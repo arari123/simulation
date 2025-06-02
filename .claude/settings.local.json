@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python test_runner.py:*)",
+      "Bash(python3:*)",
+      "Bash(grep:*)",
+      "Bash(python test:*)",
+      "Bash(curl:*)",
+      "Bash(journalctl:*)",
+      "Bash(ls:*)",
+      "Bash(touch:*)",
+      "Bash(rm:*)",
+      "Bash(find:*)",
+      "Bash(python run_tests.py:*)",
+      "Bash(cp:*)",
+      "Bash(sed:*)",
+      "Bash(kill:*)",
+      "Bash(pkill:*)",
+      "Bash(pip3 install:*)",
+      "Bash(chmod:*)"
+    ],
+    "deny": []
+  }
+}

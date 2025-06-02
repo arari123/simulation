@@ -1,0 +1,587 @@
+<template>
+  <div id="layout">
+    <ControlPanel 
+      :currentDispatchedProducts="dispatchedProductsFromSim"
+      :currentProcessTime="processTimeFromSim" 
+      :currentStepCount="currentStepCount"
+      :initialSettings="currentSettings"
+      :globalSignals="globalSignals"
+      :isSimulationEnded="isSimulationEnded"
+      :isFullExecutionRunning="isFullExecutionRunning"
+      :isGlobalSignalPanelVisible="showGlobalSignalPanel"
+      @step-simulation="handleStepSimulation"
+      @step-based-run="handleStepBasedRun"
+      @stop-full-execution="stopFullExecution"
+      @reset-simulation-display="resetSimulationDisplay"
+      @previous-step="handlePreviousStep"
+      @update-settings="handleUpdateSettings" 
+      @add-process-block="handleAddProcessBlock"
+      @export-configuration="handleExportConfiguration"
+      @import-configuration="handleImportConfiguration"
+      @toggle-global-signal-panel="toggleGlobalSignalPanelVisibility"
+      @panel-width-changed="handlePanelWidthChanged"
+    />
+    
+    <div class="main-content">
+      <div class="canvas-container">
+        <CanvasArea 
+          :blocks="blocks"
+          :connections="connections"
+          :current-settings="currentSettings"
+          :selectedBlockId="selectedBlockId"
+          :selectedConnectorInfo="selectedConnectorInfo"
+          :active-entity-states="activeEntityStates"
+          :showBlockSettingsPopup="showBlockSettingsPopup"
+          :showConnectorSettingsPopup="showConnectorSettingsPopup"
+          ref="canvasAreaRef"
+          @select-block="handleBlockClicked"
+          @select-connector="handleConnectorClicked"
+          @update-block-position="handleUpdateBlockPosition"
+        />
+        
+        <!-- 디버그 정보 표시 -->
+        <div class="debug-info" v-if="showDebugInfo">
+          <p>블록 수: {{ blocks.length }}</p>
+          <p>연결 수: {{ connections.length }}</p>
+          <p>박스 크기: {{ currentSettings.boxSize }}</p>
+          <p>제어판 너비: {{ controlPanelWidth }}px</p>
+          <p>창 크기: {{ windowSize.width }}x{{ windowSize.height }}</p>
+          <p>메인 컨텐츠 여백: {{ controlPanelWidth }}px</p>
+          <div class="debug-colors">
+            <div style="background: #f5f5f5; padding: 2px; margin: 1px; border: 1px solid #ccc;">⚪ main-content</div>
+            <div style="background: #ffffff; padding: 2px; margin: 1px; border: 1px solid #ccc;">⚪ canvas-container</div>
+            <div style="background: transparent; padding: 2px; margin: 1px; border: 1px solid #ccc;">⚪ konva-container</div>
+            <div style="background: #e9ecef; padding: 2px; margin: 1px;">⚪ canvas-area</div>
+          </div>
+          <button @click="showDebugInfo = false">닫기</button>
+        </div>
+        
+        <button class="debug-button" @click="toggleDebugInfo">🐛</button>
+      </div>
+      
+      <div 
+        v-if="showBlockSettingsPopup || showConnectorSettingsPopup"
+        class="settings-sidebar">
+        
+        <!-- 블록 설정 팝업 -->
+        <template v-if="showBlockSettingsPopup && selectedBlockData">
+          <BlockSettingsPopup 
+            :key="`block-${selectedBlockData.id}`"
+            :block-data="selectedBlockData" 
+            :all-signals="getAllSignalNamesFromBlocks(blocks)"
+            :all-blocks="blocks"
+            :is-sidebar="true"
+            @close-popup="closeBlockSettingsPopup" 
+            @save-block-settings="saveBlockSettings"
+            @copy-block="handleCopyBlock"
+            @delete-block="handleDeleteBlock"
+            @add-connector="handleAddConnector"
+            @change-block-name="handleChangeBlockName"
+          />
+        </template>
+        
+        <!-- 커넥터 설정 팝업 -->
+        <template v-if="showConnectorSettingsPopup && selectedConnectorInfo">
+          <ConnectorSettingsPopup
+            :connector-info="selectedConnectorInfo"
+            :all-signals="getAllSignalNamesFromBlocks(blocks)"
+            :all-blocks="blocks"
+            :is-sidebar="true"
+            @close-popup="closeConnectorSettingsPopup"
+            @save-connector-settings="saveConnectorSettings"
+            @change-connector-name="handleChangeConnectorName"
+          />
+        </template>
+      </div>
+    </div>
+    
+    <GlobalSignalPanel
+      :signals="globalSignals"
+      :is-visible="showGlobalSignalPanel" 
+      @close-panel="handleCloseGlobalSignalPanel"
+      @add-signal="handleAddGlobalSignal"
+      @remove-signal="handleRemoveGlobalSignal"
+      @update-signal-value="handleUpdateGlobalSignalValue"
+      @edit-signal="handleEditGlobalSignal"
+    />
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
+import ControlPanel from './components/ControlPanel.vue'
+import CanvasArea from './components/CanvasArea.vue'
+import BlockSettingsPopup from './components/BlockSettingsPopup.vue'
+import ConnectorSettingsPopup from './components/ConnectorSettingsPopup.vue'
+import GlobalSignalPanel from './components/GlobalSignalPanel.vue'
+
+// Composables
+import { useSimulation } from './composables/useSimulation.js'
+import { useBlocks } from './composables/useBlocks.js'
+import { useSignals } from './composables/useSignals.js'
+
+// Services
+import SimulationApi from './services/SimulationApi.js'
+
+// 기본 설정
+const currentSettings = ref({
+  boxSize: 100,
+  fontSize: 14,
+  deadlockTimeout: 20
+})
+
+// 제어판 너비 관리
+const controlPanelWidth = ref(300)
+
+// 디버그 정보
+const showDebugInfo = ref(false)
+const canvasAreaRef = ref(null)
+
+// 창 크기 추적
+const windowSize = ref({
+  width: window.innerWidth,
+  height: window.innerHeight
+})
+
+// Composables 사용
+const {
+  // 시뮬레이션 상태
+  dispatchedProductsFromSim,
+  processTimeFromSim,
+  currentStepCount,
+  isFirstStep,
+  activeEntityStates,
+  stepHistory,
+  isSimulationEnded,
+  isFullExecutionRunning,
+  shouldStopFullExecution,
+  
+  // 계산된 속성
+  hasStepHistory,
+  canGoBack,
+  
+  // 메서드
+  resetSimulationState,
+  executeStep,
+  executeBatchSteps,
+  startStepBasedExecution,
+  stopFullExecution,
+  resetSimulation
+} = useSimulation()
+
+const {
+  // 블록 상태
+  blocks,
+  connections,
+  selectedBlockId,
+  selectedConnectorInfo,
+  showBlockSettingsPopup,
+  showConnectorSettingsPopup,
+  
+  // 계산된 속성
+  allProcessBlocks,
+  selectedBlockData,
+  currentConnectorData,
+  
+  // 메서드
+  addNewBlockToCanvas,
+  handleBlockClicked,
+  handleUpdateBlockPosition,
+  closeBlockSettingsPopup,
+  saveBlockSettings,
+  handleConnectorClicked,
+  closeConnectorSettingsPopup,
+  saveConnectorSettings,
+  handleCopyBlock,
+  handleDeleteBlock,
+  handleAddConnector,
+  handleChangeBlockName,
+  handleChangeConnectorName,
+  setupInitialBlocks,
+  updateBlocksForSettings
+} = useBlocks()
+
+const {
+  // 신호 상태
+  globalSignals,
+  showGlobalSignalPanel,
+  
+  // 계산된 속성
+  getAllSignalNames,
+  
+  // 메서드
+  setupInitialSignals,
+  toggleGlobalSignalPanelVisibility,
+  handleCloseGlobalSignalPanel,
+  handleAddGlobalSignal,
+  handleRemoveGlobalSignal,
+  handleUpdateGlobalSignalValue,
+  updateSignalsFromSimulation,
+  handleEditGlobalSignal,
+  updateSignalReferences,
+  getAllSignalNamesFromBlocks,
+  resetSignalsToInitialValues
+} = useSignals()
+
+// 초기 시나리오 설정
+async function setupInitialScenario() {
+  console.log("[App] Setting up initial scenario from base.json...")
+  
+  try {
+    const baseConfig = await SimulationApi.loadBaseConfig()
+    console.log("[App] Base config loaded:", baseConfig)
+    
+    // 설정 적용
+    if (baseConfig.settings) {
+      currentSettings.value = { ...currentSettings.value, ...baseConfig.settings }
+    }
+    
+    // 블록 설정 적용
+    setupInitialBlocks(baseConfig, currentSettings.value)
+    
+    // 신호 설정 적용
+    setupInitialSignals(baseConfig)
+    
+    console.log("[App] Initial scenario setup completed")
+  } catch (error) {
+    console.error("[App] Failed to setup initial scenario:", error)
+    alert(`초기 설정 로드 실패: ${error.message}`)
+  }
+}
+
+// 설정 업데이트 처리
+function handleUpdateSettings(newSettings) {
+  console.log('[App] 설정 업데이트:', newSettings)
+  
+  currentSettings.value = { ...currentSettings.value, ...newSettings }
+  
+  // 블록 크기 업데이트
+  updateBlocksForSettings(newSettings)
+  
+  // 백엔드 설정 업데이트
+  updateBackendSettings(newSettings)
+}
+
+async function updateBackendSettings(settings) {
+  try {
+    await SimulationApi.updateSettings(settings)
+    console.log('[App] 백엔드 설정 업데이트 완료')
+  } catch (error) {
+    console.error('[App] 백엔드 설정 업데이트 실패:', error)
+  }
+}
+
+// 새 블록 추가 처리
+function handleAddProcessBlock(name) {
+  const newBlock = addNewBlockToCanvas(name, currentSettings.value)
+  if (newBlock && canvasAreaRef.value) {
+    // 캔버스 업데이트 (필요한 경우)
+    canvasAreaRef.value.updateCanvas?.()
+  }
+}
+
+// 시뮬레이션 실행 처리
+async function handleStepSimulation() {
+  // 첫 번째 스텝인 경우에만 설정 데이터 전송, 이후에는 null
+  const setupData = isFirstStep.value ? getSimulationSetupData() : null
+  const result = await executeStep(setupData)
+  
+  if (!result.success) {
+    alert(`시뮬레이션 실행 실패: ${result.error}`)
+  } else {
+    // 신호 상태 업데이트
+    if (result.result && result.result.current_signals) {
+      updateSignalsFromSimulation(result.result.current_signals)
+    }
+  }
+}
+
+async function handleStepBasedRun(options) {
+  console.log('[App] 스텝 기반 실행 시작:', options)
+  
+  // 첫 번째 스텝인 경우에만 설정 데이터 전송, 이후에는 null
+  const setupData = isFirstStep.value ? getSimulationSetupData() : null
+  
+  await startStepBasedExecution(setupData, (result) => {
+    // 스텝 완료 시 추가 처리
+    console.log('[App] 스텝 완료:', result)
+    
+    // 신호 상태 업데이트
+    if (result.current_signals) {
+      updateSignalsFromSimulation(result.current_signals)
+    }
+  }, options)
+}
+
+
+async function handlePreviousStep() {
+  // 이전 스텝으로 되돌리기는 시뮬레이션 리셋 후 재실행으로 구현
+  await resetSimulation()
+  resetSignalsToInitialValues()
+}
+
+async function resetSimulationDisplay() {
+  await resetSimulation()
+  resetSignalsToInitialValues()
+}
+
+// 시뮬레이션 설정 데이터 생성
+function getSimulationSetupData() {
+  // 기존 변환 로직 유지 (간소화)
+  const apiBlocks = blocks.value.map(block => ({
+    id: String(block.id),
+    name: block.name,
+    type: "process",
+    x: block.x,
+    y: block.y,
+    width: block.width,
+    height: block.height,
+    maxCapacity: block.maxCapacity || 1,
+    actions: block.actions || [],
+    connectionPoints: (block.connectionPoints || []).map(cp => ({
+      ...cp,
+      id: String(cp.id),
+      actions: (cp.actions || []).map(action => convertActionScript(action))
+    }))
+  }))
+  
+  // connections도 ID를 string으로 변환
+  const apiConnections = connections.value.map(conn => ({
+    ...conn,
+    from_block_id: String(conn.from_block_id || conn.fromBlockId),
+    to_block_id: String(conn.to_block_id || conn.toBlockId),
+    from_connector_id: String(conn.from_connector_id || conn.fromConnectorId),
+    to_connector_id: String(conn.to_connector_id || conn.toConnectorId)
+  }))
+  
+  // globalSignals를 initial_signals로 변환 (백엔드 SimulationSetup 모델에 맞춤)
+  const initial_signals = {}
+  globalSignals.value.forEach(signal => {
+    initial_signals[signal.name] = signal.value
+  })
+  
+  console.log('[App] 시뮬레이션 설정 데이터 생성:', {
+    blocks: apiBlocks.length,
+    connections: apiConnections.length,
+    initial_signals
+  })
+  
+  return {
+    blocks: apiBlocks,
+    connections: apiConnections,
+    initial_signals,  // globalSignals 대신 initial_signals 사용
+    initial_entities: 1
+  }
+}
+
+function convertActionScript(action) {
+  if (action.type === 'conditional_branch' && action.parameters?.script) {
+    return {
+      ...action,
+      parameters: {
+        ...action.parameters,
+        script: convertScriptGoToCommands(action.parameters.script)
+      }
+    }
+  }
+  return action
+}
+
+function convertScriptGoToCommands(script) {
+  // 기존 변환 로직 유지 (간소화된 버전)
+  const lines = script.split('\n')
+  const convertedLines = lines.map(line => {
+    const trimmedLine = line.trim()
+    if (trimmedLine.startsWith('go to ')) {
+      const target = trimmedLine.replace('go to ', '').trim()
+      const [targetPath] = target.split(',')
+      
+      if (targetPath.includes('.')) {
+        const [blockName, connectorName] = targetPath.split('.')
+        const targetBlock = blocks.value.find(block => 
+          block.name === blockName.trim() || block.id.toString() === blockName.trim()
+        )
+        
+        if (targetBlock) {
+          const targetConnector = targetBlock.connectionPoints?.find(cp => 
+            cp.name === connectorName.trim()
+          )
+          
+          if (targetConnector) {
+            return line.replace(targetPath, `${targetBlock.id}.${targetConnector.id}`)
+          }
+        }
+      }
+    }
+    return line
+  })
+  
+  return convertedLines.join('\n')
+}
+
+// 설정 내보내기/가져오기
+function handleExportConfiguration() {
+  const config = {
+    blocks: blocks.value,
+    connections: connections.value,
+    globalSignals: globalSignals.value,
+    settings: currentSettings.value
+  }
+  
+  const dataStr = JSON.stringify(config, null, 2)
+  const dataBlob = new Blob([dataStr], { type: 'application/json' })
+  const url = URL.createObjectURL(dataBlob)
+  
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'simulation-config.json'
+  link.click()
+  
+  URL.revokeObjectURL(url)
+}
+
+function handleImportConfiguration(config) {
+  try {
+    console.log('[App] 설정 가져오기 시작:', config);
+    
+    if (config.blocks) {
+      blocks.value = config.blocks;
+      console.log('[App] 블록 설정 로드:', config.blocks.length);
+    }
+    if (config.connections) {
+      connections.value = config.connections;
+      console.log('[App] 연결 설정 로드:', config.connections.length);
+    }
+    if (config.globalSignals) {
+      globalSignals.value = config.globalSignals;
+      console.log('[App] 전역 신호 설정 로드:', config.globalSignals.length);
+    }
+    if (config.settings) {
+      currentSettings.value = { ...currentSettings.value, ...config.settings };
+      console.log('[App] 일반 설정 로드:', config.settings);
+    }
+    
+    console.log('[App] 설정 가져오기 완료');
+  } catch (error) {
+    console.error('[App] 설정 가져오기 실패:', error);
+    alert('설정 적용 중 오류가 발생했습니다: ' + error.message);
+  }
+}
+
+// 신호 편집 시 참조 업데이트
+function handleEditGlobalSignalWithReferences(data) {
+  handleEditGlobalSignal(data)
+  if (data.originalName !== data.newName) {
+    updateSignalReferences(data.originalName, data.newName, blocks.value)
+  }
+}
+
+// 제어판 너비 변경 처리
+function handlePanelWidthChanged(newWidth) {
+  controlPanelWidth.value = newWidth
+  console.log('[App] 제어판 너비 변경:', newWidth)
+}
+
+// 디버그 토글
+function toggleDebugInfo() {
+  showDebugInfo.value = !showDebugInfo.value
+}
+
+// 컴포넌트 마운트 시 초기화
+onMounted(() => {
+  setupInitialScenario()
+  
+  // 창 크기 변경 감지
+  const updateWindowSize = () => {
+    windowSize.value = {
+      width: window.innerWidth,
+      height: window.innerHeight
+    }
+  }
+  
+  window.addEventListener('resize', updateWindowSize)
+  
+  // 컴포넌트 언마운트 시 정리
+  const cleanup = () => {
+    window.removeEventListener('resize', updateWindowSize)
+  }
+  
+  onUnmounted(cleanup)
+})
+
+// 설정 변경 감지
+watch(currentSettings, (newSettings) => {
+  updateBackendSettings(newSettings)
+}, { deep: true })
+</script>
+
+<style scoped>
+#layout {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  width: 100vw; /* 전체 너비 명시 */
+  background-color: #f5f5f5;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow: hidden;
+}
+
+.main-content {
+  flex: 1;
+  min-width: 0; /* flex 축소 허용 */
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  background: #f5f5f5; /* 원래 배경색으로 복원 */
+}
+
+.canvas-container {
+  flex: 1;
+  min-width: 200px; /* 최소 너비 보장 */
+  position: relative;
+  background: #ffffff; /* 흰색 배경으로 설정 */
+  overflow: hidden;
+}
+
+.settings-sidebar {
+  width: 400px;
+  background: #f8f9fa;
+  border-left: 1px solid #ddd;
+  transition: all 0.3s ease;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.debug-info {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  z-index: 1000;
+}
+
+.debug-button {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  font-size: 20px;
+  cursor: pointer;
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.debug-button:hover {
+  background: #0056b3;
+  transform: scale(1.1);
+}
+</style> 
