@@ -59,10 +59,10 @@ def reset_simulation_state():
     
     # 🔥 Cache invalidation: Clear simulation engine caches
     try:
-        from . import simulation_engine
-        simulation_engine._cached_simulation_setup = None
-        simulation_engine._entity_states_cache = None
-        simulation_engine._entity_states_dirty = True
+        from . import simulation_engine_v2
+        simulation_engine_v2._simulation_engine._cached_setup = None
+        simulation_engine_v2._simulation_engine._entity_states_cache = None
+        simulation_engine_v2._simulation_engine._entity_states_dirty = True
         if not PERFORMANCE_MODE:
             print("[RESET] 시뮬레이션 엔진 캐시 초기화됨")
     except Exception as e:

@@ -75,11 +75,21 @@ class EntityPool:
     
     def get_entity(self, env, entity_id: str, name: str = "Product") -> 'Entity':
         """새 엔티티 생성"""
-        return Entity(entity_id, "1", name, env.now)  # 기본값으로 블록 ID "1" 사용
+        # entity_id 형식: "블록ID-e번호" 에서 블록 ID 추출
+        block_id = entity_id.split('-')[0] if '-' in entity_id else "1"
+        return Entity(entity_id, block_id, name, env.now)
     
     def return_entity(self, entity: 'Entity'):
         """엔티티 제거"""
         entity.remove()
+    
+    def reset(self):
+        """엔티티 풀 초기화"""
+        # 모든 활성 엔티티 제거
+        entity_ids = list(active_entities_registry.keys())
+        for entity_id in entity_ids:
+            if entity_id in active_entities_registry:
+                active_entities_registry[entity_id].remove()
 
 # 전역 엔티티 풀 인스턴스
 entity_pool = EntityPool() 

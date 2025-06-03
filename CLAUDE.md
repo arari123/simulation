@@ -2,6 +2,36 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## ⚠️ CRITICAL: Testing & Simulation Execution Rules ⚠️
+
+### 🚨 IMPORTANT: User-Driven Testing Only 🚨
+**THE USER PERFORMS ALL SIMULATION TESTS - AI MUST NOT RUN SIMULATIONS**
+
+1. **NEVER execute simulation commands** (e.g., curl for /simulation/step)
+2. **WAIT for user to provide logs** from their testing
+3. **ANALYZE logs provided by user** and suggest fixes
+4. **NO automated testing** - this saves tokens and provides real-world results
+
+**Why this approach:**
+- User has the actual runtime environment
+- Saves significant API tokens and time
+- More accurate real-world testing results
+- User can observe visual UI behavior
+
+### When User Reports Issues:
+1. **Ask user to provide the log file** or relevant log excerpts
+2. **Analyze the provided logs** to identify issues
+3. **Suggest code fixes** based on log analysis
+4. **Wait for user to test** the fixes and provide feedback
+
+### 🔍 Debug Strategy:
+- **Focus on the latest logs** rather than initial logs
+- **Analyze current state** from the most recent log entries
+- **Make targeted fixes** based on the specific issues shown in logs
+- **Avoid obsessing over initial state** - work with what's currently happening
+
+⚠️ **See also: `.claude_testing_rules` file for critical testing guidelines**
+
 ## Project Overview
 
 Vue.js 3 + FastAPI 제조 공정 시뮬레이션 - A high-performance manufacturing process simulation web application that allows users to visually design and simulate manufacturing processes using drag-and-drop blocks and connectors. **Recently optimized to achieve 22,000+ simulation steps per second.**
@@ -20,8 +50,21 @@ npm run preview      # Preview production build
 ### Backend (FastAPI + SimPy) - High Performance
 ```bash
 cd backend
-pip install -r requirements.txt  # Install dependencies
-python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000  # Start optimized dev server
+
+# 가상환경 생성 및 활성화 (첫 실행 시)
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# venv\Scripts\activate  # Windows
+
+# 의존성 설치
+pip install -r requirements.txt
+
+# 서버 실행 (가상환경 활성화 필수)
+source venv/bin/activate  # 가상환경 활성화
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# 또는 실행 스크립트 사용
+./run_backend.sh
 ```
 
 ### Testing & Validation
@@ -63,26 +106,84 @@ lsof -i :8000                        # Check what's running on port 8000
    pkill -f "app.main:app" && echo "✅ All backend servers terminated"
    ```
 
+### Backend Server Logging
+**Log File Location**: `backend/logs/backend_server.log`
+
+**Key Features:**
+- **Automatic File Creation**: Log file is created automatically when server starts
+- **Fresh Start**: Each server restart creates a new log file (previous log is deleted)
+- **Maximum 100 Lines**: Log automatically rotates to keep only the last 100 lines (configurable in `logger_config.py`)
+- **AI-Readable**: Log file can be read directly by AI for debugging
+
+**Log Contents:**
+- Server startup/shutdown messages
+- API request/response logs (uvicorn access logs)
+- Application logs (info, warning, error levels)
+- Simulation engine debug logs (when DEBUG_MODE = True)
+- Timestamp for each log entry
+
+**Reading Logs for Debugging:**
+```bash
+# View entire log file
+cat backend/logs/backend_server.log
+
+# View last 100 lines
+tail -n 100 backend/logs/backend_server.log
+
+# Watch logs in real-time
+tail -f backend/logs/backend_server.log
+```
+
+**Log Configuration:**
+- Configuration: `backend/app/logger_config.py`
+- Automatic rotation when reaching 100 lines (keeps last 50 lines after rotation)
+- Both console and file output for development convenience
+- LineCountRotatingFileHandler for line-based rotation
+
+### Log Analysis Strategy
+- **Focus on Latest Logs**: When debugging, analyze the most recent log entries
+- **Current State Priority**: Understand what's happening now, not initial state
+- **Pattern Recognition**: Look for repeated patterns in logs
+- **Error Tracebacks**: Check full stack traces for root causes
+
 ## Architecture Overview
 
-### Backend Architecture (High-Performance Modular Design)
-The backend has been completely optimized for performance while maintaining modular structure:
+### Backend Architecture (Refactored Modular Design)
+The backend has been completely refactored for modularity and dynamic simulation capabilities:
 
-**Core Modules:**
-- `app/main.py` - FastAPI app initialization (38 lines)
+**Core Modules (v2 - Refactored):**
+- `app/main.py` - FastAPI app initialization
 - `app/models.py` - Pydantic data models with string ID conversion
-- `app/simulation_engine.py` - **High-performance SimPy simulation engine (22,000+ steps/sec)**
+- `app/simulation_engine_v2.py` - **Refactored modular simulation engine**
+- `app/simulation_engine.py` - Legacy engine (deprecated, kept for reference)
 - `app/entity.py` - Entity management with object pooling
 - `app/state_manager.py` - Global simulation state with caching
 - `app/script_executor.py` - Script command execution engine
 - `app/utils.py` - Optimized utility functions
 - `app/routes/` - API endpoint definitions with caching support
 
-**Performance Optimizations Applied:**
-- **Conditional Logging**: DEBUG_MODE controls logging overhead (50-70% performance gain)
-- **Setup Caching**: Simulation environments are reused when configuration unchanged (20-30% gain)
-- **Entity State Caching**: Cached entity states with dirty flag system (10-15% gain)
-- **Timeout Optimization**: Reduced event scheduling overhead (5-10% gain)
+**New Modular Structure (core/):**
+- `app/core/constants.py` - Centralized constants and configuration
+- `app/core/entity_manager.py` - Entity lifecycle management
+- `app/core/signal_manager.py` - Dynamic signal handling
+- `app/core/pipe_manager.py` - Connection and routing management
+- `app/core/source_manager.py` - Source block management
+- `app/core/action_executor.py` - Action execution logic
+- `app/core/block_processor.py` - Block process orchestration
+- `app/core/monitoring.py` - Comprehensive state monitoring
+
+**Key Improvements:**
+- **No Hardcoded Values**: All hardcoded strings (블록명, 신호명) removed
+- **Dynamic Signal Handling**: Any signal name can be used without code changes
+- **Modular Architecture**: Each concern separated into its own manager
+- **Flexible Action System**: Actions defined by configuration, not code
+- **Language Agnostic**: No Korean strings hardcoded in engine
+
+**Performance Optimizations Retained:**
+- **Conditional Logging**: DEBUG_MODE controls logging overhead
+- **Setup Caching**: Simulation environments are reused when configuration unchanged
+- **Entity State Caching**: Cached entity states with dirty flag system
+- **Timeout Optimization**: Configurable timeouts via constants
 
 ### Frontend Architecture (Vue 3 Composition API)
 **Component Hierarchy:**
@@ -115,12 +216,10 @@ Source Block → Block Actions → Route to Connector → Connector Actions → 
 
 ### Debug Mode Control
 ```python
-# In simulation_engine.py
+# In constants.py
 DEBUG_MODE = False  # Set to True for detailed debugging (impacts performance)
-
-# Conditional logging throughout codebase
-if DEBUG_MODE:
-    logger.debug(f"Debug information...")
+PERFORMANCE_MODE = True  # Set to False for detailed logging
+MONITORING_MODE = True  # Set to True for comprehensive state monitoring
 ```
 
 **Performance Impact:**
@@ -139,40 +238,6 @@ The simulation engine implements intelligent caching:
 await reset_simulation_endpoint()  # Clears environment + caches
 ```
 
-## Testing & Quality Assurance
-
-### Primary Test Suite
-```bash
-# Performance validation (MUST pass before deployment)
-python test_performance_and_ui.py
-# Expected: 22,000+ steps/sec, all entity visibility tests pass
-
-# Reset and transit entity testing
-python test_reset_and_transit.py
-# Expected: Reset works, transit entities detected in steps 4-6, 12-14
-
-# Core simulation engine
-python test_unified_simulation.py
-# Expected: All 9 test categories pass with 100% success rate
-```
-
-### Entity Visibility Testing
-The system includes comprehensive tests for entity visibility during transitions:
-- **Transit Detection**: Entities are properly marked as "transit" during block-to-block movement
-- **UI Representation**: Transit entities appear as purple rectangles on connection lines
-- **State Transitions**: Proper tracking from block → transit → destination block
-
-### Performance Benchmarking
-```python
-# Performance test pattern
-start_time = time.time()
-for i in range(1000):
-    result = await step_simulation()
-duration = time.time() - start_time
-steps_per_second = 1000 / duration
-assert steps_per_second > 20000  # Must exceed 20,000 steps/sec
-```
-
 ## Configuration & Data Flow
 
 ### Base Configuration (`base.json`)
@@ -187,6 +252,29 @@ assert steps_per_second > 20000  # Must exceed 20,000 steps/sec
 - `POST /simulation/batch-step` - **High-performance multiple steps**
 - `POST /simulation/reset` - **Reset with cache clearing**
 - `GET /simulation/load-base-config` - Load default configuration
+
+### Step Execution Behavior
+**Critical Step Behavior Rule:**
+- **Step execution continues until a `go to` action (entity movement) occurs**
+- **Multiple non-movement actions (delay, signal_update, etc.) execute within a single step**
+- **Only `route_to_connector` actions that cause entity movement trigger a new step**
+- **Each step represents one complete entity movement: source block → transit → destination block**
+
+**Implementation:**
+- The simulation engine runs a loop until entity movement is detected
+- Movement is detected by: entity location change OR processed entity count increase
+- Maximum 1000 sub-steps per step to prevent infinite loops
+
+**Example of Correct Step Behavior:**
+```
+Step N:   Entity executes multiple actions in 투입 block (delay, signal updates) 
+Step N+1: Entity executes `go to 공정1.L` → moves 투입→공정1, arrives at 공정1
+Step N+2: Entity executes actions in 공정1, then `go to 배출.L` → moves 공정1→배출
+```
+
+**Key Difference from Previous Behavior:**
+- **Before**: Every action caused a separate step (delay, signal_update, go to each triggered steps)
+- **After**: Only `go to` actions (entity movements) trigger step completion
 
 ### Data Transformation Pipeline
 ```
@@ -219,7 +307,7 @@ Cached SimPy environment → High-speed simulation execution → Results → Fro
 4. **Check cache behavior** after modifications to core simulation logic
 
 ### Backend Module Development
-1. **Simulation Performance**: Modify `app/simulation_engine.py` with performance in mind
+1. **Simulation Performance**: Modify `app/simulation_engine_v2.py` with performance in mind
 2. **Entity Management**: Use `app/entity.py` for entity lifecycle changes
 3. **State Management**: Update `app/state_manager.py` for global state modifications
 4. **API Changes**: Update `app/routes/simulation.py` for endpoint modifications
@@ -249,6 +337,34 @@ if (result.current_signals) {
 # Backend: Signals included in simulation results
 class SimulationStepResult(BaseModel):
     current_signals: Optional[Dict[str, bool]] = None  # Real-time signal states
+```
+
+## Script Syntax for Actions
+
+### Basic Commands
+```
+delay 5                    # 5 second delay
+신호명 = true              # Set signal value
+if 신호명 = true           # Check signal value (indent sub-actions with tab)
+wait 신호명 = true         # Wait until signal becomes true
+go to self.커넥터명        # Move to connector in current block
+go to 블록명.커넥터명      # Move to connector in another block
+go to 블록명.커넥터명,3    # Move with 3 second delay
+jump to 1                  # Jump to line 1 (auto 0.1s delay)
+// 주석                    # Comment
+```
+
+### Conditional Execution Example
+```
+if 공정1 load enable = true
+    공정1 load enable = false
+    go to 공정1.L,3
+if 공정2 load enable = true
+    공정2 load enable = false
+    go to 공정2.L,3
+if 공정1 load enable = false
+    delay 0.1
+    jump to 1
 ```
 
 ## Entity Visualization System
@@ -283,6 +399,16 @@ const { globalSignals, updateSignalsFromSimulation } = useSignals()
 
 ## Recent Major Improvements (Latest)
 
+### Complete Engine Refactoring (2025-06-03)
+- **Modular Architecture**: Engine split into 7+ specialized modules in `app/core/`
+- **Dynamic Simulation**: Removed all hardcoded values (블록명, 신호명)
+- **Flexible Configuration**: Any block/signal names work without code changes
+- **Clean Separation**: Each concern (entity, signal, pipe, source) has dedicated manager
+- **Maintainable**: AI-friendly code structure for easier future modifications
+- **Source Block Management**: Fixed entity creation timing and request event handling
+- **Action Execution**: Enhanced to continue actions after entity routing for signal management
+- **Reset Functionality**: Improved reset mechanism with proper state cleanup across all managers
+
 ### Performance Optimization (100x Improvement)
 - **Before**: ~100-200 steps/second
 - **After**: 22,000+ steps/second
@@ -295,7 +421,7 @@ const { globalSignals, updateSignalsFromSimulation } = useSignals()
 
 ### Enhanced Entity Visibility
 - **Transit Intelligence**: Entities display on correct connection lines during movement
-- **Path Recognition**: Backend provides "공정1→배출" format for accurate UI positioning
+- **Path Recognition**: Backend provides dynamic transit format for accurate UI positioning
 - **Fallback Logic**: Robust handling when connection paths cannot be determined
 
 ### Quantity-based Execution Control
@@ -322,22 +448,6 @@ The project includes a comprehensive set of automation scripts for streamlined d
 
 # Production deployment
 ./scripts/build.sh                          # Performance-tested production build with Docker
-```
-
-### Automated Development Lifecycle
-
-```mermaid
-graph LR
-    A[Project Start] --> B[Git Setup]
-    B --> C[Auto Dev Start]
-    C --> D[Development]
-    D --> E[Auto Commit]
-    E --> F[Auto Push]
-    F --> G[Production Build]
-    G --> H[Deploy Package]
-    
-    D --> D
-    E --> D
 ```
 
 ### Smart Git Integration Features
@@ -392,18 +502,134 @@ graph LR
 # Git tag automatically generated with build metadata
 ```
 
-### Git Repository Structure
-```
-.git/                           # Git repository
-scripts/                        # Automation scripts
-├── setup-git.sh              # Initial Git setup
-├── dev-start.sh              # Development server with Git integration  
-├── dev-stop.sh               # Clean shutdown
-├── auto-commit.sh            # Intelligent auto-commit
-├── auto-deploy.sh            # Continuous deployment watcher
-└── build.sh                  # Production build with Git tagging
-.gitignore                     # Comprehensive ignore patterns
-DEPLOY.md                      # Generated deployment guide
-```
+## Important Development Rules
 
-This codebase represents a production-ready, high-performance manufacturing simulation system with fully automated Git-based development workflow optimized for AI-assisted development and maintenance.
+### 1. Testing Methodology Rules
+- **NEVER** perform internal testing - user will test and provide logs
+- **ALWAYS** wait for user to provide test results and logs
+- **ANALYZE** logs carefully to identify issues
+- **UPDATE** code based on log analysis only
+
+### 2. Debug Mode Rules
+- **ALWAYS** set `DEBUG_MODE = False` before finishing any task
+- **ALWAYS** set `PERFORMANCE_MODE = True` for production
+- Location: `app/core/constants.py`
+
+### 3. Modular Engine Rules (v2)
+When modifying the simulation engine:
+- **Use appropriate managers** for each concern:
+  - `EntityManager`: Entity lifecycle operations
+  - `SignalManager`: Signal handling
+  - `PipeManager`: Connections and routing
+  - `SourceManager`: Source block management
+  - `ActionExecutor`: Action execution
+  - `BlockProcessor`: Block process orchestration
+- **Never hardcode** block names, signal names, or any configuration
+- **Always test** with dynamic configurations
+- **Maintain separation** of concerns between modules
+
+### 4. Code Modification Rules
+- Follow the existing modular structure in `app/core/`
+- Add new action types to `ActionType` class in `constants.py`
+- Keep all hardcoded values in `constants.py`
+- Import DEBUG_MODE in all new core modules to prevent NameError
+- Document any new modules or significant changes
+- Always call `.reset()` on new managers in simulation engine reset method
+
+## Common Troubleshooting Patterns
+
+### Source Block Not Creating Entities
+**Symptoms**: 
+- Event queue only shows 2 timeout events (no source block process)
+- No entities being created
+- Time advances by 0.1s increments
+
+**Common Causes**:
+1. Source block not properly registered in `source_manager`
+2. Source block process not added to SimPy environment
+3. Request event not triggered for source blocks
+4. Entity creation blocked by capacity constraints
+
+**Solutions**:
+- Verify source block registration in `setup_simulation`
+- Check that block processes are created for all blocks
+- Ensure `trigger_initial_events` is called
+- Verify block capacity settings
+
+### Entity Actions Not Executing
+**Symptoms**:
+- Entities created but not moving to next block
+- Actions list not being processed
+- Entities accumulating in source block
+
+**Common Causes**:
+1. Error in action execution preventing completion
+2. Missing or incorrect routing parameters
+3. Signal conditions not being met
+4. Self-routing issues (block routing to its own connector)
+
+**Solutions**:
+- Check error logs for action execution failures
+- Verify route_to_connector parameters
+- Check signal states match expected conditions
+- Handle self-connector routing specially
+
+### Performance Debugging
+**When simulation runs slowly**:
+1. Check `DEBUG_MODE` setting in `constants.py`
+2. Verify `PERFORMANCE_MODE` is True
+3. Check for excessive logging in hot paths
+4. Monitor entity count and queue sizes
+
+### Cache-Related Issues
+**Symptoms**:
+- Configuration changes not taking effect
+- Old simulation state persisting
+
+**Solutions**:
+- Force reset by setting `setup` parameter differently
+- Clear `_cached_setup` in simulation engine
+- Use reset endpoint to clear all state
+
+## Entity Lifecycle and Common Issues
+
+### Entity Flow Debugging
+Entities follow this lifecycle:
+1. **Creation**: Generated in source blocks when conditions are met
+2. **Processing**: Actions executed in current block
+3. **Transit**: Movement between blocks (visible on UI)
+4. **Arrival**: Entity reaches destination block
+5. **Disposal**: Entity exits system at sink blocks
+
+**Common Breakpoints**:
+- **Between Creation and Processing**: Check if actions are being executed
+- **Between Processing and Transit**: Verify routing logic
+- **During Transit**: Check pipe availability and capacity
+- **At Arrival**: Verify destination block capacity
+
+### SimPy Event Queue Patterns
+**Healthy Queue**:
+- Multiple block processes scheduled
+- Mix of entity events and timeout events
+- Regular time progression
+
+**Problem Queue**:
+- Only 2 events (usually timeout events)
+- No source block processes
+- Time stuck at same value or incrementing by timeout values
+
+### Action Execution Debugging
+When actions fail to execute:
+1. Check for `Entity has no attribute 'env'` errors - fixed in recent updates with hasattr() checks
+2. Verify action parameters are correctly formatted
+3. Ensure signal names exist and match exactly
+4. Check for self-routing logic (block→self.connector)
+5. Verify connector names match between script and configuration
+6. Ensure remaining actions execute after entity routing via `_execute_remaining_actions`
+7. Check DEBUG_MODE import in all core modules (common NameError source)
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.

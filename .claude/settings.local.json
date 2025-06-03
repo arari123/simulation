@@ -17,7 +17,19 @@
       "Bash(kill:*)",
       "Bash(pkill:*)",
       "Bash(pip3 install:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(npm install)",
+      "Bash(pip install:*)",
+      "Bash(sudo apt install:*)",
+      "Bash(./scripts/dev-start.sh:*)",
+      "Bash(npm run dev:*)",
+      "Bash(source:*)",
+      "Bash(python -m pip:*)",
+      "Bash(python:*)",
+      "Bash(cat:*)",
+      "Bash(rg:*)",
+      "Bash(git add:*)",
+      "Bash(git config:*)"
     ],
     "deny": []
   }

@@ -1,0 +1,10 @@
+# ⚠️ CRITICAL TESTING RULES ⚠️
+
+## 🚨 DO NOT RUN SIMULATIONS - USER RUNS ALL TESTS 🚨
+
+1. **NEVER use curl or any command to execute simulation steps**
+2. **ALWAYS wait for user to provide test results and logs**
+3. **ONLY analyze logs and suggest fixes**
+4. **NO automated testing or simulation execution**
+
+This rule is ABSOLUTE and must be followed at all times.

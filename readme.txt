@@ -2,6 +2,18 @@
                            공정 시뮬레이션 웹 애플리케이션 프로젝트
 ================================================================================================
 
+■ 실행 방법
+  [frontend 서버 구동]
+  - frontend 폴더에서 다음 프롬프트 명령어 입력
+  - npm run dev
+  [backend 서버 구동]
+  - backend 폴더에서 다음 프롬프트 명령어 입력    
+   # 가상환경 생성 및 활성화 (첫 실행 시)
+     python3 -m venv venv
+     source venv/bin/activate
+     python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+
 ■ 프로젝트 개요
   - 제조 공정을 시각적으로 모델링하고 시뮬레이션할 수 있는 웹 애플리케이션
   - 블록 기반 공정 설계, 신호 시스템, 스크립트 기반 액션 정의 지원
@@ -378,16 +390,7 @@
   - 캔버스 드래그 기능 안정화
   - 스크립트 편집기 기능 완성
 
-■ 실행 방법
-  [frontend 서버 구동]
-  - frontend 폴더에서 다음 프롬프트 명령어 입력
-  - npm run dev
-  [backend 서버 구동]
-  - backend 폴더에서 다음 프롬프트 명령어 입력    
-  - python -m uvicorn app.main:app --reload --port 8000
-  - python3 -m uvicorn app.main:app --reload --port 8000
-  [backend 서버 정지]
-  - pkill -f "app.main:app"
+
 
 ================================================================================================
                                    프로젝트 개발 상태: 완성

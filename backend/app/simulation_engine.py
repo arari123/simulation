@@ -79,10 +79,10 @@ async def run_simulation(setup: SimulationSetup) -> SimulationRunResult:
             # 🔥 연속 생성을 위해 제한 없음으로 설정 (무한 생성 가능)
             source_entity_total_limits[str(block.id)] = float('inf')  # 무한 생성 가능
             if not PERFORMANCE_MODE:
-                print(f"[INIT] 소스 블록 {block.id} ({block.name}) 초기화됨 (연속 생성 모드)")
+                logger.info(f"[INIT] 소스 블록 {block.id} ({block.name}) 초기화됨 (연속 생성 모드)")
     
     if not PERFORMANCE_MODE:
-        print(f"[INIT] 총 {len(source_entity_request_events)}개 소스 블록 초기화됨")
+        logger.info(f"[INIT] 총 {len(source_entity_request_events)}개 소스 블록 초기화됨")
     
     # 블록 프로세스들 시작
     for block_config in setup.blocks:
@@ -90,30 +90,30 @@ async def run_simulation(setup: SimulationSetup) -> SimulationRunResult:
     
     # 첫 스텝에서는 초기 엔티티 생성
     if not PERFORMANCE_MODE:
-        print(f"[INIT] 첫 스텝에서 소스 블록 이벤트 트리거 시작")
+        logger.info(f"[INIT] 첫 스텝에서 소스 블록 이벤트 트리거 시작")
     for block in setup.blocks:
         if str(block.id) in source_entity_request_events:
             event = source_entity_request_events[str(block.id)]
             if not PERFORMANCE_MODE:
-                print(f"[INIT] 블록 {block.id}: 이벤트 트리거 시도")
+                logger.info(f"[INIT] 블록 {block.id}: 이벤트 트리거 시도")
             event.succeed()
             source_entity_request_events[str(block.id)] = state_manager.sim_env.event()
             if not PERFORMANCE_MODE:
-                print(f"[INIT] 블록 {block.id}: 이벤트 트리거됨, 새 이벤트 생성됨")
+                logger.info(f"[INIT] 블록 {block.id}: 이벤트 트리거됨, 새 이벤트 생성됨")
     
     # 이벤트가 즉시 처리되도록 스케줄링 강제 실행
     if not PERFORMANCE_MODE:
-        print(f"[INIT] 이벤트 스케줄링 강제 실행")
+        logger.info(f"[INIT] 이벤트 스케줄링 강제 실행")
     try:
         state_manager.sim_env.step()
         if not PERFORMANCE_MODE:
-            print(f"[INIT] 첫 스케줄링 단계 완료, 현재 시간: {state_manager.sim_env.now}")
+            logger.info(f"[INIT] 첫 스케줄링 단계 완료, 현재 시간: {state_manager.sim_env.now}")
     except simpy.core.EmptySchedule:
         if not PERFORMANCE_MODE:
-            print(f"[INIT] 스케줄이 비어있음 - 정상")
+            logger.info(f"[INIT] 스케줄이 비어있음 - 정상")
     except Exception as e:
         if not PERFORMANCE_MODE:
-            print(f"[INIT] 스케줄링 오류: {e}")
+            logger.info(f"[INIT] 스케줄링 오류: {e}")
     
     # 시뮬레이션 실행
     def entity_count_monitor(env, target_count):
@@ -132,7 +132,7 @@ async def run_simulation(setup: SimulationSetup) -> SimulationRunResult:
             state_manager.sim_env.run()
     except Exception as e:
         if not PERFORMANCE_MODE:
-            print(f"Simulation ended with exception: {e}")
+            logger.error(f"Simulation ended with exception: {e}")
     
     # 결과 반환
     return SimulationRunResult(
@@ -203,15 +203,15 @@ async def step_simulation(setup: Optional[SimulationSetup] = None) -> Simulation
                 initial_entity_states[entity.id] = entity.current_block_id
         
         if not PERFORMANCE_MODE:
-            print(f"[STEP_DEBUG] 스텝 시작: 시간={initial_time}, 큐길이={len(state_manager.sim_env._queue)}, 엔티티={initial_entity_count}")
+            logger.debug(f"[STEP_DEBUG] 스텝 시작: 시간={initial_time}, 큐길이={len(state_manager.sim_env._queue)}, 엔티티={initial_entity_count}")
             
             # 🔍 이벤트 큐 상세 분석
             if len(state_manager.sim_env._queue) > 0:
-                print(f"[STEP_DEBUG] 이벤트 큐 상태:")
+                logger.debug(f"[STEP_DEBUG] 이벤트 큐 상태:")
                 for i, event in enumerate(state_manager.sim_env._queue[:5]):  # 처음 5개 이벤트 출력
-                    print(f"  Event {i}: time={event[0]}, priority={event[1]}, id={id(event[2])}")
+                    logger.debug(f"  Event {i}: time={event[0]}, priority={event[1]}, id={id(event[2])}")
             else:
-                print(f"[STEP_DEBUG] 이벤트 큐가 비어있음")
+                logger.debug(f"[STEP_DEBUG] 이벤트 큐가 비어있음")
         
         if len(state_manager.sim_env._queue) == 0:
             event_desc = "시뮬레이션 완료 - 더 이상 실행할 이벤트가 없음"
@@ -219,13 +219,13 @@ async def step_simulation(setup: Optional[SimulationSetup] = None) -> Simulation
             # 단순히 다음 이벤트 하나만 실행
             next_event_time = state_manager.sim_env.peek()
             if not PERFORMANCE_MODE:
-                print(f"[STEP_DEBUG] 다음 이벤트 시간: {next_event_time}")
+                logger.debug(f"[STEP_DEBUG] 다음 이벤트 시간: {next_event_time}")
             
             # 🔥 FIXED: Skip time 0 events if they don't advance time
             if next_event_time == 0 and initial_time == 0:
                 # 시간 0 이벤트를 건너뛰고 시간이 진행되는 다음 이벤트로 넘어감
                 if not PERFORMANCE_MODE:
-                    print(f"[STEP_DEBUG] 시간 0 이벤트 감지 - 시간 진행 이벤트 찾기")
+                    logger.debug(f"[STEP_DEBUG] 시간 0 이벤트 감지 - 시간 진행 이벤트 찾기")
                 found_time_advancing_event = False
                 
                 # 큐에서 시간이 진행되는 이벤트 찾기
@@ -233,7 +233,7 @@ async def step_simulation(setup: Optional[SimulationSetup] = None) -> Simulation
                     event_time = item[0]
                     if event_time > 0:
                         if not PERFORMANCE_MODE:
-                            print(f"[STEP_DEBUG] 시간 진행 이벤트 발견: {event_time}초")
+                            logger.debug(f"[STEP_DEBUG] 시간 진행 이벤트 발견: {event_time}초")
                         found_time_advancing_event = True
                         break
                 
@@ -242,7 +242,7 @@ async def step_simulation(setup: Optional[SimulationSetup] = None) -> Simulation
                     target_time = next((item[0] for item in state_manager.sim_env._queue if item[0] > 0), None)
                     if target_time:
                         if not PERFORMANCE_MODE:
-                            print(f"[STEP_DEBUG] 시간 {target_time}까지 실행")
+                            logger.debug(f"[STEP_DEBUG] 시간 {target_time}까지 실행")
                         state_manager.sim_env.run(until=target_time)
                 else:
                     # 시간이 진행되지 않으면 단일 스텝만 실행
@@ -261,7 +261,7 @@ async def step_simulation(setup: Optional[SimulationSetup] = None) -> Simulation
             entity_moved = check_entity_movement(initial_entity_states, initial_processed)
             
             if not PERFORMANCE_MODE:
-                print(f"[STEP_DEBUG] 스텝 완료: 시간={initial_time}→{new_time}, 엔티티={initial_entity_count}→{len(get_active_entity_states())}, 처리됨={initial_processed}→{processed_entities_count}")
+                logger.debug(f"[STEP_DEBUG] 스텝 완료: 시간={initial_time}→{new_time}, 엔티티={initial_entity_count}→{len(get_active_entity_states())}, 처리됨={initial_processed}→{processed_entities_count}")
             
             # 이벤트 설명 생성
             if processed_changed:
@@ -298,9 +298,9 @@ async def step_simulation(setup: Optional[SimulationSetup] = None) -> Simulation
         
     except Exception as e:
         if not PERFORMANCE_MODE:
-            print(f"[ERROR] 스텝 실행 중 오류: {e}")
+            logger.error(f"[ERROR] 스텝 실행 중 오류: {e}")
             import traceback
-            traceback.print_exc()
+            logger.error(traceback.format_exc())
         return SimulationStepResult(
             time=state_manager.sim_env.now if state_manager.sim_env else 0,
             event_description=f"오류: {str(e)}",
@@ -388,10 +388,10 @@ async def run_simulation_setup_for_step(setup: SimulationSetup) -> Optional[Simu
             # 🔥 연속 생성을 위해 제한 없음으로 설정 (무한 생성 가능)
             source_entity_total_limits[str(block.id)] = float('inf')  # 무한 생성 가능
             if not PERFORMANCE_MODE:
-                print(f"[INIT] 소스 블록 {block.id} ({block.name}) 초기화됨 (연속 생성 모드)")
+                logger.info(f"[INIT] 소스 블록 {block.id} ({block.name}) 초기화됨 (연속 생성 모드)")
     
     if not PERFORMANCE_MODE:
-        print(f"[INIT] 총 {len(source_entity_request_events)}개 소스 블록 초기화됨")
+        logger.info(f"[INIT] 총 {len(source_entity_request_events)}개 소스 블록 초기화됨")
     
     # 블록 프로세스들 시작
     for block_config in setup.blocks:
@@ -399,30 +399,30 @@ async def run_simulation_setup_for_step(setup: SimulationSetup) -> Optional[Simu
     
     # 첫 스텝에서는 초기 엔티티 생성
     if not PERFORMANCE_MODE:
-        print(f"[INIT] 첫 스텝에서 소스 블록 이벤트 트리거 시작")
+        logger.info(f"[INIT] 첫 스텝에서 소스 블록 이벤트 트리거 시작")
     for block in setup.blocks:
         if str(block.id) in source_entity_request_events:
             event = source_entity_request_events[str(block.id)]
             if not PERFORMANCE_MODE:
-                print(f"[INIT] 블록 {block.id}: 이벤트 트리거 시도")
+                logger.info(f"[INIT] 블록 {block.id}: 이벤트 트리거 시도")
             event.succeed()
             source_entity_request_events[str(block.id)] = state_manager.sim_env.event()
             if not PERFORMANCE_MODE:
-                print(f"[INIT] 블록 {block.id}: 이벤트 트리거됨, 새 이벤트 생성됨")
+                logger.info(f"[INIT] 블록 {block.id}: 이벤트 트리거됨, 새 이벤트 생성됨")
     
     # 이벤트가 즉시 처리되도록 스케줄링 강제 실행
     if not PERFORMANCE_MODE:
-        print(f"[INIT] 이벤트 스케줄링 강제 실행")
+        logger.info(f"[INIT] 이벤트 스케줄링 강제 실행")
     try:
         state_manager.sim_env.step()
         if not PERFORMANCE_MODE:
-            print(f"[INIT] 첫 스케줄링 단계 완료, 현재 시간: {state_manager.sim_env.now}")
+            logger.info(f"[INIT] 첫 스케줄링 단계 완료, 현재 시간: {state_manager.sim_env.now}")
     except simpy.core.EmptySchedule:
         if not PERFORMANCE_MODE:
-            print(f"[INIT] 스케줄이 비어있음 - 정상")
+            logger.info(f"[INIT] 스케줄이 비어있음 - 정상")
     except Exception as e:
         if not PERFORMANCE_MODE:
-            print(f"[INIT] 스케줄링 오류: {e}")
+            logger.info(f"[INIT] 스케줄링 오류: {e}")
     
     # 초기 설정 단계이므로 None을 반환하여 정상적인 스텝 실행이 계속되도록 함
     return None
@@ -491,13 +491,13 @@ def get_source_entity(env, block_config, block_log_prefix):
     max_capacity = getattr(block_config, 'maxCapacity', None) or getattr(block_config, 'capacity', None)
     
     if not PERFORMANCE_MODE:
-        print(f"{env.now:.2f}: {block_log_prefix} DEBUG: block_config.id={block_config.id} (type: {type(block_config.id)})")
-        print(f"{env.now:.2f}: {block_log_prefix} DEBUG: block_entity_counts keys: {list(block_entity_counts.keys())}")
-        print(f"{env.now:.2f}: {block_log_prefix} Capacity check: {current_entity_count}/{max_capacity}")
+        logger.info(f"{env.now:.2f}: {block_log_prefix} DEBUG: block_config.id={block_config.id} (type: {type(block_config.id)})")
+        logger.info(f"{env.now:.2f}: {block_log_prefix} DEBUG: block_entity_counts keys: {list(block_entity_counts.keys())}")
+        logger.info(f"{env.now:.2f}: {block_log_prefix} Capacity check: {current_entity_count}/{max_capacity}")
     
     if max_capacity is not None and current_entity_count >= max_capacity:
         if not PERFORMANCE_MODE:
-            print(f"{env.now:.2f}: {block_log_prefix} Source block at capacity ({current_entity_count}/{max_capacity}). Waiting for space...")
+            logger.info(f"{env.now:.2f}: {block_log_prefix} Source block at capacity ({current_entity_count}/{max_capacity}). Waiting for space...")
         if DEBUG_MODE:
             logger.debug(f"{env.now:.2f}: {block_log_prefix} Source block at capacity ({current_entity_count}/{max_capacity}). Cannot generate new entity.")
         sim_log.append({"time": env.now, "block_id": block_config.id, "event": f"Source {block_config.name} at capacity ({current_entity_count}/{max_capacity}), generation blocked"})
@@ -506,12 +506,12 @@ def get_source_entity(env, block_config, block_log_prefix):
     
     # 🔥 Continuous production: Generate entities when capacity allows
     if not PERFORMANCE_MODE:
-        print(f"{env.now:.2f}: {block_log_prefix} Ready to generate new entity (total generated: {current_total_generated})")
+        logger.info(f"{env.now:.2f}: {block_log_prefix} Ready to generate new entity (total generated: {current_total_generated})")
     
     # For continuous production, only wait for events if we need to respect production timing
     if current_total_generated == 0 and env.now == 0:
         if not PERFORMANCE_MODE:
-            print(f"{env.now:.2f}: {block_log_prefix} First entity - generating immediately.")
+            logger.info(f"{env.now:.2f}: {block_log_prefix} First entity - generating immediately.")
         if DEBUG_MODE:
             logger.debug(f"{env.now:.2f}: {block_log_prefix} First entity - generating immediately.")
     else:
@@ -521,17 +521,17 @@ def get_source_entity(env, block_config, block_log_prefix):
         
         if load_enable:
             if not PERFORMANCE_MODE:
-                print(f"{env.now:.2f}: {block_log_prefix} Load signal is enabled - generating entity immediately")
+                logger.info(f"{env.now:.2f}: {block_log_prefix} Load signal is enabled - generating entity immediately")
         else:
             if not PERFORMANCE_MODE:
-                print(f"{env.now:.2f}: {block_log_prefix} Waiting for load enable signal...")
+                logger.info(f"{env.now:.2f}: {block_log_prefix} Waiting for load enable signal...")
             try:
                 # 🔥 FIXED: Wait for signal change instead of entity request event
                 if not PERFORMANCE_MODE:
-                    print(f"{env.now:.2f}: {block_log_prefix} Waiting for '공정1 load enable' signal to become True")
+                    logger.info(f"{env.now:.2f}: {block_log_prefix} Waiting for '공정1 load enable' signal to become True")
                 yield wait_for_signal('공정1 load enable', True, env)
                 if not PERFORMANCE_MODE:
-                    print(f"{env.now:.2f}: {block_log_prefix} Load enable signal received - proceeding with entity generation")
+                    logger.info(f"{env.now:.2f}: {block_log_prefix} Load enable signal received - proceeding with entity generation")
             except Exception as e:
                 if DEBUG_MODE:
                     logger.error(f"{env.now:.2f}: {block_log_prefix} Exception waiting for signal: {e}.")
@@ -554,7 +554,7 @@ def get_source_entity(env, block_config, block_log_prefix):
     # Entity generation logging with capacity update
     current_entity_count = block_entity_counts.get(block_config.id, 0)
     if not PERFORMANCE_MODE:
-        print(f"{env.now:.2f}: {block_log_prefix} Generated Entity {entity.id} (총 {current_total_generated + 1}번째, 용량: {current_entity_count + 1}/{max_capacity})")
+        logger.info(f"{env.now:.2f}: {block_log_prefix} Generated Entity {entity.id} (총 {current_total_generated + 1}번째, 용량: {current_entity_count + 1}/{max_capacity})")
     if DEBUG_MODE:
         logger.debug(f"{env.now:.2f}: {block_log_prefix} Generated Entity {entity.id} (capacity: {current_entity_count}/{max_capacity})")
     sim_log.append({"time": env.now, "entity_id": entity.id, "event": f"Entity {entity.id} generated at Source {block_config.name}"})
@@ -569,7 +569,7 @@ def get_pipe_entity(env, block_config, in_pipe_ids, block_log_prefix):
         pipe = block_pipes.get(pipe_id)
         if pipe and len(pipe.items) > 0:
             if not PERFORMANCE_MODE:
-                print(f"{env.now:.2f}: {block_log_prefix} Waiting for entity from pipe '{pipe_id}'")
+                logger.info(f"{env.now:.2f}: {block_log_prefix} Waiting for entity from pipe '{pipe_id}'")
             entity = yield pipe.get()
             
             # 🔥 수용량 체크 - 블록이 가득 찬 경우 엔티티를 받지 않음
@@ -578,19 +578,19 @@ def get_pipe_entity(env, block_config, in_pipe_ids, block_log_prefix):
             
             if max_capacity is not None and current_count >= max_capacity:
                 if not PERFORMANCE_MODE:
-                    print(f"{env.now:.2f}: {block_log_prefix} Block at capacity ({current_count}/{max_capacity}), entity blocked")
+                    logger.info(f"{env.now:.2f}: {block_log_prefix} Block at capacity ({current_count}/{max_capacity}), entity blocked")
                 # 엔티티를 다시 파이프에 넣어서 나중에 처리
                 yield pipe.put(entity)
                 yield env.timeout(0.1)  # 짧은 대기 후 다시 시도
                 continue
             
             if not PERFORMANCE_MODE:
-                print(f"{env.now:.2f}: {block_log_prefix} Received Entity {entity.id} from TRANSIT state (capacity: {current_count + 1}/{max_capacity or 'None'})")
+                logger.info(f"{env.now:.2f}: {block_log_prefix} Received Entity {entity.id} from TRANSIT state (capacity: {current_count + 1}/{max_capacity or 'None'})")
             
             # 🔥 엔티티 위치를 현재 블록으로 업데이트
             entity.update_location(block_config.id, block_config.name)
             if not PERFORMANCE_MODE:
-                print(f"{env.now:.2f}: {block_log_prefix} Entity {entity.id} location updated from transit to block {block_config.name}")
+                logger.info(f"{env.now:.2f}: {block_log_prefix} Entity {entity.id} location updated from transit to block {block_config.name}")
             
             # 커넥터 액션이 있으면 먼저 실행
             yield from execute_connector_actions(env, block_config, entity, pipe_id, block_log_prefix)
@@ -599,7 +599,7 @@ def get_pipe_entity(env, block_config, in_pipe_ids, block_log_prefix):
     
     # 모든 파이프가 비어있거나 수용량 초과인 경우
     if not PERFORMANCE_MODE:
-        print(f"{env.now:.2f}: {block_log_prefix} Waiting for entity from pipe '{in_pipe_ids[0] if in_pipe_ids else 'unknown'}'")
+        logger.info(f"{env.now:.2f}: {block_log_prefix} Waiting for entity from pipe '{in_pipe_ids[0] if in_pipe_ids else 'unknown'}'")
     entity = yield block_pipes[in_pipe_ids[0]].get()
     
     # 🔥 수용량 재체크
@@ -608,18 +608,18 @@ def get_pipe_entity(env, block_config, in_pipe_ids, block_log_prefix):
     
     if max_capacity is not None and current_count >= max_capacity:
         if not PERFORMANCE_MODE:
-            print(f"{env.now:.2f}: {block_log_prefix} Block still at capacity, waiting...")
+            logger.info(f"{env.now:.2f}: {block_log_prefix} Block still at capacity, waiting...")
         yield block_pipes[in_pipe_ids[0]].put(entity)
         yield env.timeout(0.1)
         return None
     
     if not PERFORMANCE_MODE:
-        print(f"{env.now:.2f}: {block_log_prefix} Received Entity {entity.id} from TRANSIT state (capacity: {current_count + 1}/{max_capacity or 'None'})")
+        logger.info(f"{env.now:.2f}: {block_log_prefix} Received Entity {entity.id} from TRANSIT state (capacity: {current_count + 1}/{max_capacity or 'None'})")
     
     # 🔥 엔티티 위치를 현재 블록으로 업데이트
     entity.update_location(block_config.id, block_config.name)
     if not PERFORMANCE_MODE:
-        print(f"{env.now:.2f}: {block_log_prefix} Entity {entity.id} location updated from transit to block {block_config.name}")
+        logger.info(f"{env.now:.2f}: {block_log_prefix} Entity {entity.id} location updated from transit to block {block_config.name}")
     
     # 커넥터 액션이 있으면 먼저 실행
     yield from execute_connector_actions(env, block_config, entity, in_pipe_ids[0], block_log_prefix)
@@ -640,12 +640,12 @@ def execute_connector_actions(env, block_config, entity, arrival_pipe_id, block_
     
     if not target_connector:
         if not PERFORMANCE_MODE:
-            print(f"{env.now:.2f}: {block_log_prefix} No actions in connector {arrival_pipe_id}")
+            logger.info(f"{env.now:.2f}: {block_log_prefix} No actions in connector {arrival_pipe_id}")
         return
     
     if not hasattr(target_connector, 'actions') or not target_connector.actions:
         if not PERFORMANCE_MODE:
-            print(f"{env.now:.2f}: {block_log_prefix} No actions in connector {target_connector.id}")
+            logger.info(f"{env.now:.2f}: {block_log_prefix} No actions in connector {target_connector.id}")
         return
     
     # 커넥터 액션 실행
@@ -653,14 +653,14 @@ def execute_connector_actions(env, block_config, entity, arrival_pipe_id, block_
     
     # 🔥 중요: 커넥터 액션 실행 중에는 엔티티가 여전히 현재 블록에 위치함을 보장
     if not PERFORMANCE_MODE:
-        print(f"{env.now:.2f}: {connector_log_prefix} Starting connector actions (entity remains in block {block_config.name})")
+        logger.info(f"{env.now:.2f}: {connector_log_prefix} Starting connector actions (entity remains in block {block_config.name})")
     
     # 🔥 엔티티 위치를 명시적으로 현재 블록으로 설정 (화면 표시용)
     entity.update_location(block_config.id, block_config.name)
     
     for action in target_connector.actions:
         if not PERFORMANCE_MODE:
-            print(f"{env.now:.2f}: {connector_log_prefix} Executing connector action: {action.name} ({action.type})")
+            logger.info(f"{env.now:.2f}: {connector_log_prefix} Executing connector action: {action.name} ({action.type})")
         
         if action.type == "block_entry":
             # 블록으로 이동 액션 (커넥터에서 같은 블록으로 진입)
@@ -671,22 +671,22 @@ def execute_connector_actions(env, block_config, entity, arrival_pipe_id, block_
             if delay and delay != "0":
                 delay_time = parse_delay_value(str(delay))
                 if not PERFORMANCE_MODE:
-                    print(f"{env.now:.2f}: {connector_log_prefix} Delaying for {delay_time}s before entering block {target_block_name}")
+                    logger.info(f"{env.now:.2f}: {connector_log_prefix} Delaying for {delay_time}s before entering block {target_block_name}")
                 entity.update_location(block_config.id, block_config.name)
                 # 🔥 DEBUG: Timeout 이벤트 생성 전 큐 상태 확인
                 if not PERFORMANCE_MODE:
-                    print(f"{env.now:.2f}: {connector_log_prefix} DEBUG: Creating timeout event for {delay_time}s (target time: {env.now + delay_time})")
-                    print(f"{env.now:.2f}: {connector_log_prefix} DEBUG: Queue size before timeout: {len(env._queue)}")
+                    logger.info(f"{env.now:.2f}: {connector_log_prefix} DEBUG: Creating timeout event for {delay_time}s (target time: {env.now + delay_time})")
+                    logger.info(f"{env.now:.2f}: {connector_log_prefix} DEBUG: Queue size before timeout: {len(env._queue)}")
                 timeout_event = env.timeout(delay_time)
                 if not PERFORMANCE_MODE:
-                    print(f"{env.now:.2f}: {connector_log_prefix} DEBUG: Queue size after timeout: {len(env._queue)}")
+                    logger.info(f"{env.now:.2f}: {connector_log_prefix} DEBUG: Queue size after timeout: {len(env._queue)}")
                 yield timeout_event
                 if not PERFORMANCE_MODE:
-                    print(f"{env.now:.2f}: {connector_log_prefix} DEBUG: Timeout completed at time {env.now}")
+                    logger.info(f"{env.now:.2f}: {connector_log_prefix} DEBUG: Timeout completed at time {env.now}")
             
             # 같은 블록으로 진입 완료
             if not PERFORMANCE_MODE:
-                print(f"{env.now:.2f}: {connector_log_prefix} Entity entering block {target_block_name}")
+                logger.info(f"{env.now:.2f}: {connector_log_prefix} Entity entering block {target_block_name}")
             entity.update_location(block_config.id, block_config.name)
             return  # 커넥터 액션 완료, 블록 액션으로 진행
             
@@ -699,12 +699,12 @@ def execute_connector_actions(env, block_config, entity, arrival_pipe_id, block_
                 # 🔥 중요: 커넥터에서 같은 블록으로 이동하는 경우 체크 (더 정확한 매칭)
                 self_move_detected = any("moving to same block's main process" in log.lower() for log in act_log)
                 if not PERFORMANCE_MODE:
-                    print(f"{env.now:.2f}: {connector_log_prefix} Act log contents: {act_log}")
-                    print(f"{env.now:.2f}: {connector_log_prefix} Self move detected: {self_move_detected}")
+                    logger.info(f"{env.now:.2f}: {connector_log_prefix} Act log contents: {act_log}")
+                    logger.info(f"{env.now:.2f}: {connector_log_prefix} Self move detected: {self_move_detected}")
                 
                 if self_move_detected:
                     if not PERFORMANCE_MODE:
-                        print(f"{env.now:.2f}: {connector_log_prefix} Entity stays in same block - no location change needed")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Entity stays in same block - no location change needed")
                     # 🔥 엔티티 위치 확실히 유지
                     entity.update_location(block_config.id, block_config.name)
                     # 커넥터 액션 완료, 엔티티는 계속 같은 블록에서 블록 액션 진행
@@ -714,7 +714,7 @@ def execute_connector_actions(env, block_config, entity, arrival_pipe_id, block_
                 external_move_detected = any("moved to" in log.lower() and "same block" not in log.lower() for log in act_log)
                 if external_move_detected:
                     if not PERFORMANCE_MODE:
-                        print(f"{env.now:.2f}: {connector_log_prefix} Entity moved to different block")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Entity moved to different block")
                     return
         
         elif action.type == "signal_wait":
@@ -728,16 +728,16 @@ def execute_connector_actions(env, block_config, entity, arrival_pipe_id, block_
                 if current_signals.get(signal_name, False) == expected_value:
                     # 이미 원하는 값이면 즉시 진행
                     if not PERFORMANCE_MODE:
-                        print(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' already {expected_value} - proceeding immediately (entity in {block_config.name})")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' already {expected_value} - proceeding immediately (entity in {block_config.name})")
                 else:
                     # 원하는 값이 아니면 대기
                     if not PERFORMANCE_MODE:
-                        print(f"{env.now:.2f}: {connector_log_prefix} Waiting for signal '{signal_name}' = {expected_value} (entity in {block_config.name})")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Waiting for signal '{signal_name}' = {expected_value} (entity in {block_config.name})")
                     # 🔥 엔티티 위치를 확실히 유지
                     entity.update_location(block_config.id, block_config.name)
                     yield wait_for_signal(signal_name, expected_value, env)
                     if not PERFORMANCE_MODE:
-                        print(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' received")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' received")
         
         elif action.type == "signal_update":
             # 신호 업데이트 액션 (엔티티는 여전히 같은 블록에 있음)
@@ -747,7 +747,7 @@ def execute_connector_actions(env, block_config, entity, arrival_pipe_id, block_
             if signal_name:
                 set_signal(signal_name, value, env)
                 if not PERFORMANCE_MODE:
-                    print(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' set to {value}")
+                    logger.info(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' set to {value}")
         
         elif action.type == "route_to_connector":
             # 다른 블록으로 라우팅 액션
@@ -759,7 +759,7 @@ def execute_connector_actions(env, block_config, entity, arrival_pipe_id, block_
             if delay and delay != "0":
                 delay_time = parse_delay_value(str(delay))
                 if not PERFORMANCE_MODE:
-                    print(f"{env.now:.2f}: {connector_log_prefix} Delaying for {delay_time}s before routing (entity in {block_config.name})")
+                    logger.info(f"{env.now:.2f}: {connector_log_prefix} Delaying for {delay_time}s before routing (entity in {block_config.name})")
                 # 🔥 딜레이 중에도 엔티티 위치 유지
                 entity.update_location(block_config.id, block_config.name)
                 yield env.timeout(delay_time)
@@ -771,23 +771,23 @@ def execute_connector_actions(env, block_config, entity, arrival_pipe_id, block_
                 if pipe_id in block_pipes:
                     # 🔥 엔티티가 실제로 다른 블록으로 이동할 때만 transit 상태로 변경
                     if not PERFORMANCE_MODE:
-                        print(f"{env.now:.2f}: {connector_log_prefix} Connector actions completed - now routing to different block")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Connector actions completed - now routing to different block")
                     
                     yield block_pipes[pipe_id].put(entity)
                     target_block_name = action.parameters.get("target_block_name", f"Block {target_block_id}")
                     if not PERFORMANCE_MODE:
-                        print(f"{env.now:.2f}: {block_log_prefix} [E:{entity.id}] Routed to {target_block_name}")
+                        logger.info(f"{env.now:.2f}: {block_log_prefix} [E:{entity.id}] Routed to {target_block_name}")
                     sim_log.append({"time": env.now, "entity_id": entity.id, "event": f"Entity {entity.id} routed from {block_config.name} to {target_block_name}"})
                     return  # 엔티티가 다른 블록으로 이동했으므로 반환
                 else:
                     # 🔥 파이프가 존재하지 않는 경우 오류 처리
                     if not PERFORMANCE_MODE:
-                        print(f"{env.now:.2f}: {connector_log_prefix} ERROR: Pipe {pipe_id} not found. Available pipes: {list(block_pipes.keys())}")
-                        print(f"{env.now:.2f}: {connector_log_prefix} Routing failed - entity remains in current block")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} ERROR: Pipe {pipe_id} not found. Available pipes: {list(block_pipes.keys())}")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Routing failed - entity remains in current block")
                     return
     
     if not PERFORMANCE_MODE:
-        print(f"{env.now:.2f}: {connector_log_prefix} All connector actions completed (entity remains in {block_config.name})")
+        logger.info(f"{env.now:.2f}: {connector_log_prefix} All connector actions completed (entity remains in {block_config.name})")
 
 def execute_block_actions(env, block_config, entity, out_pipe_connectors, block_log_prefix):
     """블록의 액션들을 실행합니다."""
@@ -799,7 +799,7 @@ def execute_block_actions(env, block_config, entity, out_pipe_connectors, block_
     while current_action_index < len(block_config.actions):
         action = block_config.actions[current_action_index]
         if not PERFORMANCE_MODE:
-            print(f"{env.now:.2f}: {entity_log_prefix} Executing action: {action.name} ({action.type})")
+            logger.info(f"{env.now:.2f}: {entity_log_prefix} Executing action: {action.name} ({action.type})")
         
         # 액션 실행
         result = yield from execute_single_action(env, action, entity, out_pipe_connectors, entity_log_prefix, block_config)
@@ -826,12 +826,12 @@ def execute_single_action(env, action, entity, out_pipe_connectors, entity_log_p
         else:
             yield env.timeout(0.00001)
         if not PERFORMANCE_MODE:
-            print(f"{env.now:.2f}: {entity_log_prefix} Delayed for {duration}s.")
+            logger.info(f"{env.now:.2f}: {entity_log_prefix} Delayed for {duration}s.")
     
     elif action.type == "custom_sink":
         # 🔥 Entity 클래스의 remove()가 자동으로 카운트 감소
         if not PERFORMANCE_MODE:
-            print(f"{env.now:.2f}: {entity_log_prefix} Processed by custom sink.")
+            logger.info(f"{env.now:.2f}: {entity_log_prefix} Processed by custom sink.")
         sim_log.append({"time": env.now, "entity_id": entity.id, "event": f"Entity {entity.id} processed by sink"})
         return 'processed'
     
@@ -860,16 +860,16 @@ def execute_single_action(env, action, entity, out_pipe_connectors, entity_log_p
                     # 커넥터 액션들을 실행
                     connector_log_prefix = f"{entity_log_prefix} [Connector:{target_connector.id}]"
                     if not PERFORMANCE_MODE:
-                        print(f"{env.now:.2f}: {connector_log_prefix} Executing connector actions before routing")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Executing connector actions before routing")
                         # 🔥 커넥터 액션 실행 중에는 엔티티가 여전히 같은 블록에 있음을 명시
-                        print(f"{env.now:.2f}: {connector_log_prefix} Entity remains in block {block_config.name} during connector actions")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Entity remains in block {block_config.name} during connector actions")
                     
                     # 🔥 라우팅 정보를 저장할 변수 (모든 액션 실행 후 라우팅 수행)
                     pending_route_action = None
                     
                     for conn_action in target_connector.actions:
                         if not PERFORMANCE_MODE:
-                            print(f"{env.now:.2f}: {connector_log_prefix} Executing: {conn_action.name} ({conn_action.type})")
+                            logger.info(f"{env.now:.2f}: {connector_log_prefix} Executing: {conn_action.name} ({conn_action.type})")
                         
                         if conn_action.type == "signal_wait":
                             signal_name = conn_action.parameters.get("signal_name")
@@ -880,14 +880,14 @@ def execute_single_action(env, action, entity, out_pipe_connectors, entity_log_p
                                 if current_signals.get(signal_name, False) == expected_value:
                                     # 이미 원하는 값이면 즉시 진행
                                     if not PERFORMANCE_MODE:
-                                        print(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' already {expected_value} - proceeding immediately (entity in {block_config.name})")
+                                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' already {expected_value} - proceeding immediately (entity in {block_config.name})")
                                 else:
                                     # 원하는 값이 아니면 대기
                                     if not PERFORMANCE_MODE:
-                                        print(f"{env.now:.2f}: {connector_log_prefix} Waiting for signal '{signal_name}' = {expected_value} (entity in {block_config.name})")
+                                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Waiting for signal '{signal_name}' = {expected_value} (entity in {block_config.name})")
                                     yield wait_for_signal(signal_name, expected_value, env)
                                     if not PERFORMANCE_MODE:
-                                        print(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' received")
+                                        logger.info(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' received")
                         
                         elif conn_action.type == "signal_update":
                             signal_name = conn_action.parameters.get("signal_name")
@@ -895,7 +895,7 @@ def execute_single_action(env, action, entity, out_pipe_connectors, entity_log_p
                             if signal_name:
                                 set_signal(signal_name, value, env)
                                 if not PERFORMANCE_MODE:
-                                    print(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' set to {value}")
+                                    logger.info(f"{env.now:.2f}: {connector_log_prefix} Signal '{signal_name}' set to {value}")
                         
                         elif conn_action.type == "route_to_connector":
                             # 🔥 커넥터의 route_to_connector 액션 - 라우팅 정보만 저장하고 계속 실행
@@ -903,19 +903,19 @@ def execute_single_action(env, action, entity, out_pipe_connectors, entity_log_p
                             if conn_delay and conn_delay != "0":
                                 conn_delay_time = parse_delay_value(str(conn_delay))
                                 if not PERFORMANCE_MODE:
-                                    print(f"{env.now:.2f}: {connector_log_prefix} Delaying for {conn_delay_time}s before routing (entity in {block_config.name})")
+                                    logger.info(f"{env.now:.2f}: {connector_log_prefix} Delaying for {conn_delay_time}s before routing (entity in {block_config.name})")
                                 yield env.timeout(conn_delay_time)
                             
                             # 🔥 라우팅 액션 정보 저장 (나중에 실행)
                             pending_route_action = conn_action
                             if not PERFORMANCE_MODE:
-                                print(f"{env.now:.2f}: {connector_log_prefix} Route action scheduled: will move to {conn_action.parameters.get('target_block_name', 'Unknown')} after all connector actions complete")
+                                logger.info(f"{env.now:.2f}: {connector_log_prefix} Route action scheduled: will move to {conn_action.parameters.get('target_block_name', 'Unknown')} after all connector actions complete")
                             # 🔥 break 하지 않고 계속 다음 액션 실행
                     
                     # 🔥 모든 커넥터 액션 완료 후 라우팅 수행
                     if pending_route_action:
                         if not PERFORMANCE_MODE:
-                            print(f"{env.now:.2f}: {connector_log_prefix} All connector actions completed - now executing pending route action")
+                            logger.info(f"{env.now:.2f}: {connector_log_prefix} All connector actions completed - now executing pending route action")
                         
                         # 저장된 라우팅 액션의 파라미터로 라우팅 수행
                         target_block_id = pending_route_action.parameters.get("target_block_id")
@@ -931,11 +931,11 @@ def execute_single_action(env, action, entity, out_pipe_connectors, entity_log_p
                                 transit_display_name = f"{block_config.name}→{target_block_name}"
                                 entity.update_location("transit", transit_display_name)
                                 if not PERFORMANCE_MODE:
-                                    print(f"{env.now:.2f}: {connector_log_prefix} Entity {entity.id} set to TRANSIT state before routing to {target_block_name}")
+                                    logger.info(f"{env.now:.2f}: {connector_log_prefix} Entity {entity.id} set to TRANSIT state before routing to {target_block_name}")
                                 
                                 # 🔥 Enhanced logging for UI visibility tracking
                                 if not PERFORMANCE_MODE:
-                                    print(f"{env.now:.2f}: [TRANSIT_TRACKING] Entity {entity.id} entering transit from 공정1.R to 배출.L")
+                                    logger.info(f"{env.now:.2f}: [TRANSIT_TRACKING] Entity {entity.id} entering transit from 공정1.R to 배출.L")
                                 sim_log.append({
                                     "time": env.now, 
                                     "entity_id": entity.id, 
@@ -946,36 +946,36 @@ def execute_single_action(env, action, entity, out_pipe_connectors, entity_log_p
                                 
                                 yield block_pipes[route_pipe_id].put(entity)
                                 if not PERFORMANCE_MODE:
-                                    print(f"{env.now:.2f}: {connector_log_prefix} Entity routed to {target_block_name}")
+                                    logger.info(f"{env.now:.2f}: {connector_log_prefix} Entity routed to {target_block_name}")
                                 sim_log.append({"time": env.now, "entity_id": entity.id, "event": f"Entity {entity.id} routed from {block_config.name} to {target_block_name}"})
                                 return 'route_out'
                             else:
-                                print(f"{env.now:.2f}: {connector_log_prefix} ERROR: Route pipe {route_pipe_id} not found. Available: {list(block_pipes.keys())}")
+                                logger.info(f"{env.now:.2f}: {connector_log_prefix} ERROR: Route pipe {route_pipe_id} not found. Available: {list(block_pipes.keys())}")
                                 return 'route_error'
                         else:
-                            print(f"{env.now:.2f}: {connector_log_prefix} ERROR: Invalid route parameters")
+                            logger.info(f"{env.now:.2f}: {connector_log_prefix} ERROR: Invalid route parameters")
                             return 'route_error'
                     else:
-                        print(f"{env.now:.2f}: {connector_log_prefix} No routing action found - connector actions completed without routing")
+                        logger.info(f"{env.now:.2f}: {connector_log_prefix} No routing action found - connector actions completed without routing")
                 
                 # 🔥 커넥터에 액션이 없는 경우에만 기본 라우팅 수행
                 else:
                     # 🔥 커넥터에 액션이 없는 경우의 기본 라우팅 로직
-                    print(f"{env.now:.2f}: {entity_log_prefix} No connector actions - performing direct routing")
+                    logger.info(f"{env.now:.2f}: {entity_log_prefix} No connector actions - performing direct routing")
                     
                     # 🔥 파이프 존재 여부 확인
                     if pipe_id not in block_pipes:
-                        print(f"{env.now:.2f}: {entity_log_prefix} ERROR: Pipe {pipe_id} not found. Available pipes: {list(block_pipes.keys())}")
+                        logger.info(f"{env.now:.2f}: {entity_log_prefix} ERROR: Pipe {pipe_id} not found. Available pipes: {list(block_pipes.keys())}")
                         return 'route_error'
                     
                     # 🔥 Entity visibility fix: Enhanced transit tracking for direct routing
                     target_block_name = pipe_info.get('block_name', 'Unknown')
                     transit_display_name = f"{block_config.name}→{target_block_name}"
                     entity.update_location("transit", transit_display_name)
-                    print(f"{env.now:.2f}: {entity_log_prefix} Entity {entity.id} set to TRANSIT state before direct routing")
+                    logger.info(f"{env.now:.2f}: {entity_log_prefix} Entity {entity.id} set to TRANSIT state before direct routing")
                     
                     # 🔥 Enhanced logging for UI visibility tracking
-                    print(f"{env.now:.2f}: [TRANSIT_TRACKING] Entity {entity.id} entering transit from {block_config.name} to {target_block_name}")
+                    logger.info(f"{env.now:.2f}: [TRANSIT_TRACKING] Entity {entity.id} entering transit from {block_config.name} to {target_block_name}")
                     sim_log.append({
                         "time": env.now, 
                         "entity_id": entity.id, 
@@ -985,7 +985,7 @@ def execute_single_action(env, action, entity, out_pipe_connectors, entity_log_p
                     })
                     
                     yield block_pipes[pipe_id].put(entity)
-                    print(f"{env.now:.2f}: {entity_log_prefix} Routed to {target_block_name}")
+                    logger.info(f"{env.now:.2f}: {entity_log_prefix} Routed to {target_block_name}")
                     sim_log.append({"time": env.now, "entity_id": entity.id, "event": f"Entity {entity.id} routed out"})
                     return 'route_out'
     

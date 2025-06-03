@@ -5,6 +5,7 @@ from typing import Optional, Dict, List, Any
 import traceback
 import asyncio
 import simpy
+import logging
 
 from ..models import (
     SimulationSetup, SimulationRunResult, SimulationStepResult, 
@@ -16,8 +17,10 @@ from ..state_manager import (
 )
 from ..entity import get_active_entity_states
 from ..utils import check_entity_movement, get_latest_movement_description
-from ..simulation_engine import run_simulation, step_simulation, batch_step_simulation
+# 리팩토링된 엔진 사용
+from ..simulation_engine_v2 import run_simulation, step_simulation, batch_step_simulation
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/simulation", tags=["simulation"])
 
 def convert_global_signals_to_initial_signals(config_data: dict) -> dict:
@@ -91,33 +94,46 @@ async def step_simulation_endpoint(raw_setup: Optional[dict] = None):
     
     try:
         # 🔥 간소화된 디버깅 로그 (성능 최적화)
-        from .. import state_manager
-        has_env = state_manager.sim_env is not None
+        from .. import simulation_engine_v2
+        engine = simulation_engine_v2._simulation_engine
+        has_env = engine.sim_env is not None
         has_setup = raw_setup is not None
         
-        if has_env:
-            current_time = state_manager.sim_env.now
-            queue_size = len(state_manager.sim_env._queue)
-            print(f"[STEP] 환경 상태: 시간={current_time:.1f}, 큐={queue_size}, setup={has_setup}")
-        else:
-            print(f"[STEP] 환경 없음, setup 제공: {has_setup}")
+        # 모니터링 모드가 아닐 때만 간단한 로그 출력
+        if not getattr(engine, 'monitoring_mode', False):
+            if has_env:
+                current_time = engine.sim_env.now
+                queue_size = len(engine.sim_env._queue)
+                logger.info(f"[STEP] 환경 상태: 시간={current_time:.1f}, 큐={queue_size}, setup={has_setup}")
+            else:
+                logger.info(f"[STEP] 환경 없음, setup 제공: {has_setup}")
         
         setup = None
-        if state_manager.sim_env is None:
+        if engine.sim_env is None:
             # 🔥 시뮬레이션 환경이 없으면 setup이 필요함
             if raw_setup is None:
-                print(f"[STEP-ERROR] 환경 없음 + setup 없음")
-                raise HTTPException(
-                    status_code=400, 
-                    detail="No active simulation. Please provide simulation setup to start."
-                )
-            print(f"[STEP] 첫 번째 스텝 - 새로운 설정으로 시뮬레이션 시작")
+                # 기본 설정 자동 로드
+                logger.info(f"[STEP] 환경 없음 - 기본 설정 자동 로드")
+                try:
+                    with open('/home/arari123/project/simulation/base.json', 'r', encoding='utf-8') as f:
+                        import json
+                        raw_setup = json.load(f)
+                        logger.info(f"[STEP] 기본 설정 로드 성공")
+                except Exception as e:
+                    logger.error(f"[STEP-ERROR] 기본 설정 로드 실패: {e}")
+                    raise HTTPException(
+                        status_code=400, 
+                        detail="No active simulation and failed to load default setup. Please provide simulation setup."
+                    )
+            if not getattr(engine, 'monitoring_mode', False):
+                logger.info(f"[STEP] 첫 번째 스텝 - 새로운 설정으로 시뮬레이션 시작")
             
             # ID 변환 및 신호 처리 적용
             converted_config = convert_config_ids_to_strings(raw_setup)
             initial_signals = convert_global_signals_to_initial_signals(converted_config)
             
-            print(f"[STEP] 초기 신호 설정: {initial_signals}")
+            if not getattr(engine, 'monitoring_mode', False):
+                logger.info(f"[STEP] 초기 신호 설정: {initial_signals}")
             
             # SimulationSetup 객체 생성
             setup_data = {
@@ -132,13 +148,29 @@ async def step_simulation_endpoint(raw_setup: Optional[dict] = None):
                     setup_data[key] = converted_config[key]
             
             setup = SimulationSetup(**setup_data)
-        elif raw_setup is not None and state_manager.sim_env is not None:
-            # 🔥 이미 시뮬레이션이 진행 중인 경우 setup 무시
-            print(f"[STEP] 시뮬레이션 진행 중 - setup 무시 (기존 환경 유지)")
-            setup = None
+        elif raw_setup is not None and engine.sim_env is not None:
+            # 🔥 이미 시뮬레이션이 진행 중인 경우
+            if not getattr(engine, 'monitoring_mode', False):
+                logger.info(f"[STEP] 기존 환경에서 계속 진행")
+            # setup을 전달하여 엔진이 변경사항을 확인할 수 있도록 함
+            converted_config = convert_config_ids_to_strings(raw_setup)
+            initial_signals = convert_global_signals_to_initial_signals(converted_config)
+            
+            setup_data = {
+                "blocks": converted_config.get("blocks", []),
+                "connections": converted_config.get("connections", []),
+                "initial_signals": initial_signals
+            }
+            
+            for key in ["initial_entities", "stop_time", "stop_entities_processed"]:
+                if key in converted_config:
+                    setup_data[key] = converted_config[key]
+            
+            setup = SimulationSetup(**setup_data)
         else:
             # 🔥 환경 존재하지만 setup 없음 - 계속 진행
-            print(f"[STEP] 기존 환경에서 계속 진행")
+            if not getattr(engine, 'monitoring_mode', False):
+                logger.info(f"[STEP] 기존 환경에서 계속 진행")
             setup = None
         
         # 초기 상태 저장 (엔티티 움직임 감지용)
@@ -176,27 +208,27 @@ async def reset_simulation_endpoint():
     """시뮬레이션을 초기화합니다."""
     try:
         # 🔥 SimPy 환경을 완전히 새로 생성하여 이전 프로세스들을 정리
-        from .. import state_manager
+        from .. import simulation_engine_v2
+        engine = simulation_engine_v2._simulation_engine
         
-        if state_manager.sim_env:
-            print(f"[RESET] 이전 SimPy 환경 정리 (시간: {state_manager.sim_env.now})")
+        if engine.sim_env:
+            logger.info(f"[RESET] 이전 SimPy 환경 정리 (시간: {engine.sim_env.now})")
         
+        # 기존 state_manager도 리셋
         reset_simulation_state()
         
-        # 🔥 CRITICAL FIX: reset 후에는 환경을 None으로 설정하여 다음 스텝에서 새로 초기화되도록 함
-        state_manager.sim_env = None
+        # 새로운 엔진 리셋
+        engine.reset()
         
         # 🚀 Performance optimization cache reset
         try:
-            from .. import simulation_engine
-            simulation_engine._cached_simulation_setup = None
-            simulation_engine._entity_states_cache = None
-            simulation_engine._entity_states_dirty = True
+            from .. import simulation_engine_v2
+            simulation_engine_v2._simulation_engine.reset()
         except Exception as e:
-            print(f"[RESET] Cache reset warning: {e}")
+            logger.warning(f"[RESET] Cache reset warning: {e}")
             # Continue with reset even if cache reset fails
         
-        print(f"[RESET] SimPy 환경 및 캐시 초기화됨 - 다음 스텝에서 새로 생성됨")
+        logger.info(f"[RESET] SimPy 환경 및 캐시 초기화됨 - 다음 스텝에서 새로 생성됨")
         
         return {"message": "Simulation reset successfully"}
     except Exception as e:
@@ -215,9 +247,9 @@ async def update_settings_endpoint(settings: Dict[str, Any]):
             if key in valid_keys:
                 validated_settings[key] = value
             else:
-                print(f"[SimulationRoutes] Warning: Unknown setting key '{key}' ignored")
+                logger.warning(f"[SimulationRoutes] Warning: Unknown setting key '{key}' ignored")
         
-        print(f"[SimulationRoutes] Settings updated: {validated_settings}")
+        logger.info(f"[SimulationRoutes] Settings updated: {validated_settings}")
         
         return {
             "message": "Settings updated successfully",
