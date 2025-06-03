@@ -207,3 +207,14 @@ if 공정2 load enable = true
 - Global entity number mapping
 - Enhanced transit entity visualization
 - Tab key support in script editors
+
+### Recent Fixes (Latest)
+- **Script Editor Save Issue**: Fixed script changes not being saved properly
+  - ScriptEditor now passes both parsed actions and raw script text
+  - SettingsBase creates proper script type actions
+  - Backend recognizes and executes script type actions
+- **Time Display Accuracy**: Fixed floating point accumulation errors
+  - Frontend displays time with exactly 1 decimal place
+  - Backend rounds all time values to 1 decimal place
+  - Wait command check interval reduced from 0.1s to 0.01s
+  - Source block generation timing aligned with transit delays
