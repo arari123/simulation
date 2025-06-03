@@ -324,6 +324,14 @@ export function convertActionToScript(action, context = {}) {
         const error = action.parameters?.error || '알 수 없는 오류';
         return `// ❌ 오류: ${error}\n// ${originalLine}`;
         
+      case 'script':
+        // script 타입 액션은 저장된 스크립트를 그대로 반환
+        const savedScript = action.parameters?.script || '';
+        if (savedScript.trim()) {
+          return savedScript;
+        }
+        return `// 스크립트가 비어있음`;
+        
       default:
         return `// ${action.type} 타입은 스크립트 변환을 지원하지 않음`;
     }

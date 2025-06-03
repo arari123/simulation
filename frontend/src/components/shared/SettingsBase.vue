@@ -192,6 +192,12 @@ const generatedScript = computed(() => {
     return '// 액션이 없습니다'
   }
   
+  // script 타입 액션이 있으면 그 스크립트를 우선 반환
+  const scriptAction = editableActions.value.find(action => action.type === 'script')
+  if (scriptAction && scriptAction.parameters?.script) {
+    return scriptAction.parameters.script
+  }
+  
   const context = {
     allBlocks: props.allBlocks,
     currentBlock: props.currentBlock,
@@ -298,7 +304,8 @@ function getActionTypeLabel(type) {
     'conditional_branch': '조건부 실행',
     'action_jump': '액션 점프',
     'custom_sink': '커스텀 싱크',
-    'script_error': '스크립트 오류'
+    'script_error': '스크립트 오류',
+    'script': '스크립트'
   }
   return typeLabels[type] || type
 }
@@ -322,6 +329,10 @@ function formatActionDetails(action) {
       return '조건부 실행'
     case 'script_error':
       return `오류: ${action.parameters?.error || '알 수 없는 오류'}`
+    case 'script':
+      const scriptLines = action.parameters?.script?.split('\n') || []
+      const firstLine = scriptLines[0]?.trim() || ''
+      return scriptLines.length > 1 ? `${firstLine}... (${scriptLines.length}줄)` : firstLine || '빈 스크립트'
     default:
       return action.type
   }
@@ -343,8 +354,16 @@ function openScriptEditor() {
   // 강제로 상태 업데이트
   showActionEditor.value = false  // 다른 편집기 닫기
   
-  // 현재 액션들을 스크립트로 변환하여 편집기에 표시
-  scriptContent.value = generatedScript.value
+  // script 타입 액션이 있으면 그 스크립트를 우선 표시
+  const scriptAction = editableActions.value.find(action => action.type === 'script')
+  if (scriptAction && scriptAction.parameters?.script) {
+    scriptContent.value = scriptAction.parameters.script
+    console.log('[SettingsBase] script 타입 액션의 스크립트 사용:', scriptContent.value)
+  } else {
+    // 현재 액션들을 스크립트로 변환하여 편집기에 표시
+    scriptContent.value = generatedScript.value
+    console.log('[SettingsBase] 액션에서 생성된 스크립트 사용:', scriptContent.value)
+  }
   
   // DOM 업데이트 후 스크립트 편집기 열기
   nextTick(() => {
@@ -367,15 +386,26 @@ function closeScriptEditor() {
   scriptContent.value = ''
 }
 
-function handleScriptApply(parsedActions) {
+function handleScriptApply(parsedActions, scriptText) {
   console.log('[SettingsBase] handleScriptApply 호출됨', {
     parsedActions,
-    currentActionsLength: editableActions.value.length
+    currentActionsLength: editableActions.value.length,
+    scriptText: scriptText
   })
   
-  // 새 배열로 할당하여 반응성 보장
-  editableActions.value = [...parsedActions]
-  console.log('[SettingsBase] 액션 배열 업데이트됨:', editableActions.value)
+  // 스크립트 편집기에서 가져온 스크립트 내용을 사용하여 script 타입 액션 생성
+  const scriptAction = {
+    id: `script-${Date.now()}`,
+    name: '스크립트',
+    type: 'script',
+    parameters: {
+      script: scriptText
+    }
+  }
+  
+  // 모든 액션을 script 타입 액션 하나로 교체
+  editableActions.value = [scriptAction]
+  console.log('[SettingsBase] script 타입 액션으로 교체됨:', editableActions.value)
   
   // 스크립트 적용 후 자동 저장
   handleSave()

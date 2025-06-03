@@ -128,7 +128,8 @@ function applyScript() {
     
     console.log('[ScriptEditor] 파싱된 액션들:', parsedActions)
     
-    emit('apply', parsedActions)
+    // 파싱된 액션과 함께 스크립트 내용도 전달
+    emit('apply', parsedActions, localScriptContent.value)
   } catch (error) {
     console.error('[ScriptEditor] 스크립트 파싱 오류:', error)
     alert('스크립트 파싱 오류: ' + error.message)

@@ -11,7 +11,7 @@
   },
   "blocks": [
     {
-      "id": 1,
+      "id": "1",
       "name": "투입",
       "x": 135,
       "y": 440,
@@ -60,7 +60,7 @@
               "name": "공정1.L로 이동",
               "type": "route_to_connector",
               "parameters": {
-                "target_block_id": 2,
+                "target_block_id": "2",
                 "target_connector_id": "2-conn-left",
                 "delay": "3",
                 "target_block_name": "공정1",
@@ -72,7 +72,7 @@
       ]
     },
     {
-      "id": 2,
+      "id": "2",
       "name": "공정1",
       "x": 443,
       "y": 465,
@@ -138,7 +138,7 @@
               "name": "배출.L로 이동",
               "type": "route_to_connector",
               "parameters": {
-                "target_block_id": 3,
+                "target_block_id": "3",
                 "target_connector_id": "3-conn-left",
                 "delay": "3",
                 "target_block_name": "배출",
@@ -168,7 +168,7 @@
       ]
     },
     {
-      "id": 3,
+      "id": "3",
       "name": "배출",
       "x": 786,
       "y": 454,
@@ -196,16 +196,16 @@
   ],
   "connections": [
     {
-      "from_block_id": "1",
-      "from_connector_id": "1-conn-right",
-      "to_block_id": "2",
-      "to_connector_id": "2-conn-left"
+      "fromBlockId": "1",
+      "fromConnectorId": "1-conn-right",
+      "toBlockId": "2",
+      "toConnectorId": "2-conn-left"
     },
     {
-      "from_block_id": "2",
-      "from_connector_id": "2-conn-right",
-      "to_block_id": "3",
-      "to_connector_id": "3-conn-left"
+      "fromBlockId": "2",
+      "fromConnectorId": "2-conn-right",
+      "toBlockId": "3",
+      "toConnectorId": "3-conn-left"
     }
   ],
   "globalSignals": [

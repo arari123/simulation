@@ -63,6 +63,10 @@ const zoomFactor = 1.1;
 
 const entityTextGroup = ref(null);
 
+// 전역 엔티티 ID -> 번호 매핑
+const globalEntityIdToNumber = new Map();
+let globalNextEntityNumber = 1;
+
 function initKonva() {
   console.log("[CanvasArea] initKonva 시작");
   console.log("[CanvasArea] canvasContainerRef.value:", canvasContainerRef.value);
@@ -730,14 +734,8 @@ function displayTransitEntity(entity, index) {
         shadowOpacity: 0.5
       });
       
-      // 엔티티 번호 텍스트
-      let entityNumber;
-      const idMatch = entity.id.match(/-e(\d+)$/);
-      if (idMatch) {
-        entityNumber = parseInt(idMatch[1]);
-      } else {
-        entityNumber = index + 1;
-      }
+      // 엔티티 번호 텍스트 - 전역 매핑에서 번호 가져오기
+      const entityNumber = globalEntityIdToNumber.get(entity.id) || 0;
       
       const transitText = new Konva.Text({
         x: middleX - entitySize / 2,
@@ -842,8 +840,15 @@ function updateEntities() {
   
   console.log("[CanvasArea] Entities by block:", entitiesByBlock);
   
-  // 전역 엔티티 번호 카운터
-  let globalEntityNumber = 1;
+  // 새로운 엔티티에 대해서만 번호 할당
+  props.activeEntityStates.forEach(entity => {
+    if (!globalEntityIdToNumber.has(entity.id)) {
+      globalEntityIdToNumber.set(entity.id, globalNextEntityNumber++);
+      console.log(`[CanvasArea] New entity ${entity.id} assigned number: ${globalEntityIdToNumber.get(entity.id)}`);
+    }
+  });
+  
+  console.log("[CanvasArea] Total entity mappings:", globalEntityIdToNumber.size);
   
   // 각 블록에 엔티티 네모로 표시
   entitiesByBlock.forEach((entities, blockId) => {
@@ -906,20 +911,9 @@ function updateEntities() {
             shadowOpacity: 0.3
           });
           
-          // 엔티티 번호 텍스트 - ID에서 숫자 추출 또는 전역 카운터 사용
-          let entityNumber;
-          
-          // 엔티티 ID에서 번호 추출 시도 (예: "1-e1" -> "1", "1-e2" -> "2")
-          console.log(`[CanvasArea] Processing entity ID: ${entity.id}`);
-          const idMatch = entity.id.match(/-e(\d+)$/);
-          if (idMatch) {
-            entityNumber = parseInt(idMatch[1]);
-            console.log(`[CanvasArea] Extracted number from ID: ${entityNumber}`);
-          } else {
-            // ID에서 번호를 추출할 수 없으면 전역 카운터 사용
-            entityNumber = globalEntityNumber++;
-            console.log(`[CanvasArea] Using global counter: ${entityNumber}`);
-          }
+          // 엔티티 번호 텍스트 - 전역 매핑에서 번호 가져오기
+          const entityNumber = globalEntityIdToNumber.get(entity.id) || 0;
+          console.log(`[CanvasArea] Entity ${entity.id} has number: ${entityNumber}`);
           const fontSize = entities.length === 1 ? 16 : 12; // 14->16, 10->12로 증가
           const entityText = new Konva.Text({
             x: block.x + entityX,
@@ -1283,6 +1277,14 @@ watch(() => props.currentSettings, () => {
 
 watch(() => props.activeEntityStates, () => {
   console.log("[CanvasArea] activeEntityStates 변경됨:", props.activeEntityStates);
+  
+  // 엔티티가 모두 사라지면 전역 매핑 초기화 (리셋)
+  if (props.activeEntityStates.length === 0) {
+    globalEntityIdToNumber.clear();
+    globalNextEntityNumber = 1;
+    console.log("[CanvasArea] 엔티티 매핑 초기화됨");
+  }
+  
   dirtyFlags.value.entities = true;
   if (stage && layer) {
     drawCanvasContent();

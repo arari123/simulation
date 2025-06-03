@@ -6,7 +6,7 @@
     <div v-show="!isMinimized" class="panel-content">
       <h3>제어판</h3>
       <div>배출된 제품: {{ currentDispatchedProducts }} 개</div>
-      <div>진행 시간: {{ currentProcessTime }} 초</div>
+      <div>진행 시간: {{ currentProcessTime.toFixed(1) }} 초</div>
       <div>실행된 스텝 수: {{ currentStepCount }} 회</div>
       
       <button @click="stepExecution">스텝 실행</button>

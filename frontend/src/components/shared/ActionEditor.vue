@@ -25,6 +25,7 @@
         <option value="conditional_branch">조건부 실행</option>
         <option value="action_jump">액션 점프</option>
         <option value="custom_sink">커스텀 싱크</option>
+        <option value="script">스크립트</option>
       </select>
     </div>
 
@@ -231,6 +232,28 @@
       <div v-else-if="localAction.type === 'custom_sink'" class="info-text">
         이 액션은 추가 파라미터가 필요하지 않습니다.
       </div>
+
+      <!-- 스크립트 -->
+      <div v-else-if="localAction.type === 'script'" class="form-group">
+        <label for="script-content">스크립트:</label>
+        <textarea
+          id="script-content"
+          v-model="localAction.parameters.script"
+          rows="10"
+          placeholder="스크립트를 입력하세요..."
+          class="form-textarea"
+          @keydown="onKeyDown"
+        ></textarea>
+        <div class="help-text">
+          사용 가능한 명령어:<br>
+          - delay 5 (5초 대기)<br>
+          - 신호명 = true/false (신호 설정)<br>
+          - wait 신호명 = true/false (신호 대기)<br>
+          - if 신호명 = true/false (조건부 실행, 다음 줄 들여쓰기)<br>
+          - go to 블록명.커넥터명 (이동)<br>
+          - jump to 1 (1번 줄로 점프)
+        </div>
+      </div>
     </div>
 
     <div class="editor-footer">
@@ -294,6 +317,8 @@ const isValid = computed(() => {
       return localAction.value.parameters?.target_action_name
     case 'custom_sink':
       return true
+    case 'script':
+      return localAction.value.parameters?.script?.trim()
     default:
       return false
   }
@@ -329,6 +354,9 @@ function handleTypeChange() {
       break
     case 'custom_sink':
       localAction.value.parameters = {}
+      break
+    case 'script':
+      localAction.value.parameters = { script: '' }
       break
   }
 }
@@ -693,6 +721,9 @@ async function updateActionName() {
       break
     case 'custom_sink':
       newName = '제품 배출 처리'
+      break
+    case 'script':
+      newName = '스크립트 실행'
       break
   }
   

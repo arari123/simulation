@@ -517,8 +517,8 @@
     {
       "id": "signal-1748943452761",
       "name": "공정3 load enable",
-      "value": false,
-      "initialValue": false
+      "value": true,
+      "initialValue": true
     },
     {
       "id": "signal-1748943461850",

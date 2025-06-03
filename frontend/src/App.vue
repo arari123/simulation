@@ -339,6 +339,7 @@ function getSimulationSetupData() {
     width: block.width,
     height: block.height,
     maxCapacity: block.maxCapacity || 1,
+    script: block.script || '',  // script 필드 추가
     actions: block.actions || [],
     connectionPoints: (block.connectionPoints || []).map(cp => ({
       ...cp,
@@ -447,7 +448,36 @@ function handleImportConfiguration(config) {
     console.log('[App] 설정 가져오기 시작:', config);
     
     if (config.blocks) {
-      blocks.value = config.blocks;
+      // 블록 로드 시 script 필드가 있으면 script 타입 액션으로 변환
+      blocks.value = config.blocks.map(block => {
+        const processedBlock = { ...block };
+        
+        // script 필드가 있고 actions 배열에 script 타입 액션이 없으면 추가
+        if (processedBlock.script && processedBlock.script.trim()) {
+          const hasScriptAction = processedBlock.actions?.some(action => action.type === 'script');
+          
+          if (!hasScriptAction) {
+            // actions 배열이 없으면 생성
+            if (!processedBlock.actions) {
+              processedBlock.actions = [];
+            }
+            
+            // script 타입 액션 추가
+            processedBlock.actions.push({
+              id: `script-action-${Date.now()}`,
+              name: '스크립트 실행',
+              type: 'script',
+              parameters: {
+                script: processedBlock.script
+              }
+            });
+            
+            console.log('[App] 블록', processedBlock.name, '에 script 타입 액션 추가');
+          }
+        }
+        
+        return processedBlock;
+      });
       console.log('[App] 블록 설정 로드:', config.blocks.length);
     }
     if (config.connections) {
@@ -455,7 +485,12 @@ function handleImportConfiguration(config) {
       console.log('[App] 연결 설정 로드:', config.connections.length);
     }
     if (config.globalSignals) {
-      globalSignals.value = config.globalSignals;
+      // 신호를 로드할 때 value를 initialValue로 리셋
+      globalSignals.value = config.globalSignals.map(signal => ({
+        ...signal,
+        // initialValue가 정의되어 있으면 그것을 사용, 아니면 기존 value 사용
+        value: signal.initialValue !== undefined ? signal.initialValue : signal.value
+      }));
       console.log('[App] 전역 신호 설정 로드:', config.globalSignals.length);
     }
     if (config.settings) {

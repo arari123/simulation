@@ -11,14 +11,8 @@ from ..models import (
     SimulationSetup, SimulationRunResult, SimulationStepResult, 
     BatchStepRequest, BatchStepResult, EntityState
 )
-from ..state_manager import (
-    sim_env, sim_log, processed_entities_count,
-    reset_simulation_state, get_current_signals
-)
-from ..entity import get_active_entity_states
-from ..utils import check_entity_movement, get_latest_movement_description
-# 리팩토링된 엔진 사용
-from ..simulation_engine_v2 import run_simulation, step_simulation, batch_step_simulation
+# 새로운 단순 엔진 어댑터 사용
+from ..simple_engine_adapter import engine_adapter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/simulation", tags=["simulation"])
@@ -51,214 +45,208 @@ def convert_config_ids_to_strings(config_data: dict) -> dict:
     
     # 연결 ID 변환
     for conn in config.get("connections", []):
-        if "id" in conn and isinstance(conn["id"], int):
-            conn["id"] = str(conn["id"])
-        if "from_block_id" in conn and isinstance(conn["from_block_id"], int):
-            conn["from_block_id"] = str(conn["from_block_id"])
-        if "to_block_id" in conn and isinstance(conn["to_block_id"], int):
-            conn["to_block_id"] = str(conn["to_block_id"])
+        for field in ["fromBlockId", "toBlockId"]:
+            if field in conn and isinstance(conn[field], int):
+                conn[field] = str(conn[field])
     
     return config
 
-@router.post("/run", response_model=SimulationRunResult)
-async def run_simulation_endpoint(raw_setup: dict):
-    """전체 시뮬레이션을 실행합니다."""
+@router.post("/setup")
+async def setup_simulation_endpoint(config_data: dict):
+    """시뮬레이션 설정 엔드포인트"""
     try:
-        # ID 변환 및 신호 처리 적용
-        converted_config = convert_config_ids_to_strings(raw_setup)
-        initial_signals = convert_global_signals_to_initial_signals(converted_config)
+        logger.info("🚀 새로운 단순 엔진으로 시뮬레이션 설정 시작")
         
-        # SimulationSetup 객체 생성
-        setup_data = {
-            "blocks": converted_config.get("blocks", []),
-            "connections": converted_config.get("connections", []),
+        # ID를 문자열로 변환
+        config_data = convert_config_ids_to_strings(config_data)
+        
+        # 글로벌 신호 변환
+        initial_signals = convert_global_signals_to_initial_signals(config_data)
+        config_data["initial_signals"] = initial_signals
+        
+        # Pydantic 모델로 검증
+        setup = SimulationSetup(**config_data)
+        
+        # 새 엔진으로 설정
+        await engine_adapter.setup_simulation(setup)
+        
+        logger.info("✅ 새로운 단순 엔진 설정 완료")
+        return {
+            "message": "새로운 단순 엔진으로 시뮬레이션이 설정되었습니다",
+            "engine_type": "simple_engine_v3",
+            "blocks_count": len(setup.blocks),
+            "connections_count": len(setup.connections),
             "initial_signals": initial_signals
         }
         
-        # 기타 필드들도 포함
-        for key in ["initial_entities", "stop_time", "stop_entities_processed"]:
-            if key in converted_config:
-                setup_data[key] = converted_config[key]
-        
-        setup = SimulationSetup(**setup_data)
-        result = await run_simulation(setup)
-        return result
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Simulation error: {str(e)}")
+        logger.error(f"❌ 시뮬레이션 설정 오류: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=400, detail=f"설정 오류: {str(e)}")
 
 @router.post("/step", response_model=SimulationStepResult)
-async def step_simulation_endpoint(raw_setup: Optional[dict] = None):
-    """시뮬레이션을 한 스텝씩 실행합니다."""
-    global processed_entities_count
-    
+async def step_simulation_endpoint(config_data: Optional[dict] = None):
+    """단일 시뮬레이션 스텝 실행"""
     try:
-        # 🔥 간소화된 디버깅 로그 (성능 최적화)
-        from .. import simulation_engine_v2
-        engine = simulation_engine_v2._simulation_engine
-        has_env = engine.sim_env is not None
-        has_setup = raw_setup is not None
+        # 설정 데이터가 있으면 먼저 시뮬레이션 설정
+        if config_data:
+            logger.info("🚀 스텝 실행 전 시뮬레이션 설정")
+            
+            # 블록 정보 로깅
+            for block in config_data.get('blocks', []):
+                block_name = block.get('name', 'Unknown')
+                if 'script' in block:
+                    logger.info(f"📝 설정 중 블록 '{block_name}' 스크립트 필드 존재")
+                else:
+                    logger.info(f"📝 설정 중 블록 '{block_name}' 스크립트 필드 없음")
+            
+            # ID를 문자열로 변환
+            config_data = convert_config_ids_to_strings(config_data)
+            
+            # 글로벌 신호 변환
+            initial_signals = convert_global_signals_to_initial_signals(config_data)
+            config_data["initial_signals"] = initial_signals
+            
+            # Pydantic 모델로 검증
+            setup = SimulationSetup(**config_data)
+            
+            # 새 엔진으로 설정
+            await engine_adapter.setup_simulation(setup)
+            logger.info("✅ 시뮬레이션 설정 완료")
         
-        # 모니터링 모드가 아닐 때만 간단한 로그 출력
-        if not getattr(engine, 'monitoring_mode', False):
-            if has_env:
-                current_time = engine.sim_env.now
-                queue_size = len(engine.sim_env._queue)
-                logger.info(f"[STEP] 환경 상태: 시간={current_time:.1f}, 큐={queue_size}, setup={has_setup}")
-            else:
-                logger.info(f"[STEP] 환경 없음, setup 제공: {has_setup}")
+        logger.info("⚡ 새로운 단순 엔진 스텝 실행")
+        result = engine_adapter.step_simulation()
         
-        setup = None
-        if engine.sim_env is None:
-            # 🔥 시뮬레이션 환경이 없으면 setup이 필요함
-            if raw_setup is None:
-                # 기본 설정 자동 로드
-                logger.info(f"[STEP] 환경 없음 - 기본 설정 자동 로드")
-                try:
-                    with open('/home/arari123/project/simulation/base.json', 'r', encoding='utf-8') as f:
-                        import json
-                        raw_setup = json.load(f)
-                        logger.info(f"[STEP] 기본 설정 로드 성공")
-                except Exception as e:
-                    logger.error(f"[STEP-ERROR] 기본 설정 로드 실패: {e}")
-                    raise HTTPException(
-                        status_code=400, 
-                        detail="No active simulation and failed to load default setup. Please provide simulation setup."
-                    )
-            if not getattr(engine, 'monitoring_mode', False):
-                logger.info(f"[STEP] 첫 번째 스텝 - 새로운 설정으로 시뮬레이션 시작")
-            
-            # ID 변환 및 신호 처리 적용
-            converted_config = convert_config_ids_to_strings(raw_setup)
-            initial_signals = convert_global_signals_to_initial_signals(converted_config)
-            
-            if not getattr(engine, 'monitoring_mode', False):
-                logger.info(f"[STEP] 초기 신호 설정: {initial_signals}")
-            
-            # SimulationSetup 객체 생성
-            setup_data = {
-                "blocks": converted_config.get("blocks", []),
-                "connections": converted_config.get("connections", []),
-                "initial_signals": initial_signals
-            }
-            
-            # 기타 필드들도 포함
-            for key in ["initial_entities", "stop_time", "stop_entities_processed"]:
-                if key in converted_config:
-                    setup_data[key] = converted_config[key]
-            
-            setup = SimulationSetup(**setup_data)
-        elif raw_setup is not None and engine.sim_env is not None:
-            # 🔥 이미 시뮬레이션이 진행 중인 경우
-            if not getattr(engine, 'monitoring_mode', False):
-                logger.info(f"[STEP] 기존 환경에서 계속 진행")
-            # setup을 전달하여 엔진이 변경사항을 확인할 수 있도록 함
-            converted_config = convert_config_ids_to_strings(raw_setup)
-            initial_signals = convert_global_signals_to_initial_signals(converted_config)
-            
-            setup_data = {
-                "blocks": converted_config.get("blocks", []),
-                "connections": converted_config.get("connections", []),
-                "initial_signals": initial_signals
-            }
-            
-            for key in ["initial_entities", "stop_time", "stop_entities_processed"]:
-                if key in converted_config:
-                    setup_data[key] = converted_config[key]
-            
-            setup = SimulationSetup(**setup_data)
-        else:
-            # 🔥 환경 존재하지만 setup 없음 - 계속 진행
-            if not getattr(engine, 'monitoring_mode', False):
-                logger.info(f"[STEP] 기존 환경에서 계속 진행")
-            setup = None
-        
-        # 초기 상태 저장 (엔티티 움직임 감지용)
-        initial_entity_states = {}
-        for entity_state in get_active_entity_states():
-            initial_entity_states[entity_state.id] = entity_state.current_block_id
-        initial_processed_count = processed_entities_count
-        
-        result = await step_simulation(setup)
-        
-        # 엔티티 움직임 확인
-        has_movement = check_entity_movement(initial_entity_states, initial_processed_count)
-        
-        if not has_movement:
-            # 움직임이 없으면 최근 이벤트 설명 사용
-            result.event_description = get_latest_movement_description()
-        
+        logger.info(f"✅ 스텝 완료 - 시간: {result.time:.2f}, 엔티티: {len(result.active_entities)}")
         return result
+        
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Step simulation error: {str(e)}")
+        logger.error(f"❌ 스텝 실행 오류: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"스텝 실행 오류: {str(e)}")
 
 @router.post("/batch-step", response_model=BatchStepResult)
-async def batch_step_simulation_endpoint(request: BatchStepRequest):
-    """시뮬레이션을 여러 스텝 실행합니다."""
+def batch_step_simulation_endpoint(request: BatchStepRequest):
+    """배치 시뮬레이션 스텝 실행"""
     try:
-        result = await batch_step_simulation(request.steps)
+        logger.info(f"⚡ 새로운 단순 엔진 배치 스텝 실행 ({request.steps}스텝)")
+        result = engine_adapter.batch_step_simulation(request.steps)
+        
+        logger.info(f"✅ 배치 스텝 완료 - {result.steps_executed}스텝 실행")
         return result
+        
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Batch step simulation error: {str(e)}")
+        logger.error(f"❌ 배치 스텝 실행 오류: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"배치 스텝 실행 오류: {str(e)}")
+
+@router.post("/run", response_model=SimulationRunResult)
+def run_simulation_endpoint(max_steps: int = 100):
+    """시뮬레이션 연속 실행"""
+    try:
+        logger.info(f"🏃 새로운 단순 엔진 연속 실행 시작 (최대 {max_steps}스텝)")
+        result = engine_adapter.run_simulation(max_steps)
+        
+        logger.info(f"✅ 연속 실행 완료 - 총 {result.total_entities_processed}개 엔티티 처리")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ 연속 실행 오류: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"연속 실행 오류: {str(e)}")
 
 @router.post("/reset")
-async def reset_simulation_endpoint():
-    """시뮬레이션을 초기화합니다."""
+def reset_simulation_endpoint():
+    """시뮬레이션 리셋"""
     try:
-        # 🔥 SimPy 환경을 완전히 새로 생성하여 이전 프로세스들을 정리
-        from .. import simulation_engine_v2
-        engine = simulation_engine_v2._simulation_engine
+        logger.info("🔄 새로운 단순 엔진 리셋")
+        engine_adapter.reset_simulation()
         
-        if engine.sim_env:
-            logger.info(f"[RESET] 이전 SimPy 환경 정리 (시간: {engine.sim_env.now})")
-        
-        # 기존 state_manager도 리셋
-        reset_simulation_state()
-        
-        # 새로운 엔진 리셋
-        engine.reset()
-        
-        # 🚀 Performance optimization cache reset
-        try:
-            from .. import simulation_engine_v2
-            simulation_engine_v2._simulation_engine.reset()
-        except Exception as e:
-            logger.warning(f"[RESET] Cache reset warning: {e}")
-            # Continue with reset even if cache reset fails
-        
-        logger.info(f"[RESET] SimPy 환경 및 캐시 초기화됨 - 다음 스텝에서 새로 생성됨")
-        
-        # Reset log file
-        from ..logger_config import reset_log_file
-        reset_log_file()
-        
-        return {"message": "Simulation reset successfully"}
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Reset error: {str(e)}")
-
-@router.post("/update-settings")
-async def update_settings_endpoint(settings: Dict[str, Any]):
-    """시뮬레이션 설정을 업데이트합니다."""
-    try:
-        # 설정 검증 및 저장
-        valid_keys = ['boxSize', 'fontSize', 'deadlockTimeout', 'showEntityNames', 'showSignalNames', 'showSignalValues']
-        validated_settings = {}
-        
-        for key, value in settings.items():
-            if key in valid_keys:
-                validated_settings[key] = value
-            else:
-                logger.warning(f"[SimulationRoutes] Warning: Unknown setting key '{key}' ignored")
-        
-        logger.info(f"[SimulationRoutes] Settings updated: {validated_settings}")
-        
+        logger.info("✅ 새로운 단순 엔진 리셋 완료")
         return {
-            "message": "Settings updated successfully",
-            "updated_settings": validated_settings
+            "message": "새로운 단순 엔진이 리셋되었습니다",
+            "engine_type": "simple_engine_v3"
         }
+        
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Settings update error: {str(e)}") 
+        logger.error(f"❌ 리셋 오류: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"리셋 오류: {str(e)}")
+
+@router.get("/status")
+def get_simulation_status():
+    """현재 시뮬레이션 상태 조회"""
+    try:
+        status = engine_adapter.get_simulation_status()
+        status["engine_type"] = "simple_engine_v3"
+        return status
+        
+    except Exception as e:
+        logger.error(f"❌ 상태 조회 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"상태 조회 오류: {str(e)}")
+
+@router.get("/load-base-config")
+def load_base_config():
+    """기본 설정 로드"""
+    try:
+        base_config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "base.json")
+        
+        if os.path.exists(base_config_path):
+            with open(base_config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            logger.info("✅ 기본 설정 로드 완료")
+            return {
+                "message": "기본 설정이 로드되었습니다",
+                "config": config,
+                "engine_type": "simple_engine_v3"
+            }
+        else:
+            logger.warning("⚠️ 기본 설정 파일을 찾을 수 없습니다")
+            raise HTTPException(status_code=404, detail="기본 설정 파일을 찾을 수 없습니다")
+            
+    except Exception as e:
+        logger.error(f"❌ 기본 설정 로드 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"기본 설정 로드 오류: {str(e)}")
+
+@router.post("/load-config")
+def load_config_file(file_path: str):
+    """지정된 설정 파일 로드"""
+    try:
+        logger.info(f"📁 설정 파일 로드 시작: {file_path}")
+        
+        # 상대 경로를 절대 경로로 변환
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        full_path = os.path.join(project_root, file_path)
+        
+        if os.path.exists(full_path):
+            with open(full_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            # 블록별 스크립트 정보 로깅
+            for block in config.get('blocks', []):
+                block_name = block.get('name', 'Unknown')
+                if 'script' in block:
+                    script_lines = block['script'].split('\n')
+                    logger.info(f"📝 블록 '{block_name}' 스크립트: {len(script_lines)} 라인")
+                    if script_lines:
+                        logger.info(f"   첫 번째 라인: {script_lines[0]}")
+                else:
+                    logger.info(f"📝 블록 '{block_name}' 스크립트: 없음")
+            
+            logger.info(f"✅ 설정 파일 로드 완료: {file_path}")
+            return {
+                "message": f"설정 파일 {file_path}이(가) 로드되었습니다",
+                "config": config,
+                "engine_type": "simple_engine_v3"
+            }
+        else:
+            logger.error(f"❌ 파일을 찾을 수 없습니다: {full_path}")
+            raise HTTPException(status_code=404, detail=f"파일을 찾을 수 없습니다: {file_path}")
+            
+    except json.JSONDecodeError as e:
+        logger.error(f"❌ JSON 파싱 오류: {e}")
+        raise HTTPException(status_code=400, detail=f"JSON 파싱 오류: {str(e)}")
+    except Exception as e:
+        logger.error(f"❌ 설정 파일 로드 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"설정 파일 로드 오류: {str(e)}")

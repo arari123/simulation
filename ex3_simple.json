@@ -1,0 +1,357 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "name": "투입",
+      "x": 135,
+      "y": 440,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "script": "wait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\tgo to 공정1.L,10\nif 공정2 load enable = true\n\t공정2 load enable = false\n\tgo to 공정2.L,10",
+      "actions": [
+        {
+          "id": "script-action-1",
+          "name": "조건부 실행",
+          "type": "conditional_branch",
+          "parameters": {
+            "script": "wait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\tgo to 공정1.L,10\nif 공정2 load enable = true\n\t공정2 load enable = false\n\tgo to 공정2.L,10"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "1-conn-right",
+          "name": "R",
+          "x": 100,
+          "y": 50
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "name": "공정1",
+      "x": 443,
+      "y": 193,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "script": "delay 10\n공정1 unload enable = true\nwait 배출 load enable = true\n배출 load enable = false\n공정1 unload enable = false\ngo to 배출.L,10\n공정1 load enable = true\n배출 load enable = true",
+      "actions": [
+        {
+          "id": "script-action-1",
+          "name": "딜레이 10초",
+          "type": "delay",
+          "parameters": {
+            "duration": "10"
+          }
+        },
+        {
+          "id": "script-action-2",
+          "name": "self.R로 이동",
+          "type": "route_to_connector",
+          "parameters": {
+            "connector_id": "2-conn-right",
+            "delay": "0",
+            "target_block_name": "self",
+            "target_connector_name": "R"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "2-conn-left",
+          "name": "L",
+          "x": 0,
+          "y": 50
+        },
+        {
+          "id": "2-conn-right",
+          "name": "R",
+          "x": 100,
+          "y": 50,
+          "actions": [
+            {
+              "id": "script-action-1",
+              "name": "공정1 unload enable = true",
+              "type": "signal_update",
+              "parameters": {
+                "signal_name": "공정1 unload enable",
+                "value": true
+              }
+            },
+            {
+              "id": "script-action-2",
+              "name": "배출 load enable = true 대기",
+              "type": "signal_wait",
+              "parameters": {
+                "signal_name": "배출 load enable",
+                "expected_value": true
+              }
+            },
+            {
+              "id": "script-action-3",
+              "name": "배출 load enable = false",
+              "type": "signal_update",
+              "parameters": {
+                "signal_name": "배출 load enable",
+                "value": false
+              }
+            },
+            {
+              "id": "script-action-4",
+              "name": "공정1 unload enable = false",
+              "type": "signal_update",
+              "parameters": {
+                "signal_name": "공정1 unload enable",
+                "value": false
+              }
+            },
+            {
+              "id": "script-action-5",
+              "name": "배출.L로 이동",
+              "type": "route_to_connector",
+              "parameters": {
+                "target_block_id": "3",
+                "target_connector_id": "3-conn-left",
+                "delay": "10",
+                "target_block_name": "배출",
+                "target_connector_name": "L"
+              }
+            },
+            {
+              "id": "script-action-6",
+              "name": "공정1 load enable = true",
+              "type": "signal_update",
+              "parameters": {
+                "signal_name": "공정1 load enable",
+                "value": true
+              }
+            },
+            {
+              "id": "script-action-7",
+              "name": "배출 load enable = true",
+              "type": "signal_update",
+              "parameters": {
+                "signal_name": "배출 load enable",
+                "value": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "name": "배출",
+      "x": 786,
+      "y": 454,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "script": "// 싱크 블록 - 엔티티 자동 처리",
+      "actions": [
+        {
+          "id": "b3-act1",
+          "name": "제품 배출 처리",
+          "type": "custom_sink",
+          "parameters": {}
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "3-conn-left",
+          "name": "L",
+          "x": 0,
+          "y": 50
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "공정2",
+      "x": 454,
+      "y": 597,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "script": "delay 10\n공정2 unload enable = true\nwait 배출 load enable = true\n배출 load enable = false\n공정2 unload enable = false\ngo to 배출.L,10\n공정2 load enable = true\n배출 load enable = true",
+      "actions": [
+        {
+          "id": "script-action-1",
+          "name": "딜레이 10초",
+          "type": "delay",
+          "parameters": {
+            "duration": "10"
+          }
+        },
+        {
+          "id": "script-action-2",
+          "name": "self.R로 이동",
+          "type": "route_to_connector",
+          "parameters": {
+            "connector_id": "4-conn-right",
+            "delay": "0",
+            "target_block_name": "self",
+            "target_connector_name": "R"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "4-conn-left",
+          "name": "L",
+          "x": 0,
+          "y": 50
+        },
+        {
+          "id": "4-conn-right",
+          "name": "R",
+          "x": 100,
+          "y": 50,
+          "actions": [
+            {
+              "id": "script-action-1",
+              "name": "공정2 unload enable = true",
+              "type": "signal_update",
+              "parameters": {
+                "signal_name": "공정2 unload enable",
+                "value": true
+              }
+            },
+            {
+              "id": "script-action-2",
+              "name": "배출 load enable = true 대기",
+              "type": "signal_wait",
+              "parameters": {
+                "signal_name": "배출 load enable",
+                "expected_value": true
+              }
+            },
+            {
+              "id": "script-action-3",
+              "name": "배출 load enable = false",
+              "type": "signal_update",
+              "parameters": {
+                "signal_name": "배출 load enable",
+                "value": false
+              }
+            },
+            {
+              "id": "script-action-4",
+              "name": "공정2 unload enable = false",
+              "type": "signal_update",
+              "parameters": {
+                "signal_name": "공정2 unload enable",
+                "value": false
+              }
+            },
+            {
+              "id": "script-action-5",
+              "name": "배출.L로 이동",
+              "type": "route_to_connector",
+              "parameters": {
+                "target_block_id": "3",
+                "target_connector_id": "3-conn-left",
+                "delay": "10",
+                "target_block_name": "배출",
+                "target_connector_name": "L"
+              }
+            },
+            {
+              "id": "script-action-6",
+              "name": "공정2 load enable = true",
+              "type": "signal_update",
+              "parameters": {
+                "signal_name": "공정2 load enable",
+                "value": true
+              }
+            },
+            {
+              "id": "script-action-7",
+              "name": "배출 load enable = true",
+              "type": "signal_update",
+              "parameters": {
+                "signal_name": "배출 load enable",
+                "value": true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "fromBlockId": "1",
+      "fromConnectorId": "1-conn-right",
+      "toBlockId": "2",
+      "toConnectorId": "2-conn-left"
+    },
+    {
+      "fromBlockId": "2",
+      "fromConnectorId": "2-conn-right",
+      "toBlockId": "3",
+      "toConnectorId": "3-conn-left"
+    },
+    {
+      "fromBlockId": "1",
+      "fromConnectorId": "1-conn-right",
+      "toBlockId": "4",
+      "toConnectorId": "4-conn-left"
+    },
+    {
+      "fromBlockId": "4",
+      "fromConnectorId": "4-conn-right",
+      "toBlockId": "3",
+      "toConnectorId": "3-conn-left"
+    }
+  ],
+  "initial_signals": {
+    "공정1 load enable": true,
+    "공정1 unload enable": false,
+    "공정2 load enable": true,
+    "공정2 unload enable": false,
+    "배출 load enable": true
+  },
+  "globalSignals": [
+    {
+      "id": "signal-1",
+      "name": "공정1 load enable",
+      "value": true,
+      "initialValue": true
+    },
+    {
+      "id": "signal-2",
+      "name": "공정1 unload enable",
+      "value": false,
+      "initialValue": false
+    },
+    {
+      "id": "signal-3",
+      "name": "공정2 load enable",
+      "value": true,
+      "initialValue": true
+    },
+    {
+      "id": "signal-4",
+      "name": "공정2 unload enable",
+      "value": false,
+      "initialValue": false
+    },
+    {
+      "id": "signal-5",
+      "name": "배출 load enable",
+      "value": true,
+      "initialValue": true
+    }
+  ],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 14,
+    "deadlockTimeout": 20,
+    "showEntityNames": true,
+    "showSignalNames": true,
+    "showSignalValues": true
+  }
+}

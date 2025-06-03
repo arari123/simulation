@@ -546,19 +546,47 @@ export function useBlocks() {
     console.log('[useBlocks] 기본 블록 설정 로드')
     
     if (baseConfig.blocks) {
-      blocks.value = baseConfig.blocks.map(block => ({
-        ...block,
-        // base.json에 width/height가 있으면 그대로 사용, 없으면 현재 설정 사용
-        width: block.width || currentSettings.boxSize,
-        height: block.height || currentSettings.boxSize,
-        // connectionPoints는 base.json의 원본 위치 정보를 그대로 사용
-        connectionPoints: (block.connectionPoints || []).map(cp => ({
-          ...cp,
-          // base.json에서 정의된 위치를 그대로 사용
-          x: cp.x !== undefined ? cp.x : (cp.name === 'R' ? currentSettings.boxSize : 0),
-          y: cp.y !== undefined ? cp.y : currentSettings.boxSize / 2
-        }))
-      }))
+      blocks.value = baseConfig.blocks.map(block => {
+        const processedBlock = {
+          ...block,
+          // base.json에 width/height가 있으면 그대로 사용, 없으면 현재 설정 사용
+          width: block.width || currentSettings.boxSize,
+          height: block.height || currentSettings.boxSize,
+          // connectionPoints는 base.json의 원본 위치 정보를 그대로 사용
+          connectionPoints: (block.connectionPoints || []).map(cp => ({
+            ...cp,
+            // base.json에서 정의된 위치를 그대로 사용
+            x: cp.x !== undefined ? cp.x : (cp.name === 'R' ? currentSettings.boxSize : 0),
+            y: cp.y !== undefined ? cp.y : currentSettings.boxSize / 2
+          }))
+        };
+        
+        // script 필드가 있고 actions 배열에 script 타입 액션이 없으면 추가
+        if (processedBlock.script && processedBlock.script.trim()) {
+          const hasScriptAction = processedBlock.actions?.some(action => action.type === 'script');
+          
+          if (!hasScriptAction) {
+            // actions 배열이 없으면 생성
+            if (!processedBlock.actions) {
+              processedBlock.actions = [];
+            }
+            
+            // script 타입 액션 추가
+            processedBlock.actions.push({
+              id: `script-action-${Date.now()}-${block.id}`,
+              name: '스크립트 실행',
+              type: 'script',
+              parameters: {
+                script: processedBlock.script
+              }
+            });
+            
+            console.log('[useBlocks] 블록', processedBlock.name, '에 script 타입 액션 추가');
+          }
+        }
+        
+        return processedBlock;
+      })
     }
 
     if (baseConfig.connections) {
