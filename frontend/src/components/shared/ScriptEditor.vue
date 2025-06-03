@@ -33,6 +33,7 @@
                 @input="onScriptInput"
                 @compositionstart="onCompositionStart"
                 @compositionend="onCompositionEnd"
+                @keydown="onKeyDown"
               ></textarea>
               <div class="syntax-errors" ref="syntaxErrors">
                 <div 
@@ -173,6 +174,112 @@ function onCompositionEnd() {
   isComposing.value = false
   // 한글 입력이 끝났을 때 실시간 검증 실행
   onScriptInput()
+}
+
+function onKeyDown(event) {
+  // Tab 키 처리 - 들여쓰기
+  if (event.key === 'Tab') {
+    event.preventDefault()
+    
+    const textarea = event.target
+    const start = textarea.selectionStart
+    const end = textarea.selectionEnd
+    const text = textarea.value
+    
+    if (event.shiftKey) {
+      // Shift+Tab: 내어쓰기
+      const lineStart = text.lastIndexOf('\n', start - 1) + 1
+      const lineEnd = text.indexOf('\n', end)
+      const selectedLines = text.substring(lineStart, lineEnd === -1 ? text.length : lineEnd)
+      
+      // 각 줄의 시작에서 탭 제거
+      const unindentedLines = selectedLines.split('\n').map(line => {
+        if (line.startsWith('\t')) {
+          return line.substring(1)
+        } else if (line.startsWith('    ')) { // 4칸 공백
+          return line.substring(4)
+        }
+        return line
+      }).join('\n')
+      
+      const before = text.substring(0, lineStart)
+      const after = text.substring(lineEnd === -1 ? text.length : lineEnd)
+      
+      localScriptContent.value = before + unindentedLines + after
+      
+      // 커서 위치 조정
+      nextTick(() => {
+        const removedChars = selectedLines.length - unindentedLines.length
+        textarea.selectionStart = Math.max(lineStart, start - Math.min(removedChars, start - lineStart))
+        textarea.selectionEnd = Math.max(lineStart, end - removedChars)
+      })
+    } else {
+      // Tab: 들여쓰기
+      if (start === end) {
+        // 단일 커서: 탭 문자 삽입
+        const before = text.substring(0, start)
+        const after = text.substring(end)
+        
+        localScriptContent.value = before + '\t' + after
+        
+        // 커서 위치 조정
+        nextTick(() => {
+          textarea.selectionStart = textarea.selectionEnd = start + 1
+        })
+      } else {
+        // 선택된 텍스트: 각 줄의 시작에 탭 추가
+        const lineStart = text.lastIndexOf('\n', start - 1) + 1
+        const lineEnd = text.indexOf('\n', end)
+        const selectedLines = text.substring(lineStart, lineEnd === -1 ? text.length : lineEnd)
+        
+        // 각 줄의 시작에 탭 추가
+        const indentedLines = selectedLines.split('\n').map(line => '\t' + line).join('\n')
+        
+        const before = text.substring(0, lineStart)
+        const after = text.substring(lineEnd === -1 ? text.length : lineEnd)
+        
+        localScriptContent.value = before + indentedLines + after
+        
+        // 커서 위치 조정
+        nextTick(() => {
+          const addedChars = indentedLines.length - selectedLines.length
+          textarea.selectionStart = start + (start > lineStart ? 1 : 0)
+          textarea.selectionEnd = end + addedChars
+        })
+      }
+    }
+    
+    // 실시간 검증 실행
+    onScriptInput()
+  }
+  
+  // Enter 키 처리 - 자동 들여쓰기
+  else if (event.key === 'Enter') {
+    event.preventDefault()
+    
+    const textarea = event.target
+    const start = textarea.selectionStart
+    const text = textarea.value
+    
+    // 현재 줄의 들여쓰기 레벨 확인
+    const lineStart = text.lastIndexOf('\n', start - 1) + 1
+    const currentLine = text.substring(lineStart, start)
+    const indent = currentLine.match(/^(\t*)/)[1] // 시작 부분의 탭들
+    
+    // 새 줄 + 동일한 들여쓰기 적용
+    const before = text.substring(0, start)
+    const after = text.substring(start)
+    
+    localScriptContent.value = before + '\n' + indent + after
+    
+    // 커서 위치 조정
+    nextTick(() => {
+      textarea.selectionStart = textarea.selectionEnd = start + 1 + indent.length
+    })
+    
+    // 실시간 검증 실행
+    onScriptInput()
+  }
 }
 
 // Props 변경 감지
@@ -324,6 +431,9 @@ watch(() => props.show, (newShow) => {
   cursor: text;
   z-index: 1;
   position: relative;
+  tab-size: 4; /* 탭 크기 설정 */
+  -moz-tab-size: 4;
+  white-space: pre; /* 공백과 탭 보존 */
 }
 
 .syntax-errors {

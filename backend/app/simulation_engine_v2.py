@@ -133,19 +133,10 @@ class SimulationEngine:
             logger.debug(f"Triggering initial events for source blocks")
         self.source_manager.trigger_initial_events(self.sim_env)
         
-        # 첫 스텝 실행
+        # 첫 스텝은 step_simulation에서 실행하도록 함
+        # 여기서는 환경 설정만 완료
         if DEBUG_MODE:
-            logger.debug(f"Executing first step")
-            logger.debug(f"Event queue before first step: {len(self.sim_env._queue)} events")
-        try:
-            self.sim_env.step()
-            if DEBUG_MODE:
-                logger.debug(f"First step completed, current time: {self.sim_env.now}")
-                logger.debug(f"Event queue after first step: {len(self.sim_env._queue)} events")
-        except simpy.core.EmptySchedule:
-            if DEBUG_MODE:
-                logger.debug(f"Empty schedule after first step")
-            pass
+            logger.debug(f"Setup completed. Event queue: {len(self.sim_env._queue)} events")
             
     def _extract_generation_condition(self, block: ProcessBlockConfig) -> Optional[Dict[str, Any]]:
         """블록에서 생성 조건을 추출합니다."""

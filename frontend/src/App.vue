@@ -20,6 +20,7 @@
       @import-configuration="handleImportConfiguration"
       @toggle-global-signal-panel="toggleGlobalSignalPanelVisibility"
       @panel-width-changed="handlePanelWidthChanged"
+      @refresh-auto-connections="refreshAllAutoConnections"
     />
     
     <div class="main-content">
@@ -198,7 +199,8 @@ const {
   handleChangeBlockName,
   handleChangeConnectorName,
   setupInitialBlocks,
-  updateBlocksForSettings
+  updateBlocksForSettings,
+  refreshAllAutoConnections
 } = useBlocks()
 
 const {

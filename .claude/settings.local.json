@@ -29,7 +29,8 @@
       "Bash(cat:*)",
       "Bash(rg:*)",
       "Bash(git add:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(git push:*)"
     ],
     "deny": []
   }

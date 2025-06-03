@@ -380,7 +380,7 @@ function addBlockContent(blockGroup, blockData) {
       // 선택된 커넥터인지 확인
       const isSelected = props.selectedConnectorInfo && 
                         String(props.selectedConnectorInfo.blockId) === String(blockData.id) && 
-                        props.selectedConnectorInfo.connectorId === cp.id;
+                        String(props.selectedConnectorInfo.connectorId) === String(cp.id);
       
       const connectorCircle = new Konva.Circle({
         x: cp.x,

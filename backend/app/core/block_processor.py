@@ -89,6 +89,13 @@ class BlockProcessor:
                 env, block_config, entity, out_pipes, block_log_prefix
             )
             
+            # 소스 블록인 경우 짧은 대기 후 계속 진행
+            if is_source:
+                yield env.timeout(0.1)  # 짧은 대기 후 다음 엔티티 생성 체크
+            # 싱크 블록인 경우에도 짧은 대기를 추가하여 처리 사이클 보장
+            elif has_custom_sink:
+                yield env.timeout(0.01)  # 매우 짧은 대기로 다음 엔티티 처리 준비
+            
     def _get_entity_for_block(self, env: simpy.Environment, block_config: Any,
                              is_source: bool, has_custom_sink: bool,
                              in_pipes: List[str], block_log_prefix: str) -> Generator:
@@ -114,13 +121,20 @@ class BlockProcessor:
         # 생성 수 확인
         generated_count = self.source_manager.get_generated_count(block_id)
         
-        # Request event 대기 (첫 번째 엔티티 생성 시에만)
+        # 첫 번째 엔티티 생성 시에만 request event 대기
         if generated_count == 0:
             request_event = self.source_manager.get_request_event(block_id)
             if request_event and not request_event.triggered:
                 if DEBUG_MODE:
                     logger.debug(f"{env.now:.2f}: {block_log_prefix} Waiting for request event...")
                 yield request_event
+        else:
+            # 이후 엔티티들은 블록이 비어있을 때만 생성
+            current_count = self.entity_manager.get_block_entity_count(block_config.id)
+            if current_count > 0:
+                # 블록에 엔티티가 있으면 대기
+                yield env.timeout(TimeoutConfig.NO_ENTITY_TIMEOUT)
+                return None
         
         # 수용량 확인
         max_capacity = getattr(block_config, 'maxCapacity', None) or getattr(block_config, 'capacity', None)
@@ -166,9 +180,9 @@ class BlockProcessor:
             "event": f"Entity {entity.id} generated at Source {block_config.name}"
         })
         
-        # 다음 엔티티 생성을 위한 지연 (연속 생성 방지)
-        if new_count > 1:  # 첫 번째 이후부터는 지연 적용
-            yield env.timeout(1.0)  # 1초 간격으로 생성
+        # 엔티티 생성 후 스텝 경계 생성
+        # 매우 짧은 시간 후에 이벤트를 발생시켜 스텝이 완료되도록 함
+        yield env.timeout(0.001)
         
         return entity
         
@@ -179,7 +193,26 @@ class BlockProcessor:
         if not in_pipes:
             return None
             
-        # 첫 번째 파이프에서 대기
+        # 모든 입력 파이프를 확인하여 엔티티가 있는 첫 번째 파이프에서 가져오기
+        # SimPy의 AnyOf를 사용하여 여러 파이프 중 하나에서 엔티티가 도착하면 즉시 처리
+        pipe_events = []
+        pipes_map = {}
+        
+        for pipe_id in in_pipes:
+            pipe = self.pipe_manager.get_pipe(pipe_id)
+            if pipe and len(pipe.items) > 0:
+                # 즉시 사용 가능한 엔티티가 있는 경우
+                if DEBUG_MODE:
+                    logger.debug(f"{env.now:.2f}: {block_log_prefix} Found entity in pipe {pipe_id} (items: {len(pipe.items)})")
+                entity = yield pipe.get()
+                if DEBUG_MODE:
+                    logger.debug(f"{env.now:.2f}: {block_log_prefix} Retrieved entity {entity.id} from pipe {pipe_id}")
+                
+                # 도착한 파이프 ID를 저장하여 커넥터 액션 실행 시 사용
+                self._last_arrival_pipe = pipe_id
+                return entity
+        
+        # 모든 파이프가 비어있는 경우, 첫 번째 파이프에서 대기
         pipe_id = in_pipes[0]
         pipe = self.pipe_manager.get_pipe(pipe_id)
         
@@ -188,10 +221,11 @@ class BlockProcessor:
             return None
             
         if DEBUG_MODE:
-            logger.debug(f"{env.now:.2f}: {block_log_prefix} Waiting for entity from pipe {pipe_id} (current items: {len(pipe.items)})")
+            logger.debug(f"{env.now:.2f}: {block_log_prefix} All pipes empty, waiting on first pipe {pipe_id}")
             
         # 엔티티 가져오기 - 파이프에서 블로킹 대기
         entity = yield pipe.get()
+        self._last_arrival_pipe = pipe_id
         
         if DEBUG_MODE:
             logger.debug(f"{env.now:.2f}: {block_log_prefix} Retrieved entity {entity.id} from pipe {pipe_id}")
@@ -214,8 +248,9 @@ class BlockProcessor:
             logger.info(f"{env.now:.2f}: {block_log_prefix} Received Entity {entity.id} "
                       f"from TRANSIT state (capacity: {current_count}/{max_capacity or 'None'})")
                           
-        # 커넥터 액션 실행
-        yield from self._execute_connector_actions(env, block_config, entity, pipe_id, block_log_prefix)
+        # 커넥터 액션 실행 - 저장된 arrival pipe 사용
+        arrival_pipe = getattr(self, '_last_arrival_pipe', pipe_id)
+        yield from self._execute_connector_actions(env, block_config, entity, arrival_pipe, block_log_prefix)
         
         return entity
         
@@ -230,7 +265,13 @@ class BlockProcessor:
                     target_connector = connector
                     break
                     
-        if not target_connector or not hasattr(target_connector, 'actions') or not target_connector.actions:
+        if not target_connector:
+            return
+            
+        # 커넥터 액션이 없는 경우, 기본적으로 블록 진입만 처리
+        if not hasattr(target_connector, 'actions') or not target_connector.actions:
+            # 엔티티가 이미 블록에 위치 업데이트됨 (파이프에서 나올 때)
+            # 추가 처리 없이 반환
             return
             
         # 커넥터 액션 실행
@@ -253,9 +294,6 @@ class BlockProcessor:
             result = yield from self.action_executor.execute_action(env, action, entity, context)
             
             if result == 'route_out':
-                # 엔티티가 라우팅됨 - 소스 블록이면 다음 엔티티를 위한 request event 생성
-                if self.source_manager.is_source_block(str(block_config.id)):
-                    self.source_manager.create_request_event(str(block_config.id), env)
                 
                 # 나머지 액션은 별도로 실행
                 entity_routed = True
@@ -292,9 +330,6 @@ class BlockProcessor:
             result = yield from self.action_executor.execute_action(env, action, entity, context)
             
             if result == 'route_out':
-                # 엔티티가 라우팅됨 - 소스 블록이면 다음 엔티티를 위한 request event 생성
-                if self.source_manager.is_source_block(str(block_config.id)):
-                    self.source_manager.create_request_event(str(block_config.id), env)
                 
                 # 나머지 액션은 별도로 실행
                 entity_routed = True
@@ -303,6 +338,10 @@ class BlockProcessor:
             elif result == 'processed':
                 self.processed_entities_count += 1
                 self.entity_manager.process_entity(entity)
+                # 엔티티가 처리된 후에도 나머지 액션들을 실행해야 함 (주로 신호 업데이트)
+                remaining_actions = block_config.actions[idx+1:]
+                if remaining_actions:
+                    env.process(self._execute_remaining_actions(env, block_config, remaining_actions, out_pipes, block_log_prefix))
                 break
             elif result == 'route_to_self_connector':
                 # 자기 자신의 커넥터로 이동 - 커넥터 액션 실행
@@ -328,7 +367,6 @@ class BlockProcessor:
                                 conn_result = yield from self.action_executor.execute_action(env, conn_action, entity, conn_context)
                                 
                                 if conn_result == 'route_out':
-                                    # self-connector에서도 라우팅이 발생한 경우
                                     entity_routed = True
                                     # 커넥터 액션 중 라우팅 이후의 액션들과 블록의 나머지 액션들을 모두 실행해야 함
                                     remaining_connector_actions = connector.actions[connector.actions.index(conn_action)+1:]
@@ -344,6 +382,7 @@ class BlockProcessor:
     def _execute_remaining_actions(self, env: simpy.Environment, block_config: Any,
                                   actions: List[Any], out_pipes: Dict[str, Any], block_log_prefix: str) -> Generator:
         """엔티티가 라우팅된 후 나머지 액션을 실행합니다."""
+        
         for action in actions:
             if not PERFORMANCE_MODE:
                 logger.info(f"{env.now:.2f}: {block_log_prefix} Executing remaining action: "

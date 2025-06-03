@@ -9,7 +9,7 @@ from .entity_manager import EntityManager
 from .signal_manager import SignalManager
 from .pipe_manager import PipeManager
 from ..utils import parse_delay_value
-from ..script_executor import execute_script_line, execute_conditional_branch_script
+from .script_executor import ScriptExecutor
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,7 @@ class ActionExecutor:
         self.signal_manager = signal_manager
         self.pipe_manager = pipe_manager
         self.sim_log = []
+        self.script_executor = ScriptExecutor(signal_manager, pipe_manager, entity_manager)
         
     def execute_action(self, env: simpy.Environment, action: Any, entity: Any, 
                       context: Dict[str, Any]) -> Generator:
@@ -132,7 +133,17 @@ class ActionExecutor:
                 logger.error(f"route_to_connector: connector {connector_id} not found in out_pipes")
                 return 'route_error'
                 
-            pipe_info = out_pipes[connector_id]
+            # out_pipes[connector_id]가 리스트인 경우 첫 번째 연결 사용
+            pipe_info_data = out_pipes[connector_id]
+            if isinstance(pipe_info_data, list):
+                if len(pipe_info_data) == 0:
+                    logger.error(f"route_to_connector: no connections for connector {connector_id}")
+                    return 'route_error'
+                pipe_info = pipe_info_data[0]  # 첫 번째 연결 사용
+            else:
+                # 구 형식 지원
+                pipe_info = pipe_info_data
+                
             target_block_id = pipe_info.get('block_id')
             target_connector_id = pipe_info.get('connector_name')
             target_block_name = pipe_info.get('block_name')
@@ -192,7 +203,8 @@ class ActionExecutor:
         if script:
             act_log = []
             out_pipes = context.get('out_pipes', {})
-            yield from execute_conditional_branch_script(env, script, entity, act_log, out_pipes)
+            from_block_name = context.get('block_name', 'Unknown')
+            yield from self.script_executor.execute_conditional_branch_script(env, script, entity, act_log, out_pipes, from_block_name)
             
             if any("moved to" in log for log in act_log):
                 return 'route_out'

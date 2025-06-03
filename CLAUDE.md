@@ -112,8 +112,9 @@ lsof -i :8000                        # Check what's running on port 8000
 **Key Features:**
 - **Automatic File Creation**: Log file is created automatically when server starts
 - **Fresh Start**: Each server restart creates a new log file (previous log is deleted)
-- **Maximum 100 Lines**: Log automatically rotates to keep only the last 100 lines (configurable in `logger_config.py`)
+- **Maximum 200 Lines**: Log automatically rotates to keep only the last 100 lines when reaching 200 lines
 - **AI-Readable**: Log file can be read directly by AI for debugging
+- **Simulation Reset Behavior**: Log file is completely reset when simulation is reset via `/simulation/reset` endpoint
 
 **Log Contents:**
 - Server startup/shutdown messages
@@ -136,9 +137,10 @@ tail -f backend/logs/backend_server.log
 
 **Log Configuration:**
 - Configuration: `backend/app/logger_config.py`
-- Automatic rotation when reaching 100 lines (keeps last 50 lines after rotation)
+- Automatic rotation when reaching 200 lines (keeps last 100 lines after rotation)
 - Both console and file output for development convenience
 - LineCountRotatingFileHandler for line-based rotation
+- `reset_log_file()` function called on simulation reset
 
 ### Log Analysis Strategy
 - **Focus on Latest Logs**: When debugging, analyze the most recent log entries
@@ -367,6 +369,36 @@ if 공정1 load enable = false
     jump to 1
 ```
 
+### Script Editor Features
+- **Tab Key Support**: Tab for indent, Shift+Tab for outdent
+- **Auto-Indentation**: Enter key preserves current line's indentation
+- **Multi-line Selection**: Tab/Shift+Tab works on selected lines
+- **Syntax Preservation**: Tab size set to 4 spaces visually
+
+## Auto Connection System
+
+### Automatic Connection Creation
+- **Action Analysis**: Analyzes `route_to_connector` actions and `go to` commands in scripts
+- **Real-time Generation**: Creates connections immediately when actions are saved
+- **Script Pattern Recognition**: Regex pattern `/go\s+to\s+([^.\s]+)\.([^,\s]+)/gi`
+- **Duplicate Prevention**: Checks for existing connections before creating new ones
+- **Manual Refresh**: "🔗 자동 연결 새로고침" button in Control Panel
+
+### Connection Types
+- **Manual Connections**: User-created connections (preserved during refresh)
+- **Auto Connections**: Generated from actions (marked with `auto_generated` flag)
+- **Conditional Connections**: From conditional branch scripts (marked with `from_conditional_script`)
+
+### Implementation Functions
+```javascript
+// useBlocks.js
+extractConnectionsFromActions()    // Extract connections from block/connector actions
+extractConnectionsFromScript()     // Parse "go to" commands from scripts  
+createAutoConnections()           // Create connections for block actions
+createAutoConnectionsFromConnector() // Create connections for connector actions
+refreshAllAutoConnections()       // Refresh all auto-generated connections
+```
+
 ## Entity Visualization System
 
 ### Transit Entity Display
@@ -408,6 +440,28 @@ const { globalSignals, updateSignalsFromSimulation } = useSignals()
 - **Source Block Management**: Fixed entity creation timing and request event handling
 - **Action Execution**: Enhanced to continue actions after entity routing for signal management
 - **Reset Functionality**: Improved reset mechanism with proper state cleanup across all managers
+- **Step Execution Fix**: Steps now complete only on entity movement (`go to` actions), not every action
+
+### Frontend Improvements (2025-06-03)
+- **ID Type Safety**: Fixed block/connector selection issues with numeric IDs by using String() conversions
+- **Script Editor Enhancement**: Added Tab key support for indentation in script editors
+- **Auto Connection Creation**: Automatic connection line generation from `go to` actions
+- **Connection Refresh**: Manual refresh button to analyze all actions and create missing connections
+- **Complex Wait Support**: Script parser now handles `wait condition1 or condition2` syntax
+- **Conditional Script Preservation**: Multi-line conditional scripts are preserved when editing
+
+### Logging System Improvements (2025-06-03)
+- **Simulation Reset Log Clear**: Log file is reset when simulation is reset
+- **Improved Error Messages**: Better routing error messages with available routes displayed
+- **Source Block Entity Generation**: Fixed to generate entities continuously at appropriate intervals
+- **Complex Wait Support**: Script executor now handles `wait condition1 or condition2` syntax with OR logic
+
+### Multi-Connection Support (2025-06-03)
+- **Multiple Connections per Connector**: PipeManager now supports multiple connections from a single connector
+- **List-based Connection Storage**: Changed from single connection to list of connections per connector
+- **Backward Compatibility**: Action executor handles both old (single) and new (list) formats
+- **Script Executor Enhancement**: Supports routing to any of multiple connected destinations
+- **Entity Generation Timing**: Added small timeout after entity generation to create step boundaries
 
 ### Performance Optimization (100x Improvement)
 - **Before**: ~100-200 steps/second
@@ -428,6 +482,12 @@ const { globalSignals, updateSignalsFromSimulation } = useSignals()
 - **Auto-stop**: Simulations automatically stop when target quantity is reached
 - **Progress Tracking**: Real-time monitoring of processed entity count vs target
 - **Mode Support**: Quantity-based and time-based execution modes
+
+### Parallel Processing Support (2025-06-03)
+- **Multi-Input Pipe Handling**: Blocks can now properly receive entities from multiple input pipes
+- **Transit State in Conditional Branches**: Entities show proper transit state when routed via conditional_branch actions
+- **Signal-Based Flow Control**: Proper synchronization for parallel processing with signal-based entity flow control
+- **Fair Pipe Selection**: Blocks check all input pipes for available entities, not just the first pipe
 
 ## Git-based Automated Development Workflow
 
@@ -543,18 +603,22 @@ When modifying the simulation engine:
 - Event queue only shows 2 timeout events (no source block process)
 - No entities being created
 - Time advances by 0.1s increments
+- Only first entity created, no subsequent entities
 
 **Common Causes**:
 1. Source block not properly registered in `source_manager`
 2. Source block process not added to SimPy environment
 3. Request event not triggered for source blocks
 4. Entity creation blocked by capacity constraints
+5. Source block waiting for signal conditions that never become true
 
 **Solutions**:
 - Verify source block registration in `setup_simulation`
 - Check that block processes are created for all blocks
 - Ensure `trigger_initial_events` is called
 - Verify block capacity settings
+- Check signal states for source block generation conditions
+- Source blocks now generate entities when block is empty (after first entity leaves)
 
 ### Entity Actions Not Executing
 **Symptoms**:
@@ -606,6 +670,7 @@ Entities follow this lifecycle:
 - **Between Processing and Transit**: Verify routing logic
 - **During Transit**: Check pipe availability and capacity
 - **At Arrival**: Verify destination block capacity
+- **Parallel Routes**: Check if multiple entities are trying to enter capacity-limited blocks
 
 ### SimPy Event Queue Patterns
 **Healthy Queue**:
@@ -627,6 +692,46 @@ When actions fail to execute:
 5. Verify connector names match between script and configuration
 6. Ensure remaining actions execute after entity routing via `_execute_remaining_actions`
 7. Check DEBUG_MODE import in all core modules (common NameError source)
+
+### Frontend ID Type Issues
+**Symptoms**:
+- Blocks not clickable when loaded from JSON files with numeric IDs
+- Connector selection not working properly
+- Block settings popup not opening
+
+**Solutions**:
+- All ID comparisons use `String()` conversion for type safety
+- Functions like `findBlockById` use `String(block.id) === String(id)`
+- Both numeric and string IDs work seamlessly
+
+### Script Editor Tab Key Issues
+**Symptoms**:
+- Tab key moves focus instead of inserting indentation
+- Cannot indent code blocks in script editors
+
+**Solutions**:
+- `@keydown="onKeyDown"` handler added to textareas
+- `event.preventDefault()` stops default tab behavior
+- Tab key now inserts tab character or indents selected lines
+
+### Sink Block Processing Issues
+**Symptoms**:
+- Entities stuck in transit state (e.g., "공정2→배출")
+- Sink blocks not processing entities despite having custom_sink action
+- Multiple entities accumulating in transit to sink block
+
+**Common Causes**:
+1. Missing `block_entry` action in sink block connector
+2. Sink block capacity constraints (maxCapacity=1)
+3. Block process not properly retrieving entities from pipe
+4. Parallel processing: multiple blocks sending entities to single sink block
+
+**Solutions**:
+- Ensure sink block connectors have proper actions (or handle empty actions)
+- Check sink block capacity settings
+- Verify block process continues after processing entities
+- Monitor pipe states and entity locations
+- For parallel processing: implement signal-based flow control to prevent simultaneous arrivals
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.

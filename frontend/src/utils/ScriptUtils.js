@@ -46,21 +46,49 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
     }
     else if (lowerLine.startsWith('wait ')) {
       const waitPart = line.replace(/wait /i, '').trim()
-      if (!waitPart.includes(' = ')) {
-        errors.push(`라인 ${lineNum}: 잘못된 대기 형식 (예: wait 신호명 = true)`)
-      } else {
-        const parts = waitPart.split(' = ')
-        if (parts.length === 2) {
-          const signalName = parts[0].trim()
-          const value = parts[1].trim().toLowerCase()
-          
-          // 신호 이름 유효성 검사
-          if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
-            errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
+      
+      // Check if it contains 'or' operator for complex conditions
+      if (waitPart.toLowerCase().includes(' or ')) {
+        // Complex wait condition with OR - validate each part
+        const conditions = waitPart.split(/\s+or\s+/i)
+        for (const condition of conditions) {
+          if (!condition.includes(' = ')) {
+            errors.push(`라인 ${lineNum}: 잘못된 대기 조건 형식 "${condition}" (예: 신호명 = true)`)
+          } else {
+            const parts = condition.trim().split(' = ')
+            if (parts.length === 2) {
+              const signalName = parts[0].trim()
+              const value = parts[1].trim().toLowerCase()
+              
+              // 신호 이름 유효성 검사
+              if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
+                errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
+              }
+              
+              if (value !== 'true' && value !== 'false') {
+                errors.push(`라인 ${lineNum}: 신호 값은 true 또는 false여야 합니다`)
+              }
+            }
           }
-          
-          if (value !== 'true' && value !== 'false') {
-            errors.push(`라인 ${lineNum}: 신호 값은 true 또는 false여야 합니다`)
+        }
+      } else {
+        // Simple wait condition
+        if (!waitPart.includes(' = ')) {
+          errors.push(`라인 ${lineNum}: 잘못된 대기 형식 (예: wait 신호명 = true)`)
+        } else {
+          const parts = waitPart.split(' = ')
+          if (parts.length === 2) {
+            const signalName = parts[0].trim()
+            const value = parts[1].trim().toLowerCase()
+            
+            // 신호 이름 유효성 검사
+            if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
+              errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
+            }
+            
+            if (value !== 'true' && value !== 'false') {
+              errors.push(`라인 ${lineNum}: 신호 값은 true 또는 false여야 합니다`)
+            }
           }
         }
       }
@@ -174,6 +202,25 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
   const actions = []
   let actionCounter = 1
   
+  // Check if the entire script is a multi-line conditional script
+  // This happens when editing an existing conditional_branch action
+  const firstLine = lines[0]?.trim().toLowerCase() || ''
+  const hasComplexWait = firstLine.startsWith('wait ') && firstLine.includes(' or ')
+  const hasIfStatement = lines.some(line => line.trim().toLowerCase().startsWith('if '))
+  
+  // If script contains complex wait or if statements, treat entire script as conditional branch
+  if (hasComplexWait || hasIfStatement) {
+    actions.push({
+      id: `script-action-${actionCounter++}`,
+      name: '조건부 실행',
+      type: 'conditional_branch',
+      parameters: { 
+        script: script  // Keep the entire script as-is
+      }
+    })
+    return actions
+  }
+  
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
     const lineNumber = i + 1
@@ -216,7 +263,20 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
     }
     else if (lowerLine.startsWith('wait ')) {
       const waitPart = line.replace(/wait /i, '').trim()
-      if (waitPart.includes(' = ')) {
+      
+      // Check if it contains 'or' operator for complex conditions
+      if (waitPart.toLowerCase().includes(' or ')) {
+        // Complex wait with OR - treat as conditional branch
+        actions.push({
+          id: `script-action-${actionCounter++}`,
+          name: `복합 대기 조건`,
+          type: 'conditional_branch',
+          parameters: { 
+            script: line  // Store the entire wait line as script
+          }
+        })
+      } else if (waitPart.includes(' = ')) {
+        // Simple wait condition
         const [signalName, value] = waitPart.split(' = ').map(s => s.trim())
         actions.push({
           id: `script-action-${actionCounter++}`,
@@ -419,16 +479,18 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
       }
     }
     else if (lowerLine.startsWith('if ')) {
-      // 조건부 실행은 복잡하므로 일단 스크립트 그대로 저장
+      // This should not happen anymore as we handle if statements at the beginning
+      // If we reach here, it means there's a parsing error
       actions.push({
         id: `script-action-${actionCounter++}`,
-        name: '조건부 실행',
-        type: 'conditional_branch',
+        name: `❌ 오류: ${line}`,
+        type: 'script_error',
         parameters: { 
-          script: script  // 전체 스크립트를 저장
+          originalLine: line,
+          lineNumber: lineNumber,
+          error: `조건문은 스크립트 전체를 조건부 실행으로 처리해야 합니다`
         }
       })
-      break  // 조건부 실행이 있으면 나머지는 그 안에 포함된 것으로 간주
     }
     else {
       // 인식되지 않는 명령어도 오류 액션으로 생성

@@ -41,6 +41,10 @@ class PipeManager:
         for block in blocks:
             self.in_pipes_map[str(block.id)] = []
             self.out_pipes_map[str(block.id)] = {}
+            # 각 커넥터에 대해 여러 연결을 저장할 수 있도록 리스트로 초기화
+            if hasattr(block, 'connectionPoints') and block.connectionPoints:
+                for cp in block.connectionPoints:
+                    self.out_pipes_map[str(block.id)][cp.id] = []
             
         # 매핑 구성
         for conn in connections:
@@ -54,12 +58,25 @@ class PipeManager:
             
             # 출력 파이프 매핑
             to_block = next((b for b in blocks if str(b.id) == str(conn.to_block_id)), None)
-            self.out_pipes_map[str(conn.from_block_id)][conn.from_connector_id] = {
+            # to_connector의 실제 이름 찾기
+            to_connector_name = conn.to_connector_id
+            if to_block and hasattr(to_block, 'connectionPoints') and to_block.connectionPoints:
+                for cp in to_block.connectionPoints:
+                    if cp.id == conn.to_connector_id:
+                        to_connector_name = cp.name
+                        break
+                        
+            # 여러 연결을 지원하기 위해 리스트에 추가
+            if conn.from_connector_id not in self.out_pipes_map[str(conn.from_block_id)]:
+                self.out_pipes_map[str(conn.from_block_id)][conn.from_connector_id] = []
+                
+            self.out_pipes_map[str(conn.from_block_id)][conn.from_connector_id].append({
                 'pipe_id': pipe_id,
                 'block_id': conn.to_block_id,
                 'block_name': to_block.name if to_block else 'Unknown',
-                'connector_name': conn.to_connector_id
-            }
+                'connector_id': conn.to_connector_id,
+                'connector_name': to_connector_name
+            })
             
     def get_pipe(self, pipe_id: str) -> Optional[simpy.Store]:
         """파이프를 가져옵니다."""
@@ -69,8 +86,8 @@ class PipeManager:
         """블록의 입력 파이프 목록을 반환합니다."""
         return self.in_pipes_map.get(str(block_id), [])
         
-    def get_output_pipes(self, block_id: str) -> Dict[str, Dict[str, Any]]:
-        """블록의 출력 파이프 정보를 반환합니다."""
+    def get_output_pipes(self, block_id: str) -> Dict[str, List[Dict[str, Any]]]:
+        """블록의 출력 파이프 정보를 반환합니다. 각 커넥터는 여러 연결을 가질 수 있습니다."""
         return self.out_pipes_map.get(str(block_id), {})
         
     def find_pipe_by_arrival(self, block_id: str, connector_id: str) -> Optional[str]:

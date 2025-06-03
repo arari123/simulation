@@ -55,6 +55,8 @@
       <button @click="openSettingsPopup">설정</button>
       <button @click="triggerAddProcessBlock">공정 블록 추가</button>
       <small class="info-text">💡 블록 클릭 후 복사(Ctrl+D) 또는 삭제(Delete) 가능</small>
+      <button @click="refreshAutoConnections" class="refresh-connections-btn">🔗 자동 연결 새로고침</button>
+      <small class="info-text">💡 go to 액션에서 자동으로 연결선 생성</small>
       <button @click="saveConfiguration">저장</button>
       <button @click="loadConfiguration">불러오기</button>
 
@@ -127,7 +129,8 @@ const emit = defineEmits([
     'export-configuration',
     'import-configuration',
     'previous-step',
-    'panel-width-changed' // 패널 너비 변경 이벤트 추가
+    'panel-width-changed', // 패널 너비 변경 이벤트 추가
+    'refresh-auto-connections'
 ])
 
 const inputQuantity = ref(10) // 투입 수량은 로컬에서 관리
@@ -246,6 +249,11 @@ function triggerAddProcessBlock() {
   }
 }
 
+function refreshAutoConnections() {
+  emit('refresh-auto-connections');
+  console.log("자동 연결 새로고침 실행");
+}
+
 function saveConfiguration() {
   // 전체 시뮬레이션 설정을 JSON으로 구성
   const config = {
@@ -359,6 +367,14 @@ function toggleGlobalSignalPanel() {
 }
 .reset-button:hover {
     background-color: #e0a800;
+}
+
+.refresh-connections-btn {
+    background-color: #17a2b8; /* 정보성 청록색 */
+    color: white;
+}
+.refresh-connections-btn:hover {
+    background-color: #138496;
 }
 
 .execution-options {

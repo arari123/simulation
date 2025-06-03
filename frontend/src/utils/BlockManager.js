@@ -26,7 +26,7 @@ export function validateBlockName(name, existingBlocks = [], excludeId = null) {
   
   // 중복 이름 검사
   const isDuplicate = existingBlocks.some(block => 
-    block.name === trimmedName && block.id !== excludeId
+    block.name === trimmedName && String(block.id) !== String(excludeId)
   );
   
   if (isDuplicate) {
@@ -46,7 +46,7 @@ export function validateConnectorName(name, existingConnectors = [], excludeId =
   
   // 중복 이름 검사
   const isDuplicate = existingConnectors.some(connector => 
-    connector.name === trimmedName && connector.id !== excludeId
+    connector.name === trimmedName && String(connector.id) !== String(excludeId)
   );
   
   if (isDuplicate) {
@@ -138,7 +138,7 @@ export function addConnectorToBlock(block, position, customName = null, settings
 
 // 블록 찾기 (ID 또는 이름으로)
 export function findBlockById(blocks, id) {
-  return blocks.find(block => block.id == id || block.id === id);
+  return blocks.find(block => String(block.id) === String(id));
 }
 
 export function findBlockByName(blocks, name) {
@@ -148,7 +148,7 @@ export function findBlockByName(blocks, name) {
 // 커넥터 찾기
 export function findConnectorById(block, connectorId) {
   if (!block || !block.connectionPoints) return null;
-  return block.connectionPoints.find(cp => cp.id === connectorId);
+  return block.connectionPoints.find(cp => String(cp.id) === String(connectorId));
 }
 
 export function findConnectorByName(block, connectorName) {

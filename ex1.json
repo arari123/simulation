@@ -1,0 +1,257 @@
+{
+  "version": "1.0",
+  "description": "Fixed configuration for proper entity creation and signal initialization",
+  "settings": {
+    "boxSize": 120,
+    "fontSize": 14,
+    "language": "Korean",
+    "deadlockTimeout": 120,
+    "maxSteps": 10000,
+    "stepDuration": 1.0
+  },
+  "blocks": [
+    {
+      "id": "1",
+      "name": "투입",
+      "x": 100,
+      "y": 200,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 10,
+      "actions": [
+        {
+          "type": "route_to_connector",
+          "parameters": {
+            "connector_name": "R"
+          }
+        },
+        {
+          "type": "conditional_branch",
+          "parameters": {
+            "script": "if 공정1 load enable = true\n\t공정1 load enable = false\n\tgo to 공정1.L,3\nif 공정2 load enable = true\n\t공정2 load enable = false\n\tgo to 공정2.L,3\nif 공정1 load enable = false\n\tif 공정2 load enable = false\n\t\tdelay 0.1\n\t\tjump to 1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "1",
+          "name": "R",
+          "direction": "right",
+          "position": {
+            "x": 120,
+            "y": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "name": "공정1",
+      "x": 300,
+      "y": 150,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "type": "delay",
+          "parameters": {
+            "duration": 5
+          }
+        },
+        {
+          "type": "signal_update",
+          "parameters": {
+            "signal_name": "공정1 unload enable",
+            "signal_value": true
+          }
+        },
+        {
+          "type": "route_to_connector",
+          "parameters": {
+            "connector_name": "R"
+          }
+        },
+        {
+          "type": "conditional_branch",
+          "parameters": {
+            "script": "if 배출 load enable = true\n\t배출 load enable = false\n\t공정1 unload enable = false\n\tgo to 배출.L,1\nif 배출 load enable = false\n\tdelay 0.1\n\tjump to 1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "1",
+          "name": "L",
+          "direction": "left",
+          "position": {
+            "x": 0,
+            "y": 40
+          }
+        },
+        {
+          "id": "2",
+          "name": "R",
+          "direction": "right",
+          "position": {
+            "x": 120,
+            "y": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "name": "공정2",
+      "x": 300,
+      "y": 250,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "type": "delay",
+          "parameters": {
+            "duration": 5
+          }
+        },
+        {
+          "type": "signal_update",
+          "parameters": {
+            "signal_name": "공정2 unload enable",
+            "signal_value": true
+          }
+        },
+        {
+          "type": "route_to_connector",
+          "parameters": {
+            "connector_name": "R"
+          }
+        },
+        {
+          "type": "conditional_branch",
+          "parameters": {
+            "script": "if 배출 load enable = true\n\t배출 load enable = false\n\t공정2 unload enable = false\n\tgo to 배출.L,1\nif 배출 load enable = false\n\tdelay 0.1\n\tjump to 1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "1",
+          "name": "L",
+          "direction": "left",
+          "position": {
+            "x": 0,
+            "y": 40
+          }
+        },
+        {
+          "id": "2",
+          "name": "R",
+          "direction": "right",
+          "position": {
+            "x": 120,
+            "y": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "배출",
+      "x": 500,
+      "y": 200,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 100,
+      "actions": [
+        {
+          "type": "custom_sink",
+          "parameters": {}
+        },
+        {
+          "type": "signal_update",
+          "parameters": {
+            "signal_name": "배출 load enable",
+            "signal_value": true
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "1",
+          "name": "L",
+          "direction": "left",
+          "position": {
+            "x": 0,
+            "y": 40
+          }
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from_block_id": "1",
+      "from_connector_id": "1",
+      "to_block_id": "2",
+      "to_connector_id": "1",
+      "auto_generated": true
+    },
+    {
+      "from_block_id": "1",
+      "from_connector_id": "1",
+      "to_block_id": "3",
+      "to_connector_id": "1",
+      "auto_generated": true
+    },
+    {
+      "from_block_id": "2",
+      "from_connector_id": "2",
+      "to_block_id": "4",
+      "to_connector_id": "1",
+      "auto_generated": true
+    },
+    {
+      "from_block_id": "3",
+      "from_connector_id": "2",
+      "to_block_id": "4",
+      "to_connector_id": "1",
+      "auto_generated": true
+    }
+  ],
+  "globalSignals": [
+    {
+      "name": "공정1 load enable",
+      "initialValue": true,
+      "currentValue": true
+    },
+    {
+      "name": "공정1 unload enable",
+      "initialValue": false,
+      "currentValue": false
+    },
+    {
+      "name": "공정2 load enable",
+      "initialValue": true,
+      "currentValue": true
+    },
+    {
+      "name": "공정2 unload enable",
+      "initialValue": false,
+      "currentValue": false
+    },
+    {
+      "name": "배출 load enable",
+      "initialValue": true,
+      "currentValue": true
+    }
+  ],
+  "simulationState": {
+    "currentTime": 0,
+    "totalProductsGenerated": 0,
+    "totalProductsDispatched": 0,
+    "processTime": 0,
+    "currentStep": 0
+  }
+}

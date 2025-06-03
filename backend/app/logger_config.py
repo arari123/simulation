@@ -13,7 +13,7 @@ LOG_FILE = os.path.join(LOG_DIR, "backend_server.log")
 class LineCountRotatingFileHandler(logging.handlers.RotatingFileHandler):
     """Custom rotating file handler that rotates based on line count"""
     
-    def __init__(self, filename, max_lines=100, *args, **kwargs):
+    def __init__(self, filename, max_lines=200, *args, **kwargs):
         self.max_lines = max_lines
         self.line_count = 0
         # Remove the log file if it exists (fresh start)
@@ -56,6 +56,26 @@ class PrintToLoggerInterceptor:
     def flush(self):
         pass
 
+def reset_log_file():
+    """Reset the log file - used when simulation is reset"""
+    if os.path.exists(LOG_FILE):
+        # Close all file handlers first
+        root_logger = logging.getLogger()
+        for handler in root_logger.handlers[:]:
+            if isinstance(handler, logging.FileHandler):
+                handler.close()
+                root_logger.removeHandler(handler)
+        
+        # Remove the log file
+        try:
+            os.remove(LOG_FILE)
+        except Exception as e:
+            logging.error(f"Error removing log file: {e}")
+    
+    # Re-setup logging
+    setup_logging()
+    logging.info("Log file reset due to simulation reset")
+
 def setup_logging():
     """Configure logging for the backend server"""
     # Create formatter
@@ -67,7 +87,7 @@ def setup_logging():
     # Create file handler with line count rotation
     file_handler = LineCountRotatingFileHandler(
         LOG_FILE,
-        max_lines=100,
+        max_lines=200,
         maxBytes=0,  # Disable size-based rotation
         backupCount=0  # No backup files
     )
@@ -133,5 +153,5 @@ def setup_logging():
     logging.info(f"=" * 80)
     logging.info(f"Backend server started at {datetime.now()}")
     logging.info(f"Log file: {LOG_FILE}")
-    logging.info(f"Maximum lines: 100 (auto-rotation enabled)")
+    logging.info(f"Maximum lines: 200 (auto-rotation enabled)")
     logging.info(f"=" * 80)

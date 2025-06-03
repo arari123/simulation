@@ -230,6 +230,10 @@ async def reset_simulation_endpoint():
         
         logger.info(f"[RESET] SimPy 환경 및 캐시 초기화됨 - 다음 스텝에서 새로 생성됨")
         
+        # Reset log file
+        from ..logger_config import reset_log_file
+        reset_log_file()
+        
         return {"message": "Simulation reset successfully"}
     except Exception as e:
         traceback.print_exc()
