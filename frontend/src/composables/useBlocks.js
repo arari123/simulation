@@ -173,6 +173,12 @@ export function useBlocks() {
         const scriptConnections = extractConnectionsFromScript(action.parameters.script, sourceBlockId)
         connections.push(...scriptConnections)
       }
+      
+      // 스크립트 타입 액션에서도 연결 추출
+      if (action.type === 'script' && action.parameters?.script) {
+        const scriptConnections = extractConnectionsFromScript(action.parameters.script, sourceBlockId)
+        connections.push(...scriptConnections)
+      }
     })
     
     return connections
@@ -425,6 +431,9 @@ export function useBlocks() {
     }
 
     addCustomConnectorToBlock(block, connectorData)
+    
+    // 새 커넥터 추가 후 모든 연결선 새로고침
+    refreshAllAutoConnections()
   }
 
 
