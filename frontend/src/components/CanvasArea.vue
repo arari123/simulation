@@ -123,7 +123,7 @@ function initKonva() {
       container: container,
       width: width,
       height: height,
-      draggable: false, // Stage 드래그 비활성화
+      draggable: true, // Stage 드래그 활성화
     });
 
 
@@ -495,15 +495,17 @@ function addBlockContent(blockGroup, blockData) {
             // 여기서 영역 제한과 자석 효과 적용
             applyConstraintsAndSnap();
             
+            // 커넥터 드래그 완료 후 stage 드래그 다시 활성화
+            stage.draggable(true);
+            
             // 이벤트 리스너 제거
             stage.off('mousemove', mouseMoveHandler);
             stage.off('mouseup', mouseUpHandler);
           }
         };
         
-        // Stage 드래그 방지를 위해 stopDrag 설정
+        // 커넥터 hover 이벤트
         connectorCircle.on('mouseenter', () => {
-          if (stage) stage.draggable(false);
           document.body.style.cursor = 'move';
         });
         
@@ -522,6 +524,8 @@ function addBlockContent(blockGroup, blockData) {
             dragStartConnectorPos = connectorCircle.position();
             document.body.style.cursor = 'grabbing';
             
+            // 커넥터 드래그 중에는 stage 드래그 비활성화
+            stage.draggable(false);
             
             // 이벤트 리스너 추가
             stage.on('mousemove', mouseMoveHandler);
