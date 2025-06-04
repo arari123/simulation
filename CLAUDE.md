@@ -112,15 +112,16 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### Commands
 ```
-delay 5                    # Wait 5 seconds
-신호명 = true              # Set signal
-wait 신호명 = true         # Wait for signal
-wait A = true or B = true  # OR condition wait
-if 신호명 = true           # Conditional (indent sub-actions)
-go to 블록명.커넥터명      # Move to another block
-go to 블록명.커넥터명,3    # Move with 3s transit delay
-jump to 1                  # Jump to line 1
-// comment                 # Comment line
+delay 5                           # Wait 5 seconds
+신호명 = true                     # Set signal
+wait 신호명 = true                # Wait for signal
+wait A = true or B = true         # OR condition wait
+if 신호명 = true                  # Conditional (indent sub-actions)
+go to 블록명.커넥터명             # Move to another block
+go to 블록명.커넥터명,3           # Move with 3s transit delay
+go from 커넥터명 to 블록명.커넥터명,3  # Move from specific connector (recommended)
+jump to 1                         # Jump to line 1
+// comment                        # Comment line
 ```
 
 ### Example Script
@@ -128,10 +129,10 @@ jump to 1                  # Jump to line 1
 wait 공정1 load enable = true or 공정2 load enable = true
 if 공정1 load enable = true
     공정1 load enable = false
-    go to 공정1.L,10
+    go from R to 공정1.L,3
 if 공정2 load enable = true
     공정2 load enable = false
-    go to 공정2.L,10
+    go from R to 공정2.L,3
 ```
 
 ## Key Technical Details
@@ -155,6 +156,12 @@ if 공정2 load enable = true
 - Each step = one entity movement (not one action)
 - Multiple actions execute within single step until `go to`
 - Event-based stepping ensures realistic time progression
+
+### Connector Management
+- **Add Connectors**: Use "+" button in block settings
+- **Delete Connectors**: Red "🗑️ 커넥터 삭제" button in connector settings
+- **Move Connectors**: Drag blue dotted circle when connector is selected
+- **Automatic Cleanup**: Deleting connector removes all related connections and script references
 
 ## Common Issues & Solutions
 
@@ -215,6 +222,15 @@ if 공정2 load enable = true
 - Tab key support in script editors
 
 ### Recent Fixes (Latest)
+- **Script Priority Fix**: Fixed script action priority in backend engine (2025-06-04)
+  - Backend now prioritizes `actions` array script type over legacy `script` field
+  - Resolves 10-second delay issue when user edits scripts in UI
+  - Ensures UI script changes are properly saved and executed
+- **Connector Deletion Feature**: Complete implementation of connector removal (2025-06-04)
+  - Added "🗑️ 커넥터 삭제" button in connector settings popup
+  - Automatically removes all related connection lines
+  - Includes confirmation dialog to prevent accidental deletion
+  - Refreshes auto-connections after deletion to clean up script references
 - **Script Editor Save Issue**: Fixed script changes not being saved properly
   - ScriptEditor now passes both parsed actions and raw script text
   - SettingsBase creates proper script type actions
