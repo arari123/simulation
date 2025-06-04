@@ -192,6 +192,9 @@ if 공정2 load enable = true
 3. **Maintain API compatibility** - Use adapter pattern
 4. **Entity ID consistency** - Always convert to strings
 5. **Global state for persistence** - Entity numbers, signals
+6. **Preserve existing functionality** - When adding new features, create separate modules to avoid breaking current code
+7. **Intuitive script commands** - Commands should be easy to understand for non-programmers
+8. **Add new functions, don't modify** - When adding script commands, create new functions instead of modifying existing ones
 
 ## Recent Major Changes
 

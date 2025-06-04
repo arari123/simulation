@@ -26,8 +26,6 @@ export function useSignals() {
    * 초기 신호 설정
    */
   function setupInitialSignals(baseConfig) {
-    console.log('[useSignals] 전역 신호 설정 로드')
-    
     if (baseConfig.globalSignals) {
       globalSignals.value = baseConfig.globalSignals.map(signal => ({
         ...signal,
@@ -35,8 +33,6 @@ export function useSignals() {
         value: signal.initialValue !== undefined ? signal.initialValue : signal.value
       }))
     }
-    
-    console.log(`[useSignals] ${globalSignals.value.length}개 전역 신호 로드됨`)
   }
 
   /**
@@ -44,7 +40,6 @@ export function useSignals() {
    */
   function toggleGlobalSignalPanelVisibility() {
     showGlobalSignalPanel.value = !showGlobalSignalPanel.value
-    console.log(`[useSignals] 신호 패널 ${showGlobalSignalPanel.value ? '표시' : '숨김'}`)
   }
 
   /**
@@ -52,15 +47,12 @@ export function useSignals() {
    */
   function handleCloseGlobalSignalPanel() {
     showGlobalSignalPanel.value = false
-    console.log('[useSignals] 신호 패널 닫기')
   }
 
   /**
    * 새 신호 추가
    */
   function handleAddGlobalSignal(signal) {
-    console.log('[useSignals] 새 신호 추가:', signal)
-    
     if (!globalSignals.value.find(s => s.name === signal.name)) {
       globalSignals.value.push({
         id: signal.id || `signal-${Date.now()}`,
@@ -68,7 +60,6 @@ export function useSignals() {
         value: signal.value !== undefined ? signal.value : false,
         initialValue: signal.initialValue !== undefined ? signal.initialValue : false
       })
-      console.log(`[useSignals] 신호 "${signal.name}" 추가됨`)
     } else {
       console.warn(`[useSignals] 이미 존재하는 신호: ${signal.name}`)
     }
@@ -78,12 +69,9 @@ export function useSignals() {
    * 신호 삭제
    */
   function handleRemoveGlobalSignal(signalName) {
-    console.log(`[useSignals] 신호 삭제: ${signalName}`)
-    
     const index = globalSignals.value.findIndex(s => s.name === signalName)
     if (index !== -1) {
       globalSignals.value.splice(index, 1)
-      console.log(`[useSignals] 신호 "${signalName}" 삭제됨`)
     }
   }
 
@@ -91,12 +79,9 @@ export function useSignals() {
    * 신호 값 업데이트
    */
   function handleUpdateGlobalSignalValue(data) {
-    console.log('[useSignals] 신호 값 업데이트:', data)
-    
     const signal = globalSignals.value.find(s => s.name === data.name)
     if (signal) {
       signal.value = data.value
-      console.log(`[useSignals] 신호 "${data.name}" 값이 ${data.value}로 변경됨`)
     }
   }
 
@@ -108,20 +93,13 @@ export function useSignals() {
       return
     }
 
-    console.log('[useSignals] 시뮬레이션에서 신호 상태 업데이트:', currentSignals)
-    
     // 시뮬레이션 결과의 신호 상태로 전역 신호 업데이트
     Object.entries(currentSignals).forEach(([signalName, signalValue]) => {
       const signal = globalSignals.value.find(s => s.name === signalName)
       if (signal) {
-        const oldValue = signal.value
         signal.value = signalValue
-        if (oldValue !== signalValue) {
-          console.log(`[useSignals] 신호 "${signalName}" 값이 ${oldValue} → ${signalValue}로 변경됨`)
-        }
       } else {
         // 새로운 신호가 시뮬레이션에서 생성된 경우 자동 추가
-        console.log(`[useSignals] 새 신호 자동 추가: ${signalName} = ${signalValue}`)
         globalSignals.value.push({
           id: `signal-${Date.now()}-${signalName}`,
           name: signalName,
@@ -136,8 +114,6 @@ export function useSignals() {
    * 신호 편집 (이름 변경)
    */
   function handleEditGlobalSignal(data) {
-    console.log('[useSignals] 신호 편집:', data)
-    
     const signalIndex = globalSignals.value.findIndex(s => s.name === data.originalName)
     if (signalIndex !== -1) {
       globalSignals.value[signalIndex] = {
@@ -146,8 +122,6 @@ export function useSignals() {
         value: data.value !== undefined ? data.value : globalSignals.value[signalIndex].value,
         initialValue: data.initialValue !== undefined ? data.initialValue : globalSignals.value[signalIndex].initialValue
       }
-      
-      console.log(`[useSignals] 신호 "${data.originalName}"이 "${data.newName}"으로 변경됨`)
     }
   }
 
@@ -155,8 +129,6 @@ export function useSignals() {
    * 블록에서 신호 참조 업데이트
    */
   function updateSignalReferences(oldName, newName, blocks) {
-    console.log(`[useSignals] 신호 참조 업데이트: ${oldName} → ${newName}`)
-    
     blocks.forEach(block => {
       // 블록 액션에서 신호 참조 업데이트
       if (block.actions) {
@@ -289,8 +261,6 @@ export function useSignals() {
    * 신호 초기화 (시뮬레이션 리셋 시)
    */
   function resetSignalsToInitialValues() {
-    console.log('[useSignals] 신호를 초기값으로 리셋')
-    
     globalSignals.value.forEach(signal => {
       if (signal.initialValue !== undefined) {
         signal.value = signal.initialValue

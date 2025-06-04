@@ -50,8 +50,6 @@ export function useBlocks() {
    * 새 블록을 캔버스에 추가
    */
   function addNewBlockToCanvas(name, currentSettings) {
-    console.log(`[useBlocks] 새 블록 생성 시도: ${name}`)
-    
     const validation = validateBlockName(name, blocks.value)
     if (!validation.valid) {
       alert(validation.error)
@@ -61,7 +59,6 @@ export function useBlocks() {
     const newBlock = createNewBlock(name, blocks.value, currentSettings)
     blocks.value.push(newBlock)
     
-    console.log(`[useBlocks] 새 블록 생성됨:`, newBlock)
     return newBlock
   }
 
@@ -69,15 +66,12 @@ export function useBlocks() {
    * 블록 클릭 처리
    */
   function handleBlockClicked(blockId) {
-    console.log(`[useBlocks] 블록 클릭됨: ${blockId}`)
-    
     // 선택 해제 요청인 경우
     if (blockId === null) {
       selectedBlockId.value = null
       showBlockSettingsPopup.value = false
       showConnectorSettingsPopup.value = false
       selectedConnectorInfo.value = null
-      console.log(`[useBlocks] 모든 선택 해제`)
       return
     }
 
@@ -85,13 +79,11 @@ export function useBlocks() {
     const targetBlock = blocks.value.find(b => String(b.id) === String(blockId))
     if (!targetBlock) {
       console.error(`[useBlocks] 블록 ID ${blockId}를 찾을 수 없습니다`)
-      console.log(`[useBlocks] 현재 블록 목록:`, blocks.value.map(b => ({ id: b.id, name: b.name, type: typeof b.id })))
-      console.log(`[useBlocks] 찾는 blockId:`, blockId, typeof blockId)
       return
     }
 
-    // 커넥터 설정창이 열려있다면 닫기
-    if (showConnectorSettingsPopup.value) {
+    // 커넥터 설정창이 열려있다면 닫기 (커넥터 선택도 해제)
+    if (showConnectorSettingsPopup.value || selectedConnectorInfo.value) {
       showConnectorSettingsPopup.value = false
       selectedConnectorInfo.value = null
     }
@@ -99,24 +91,36 @@ export function useBlocks() {
     // 블록 선택 및 설정창 열기
     selectedBlockId.value = blockId
     showBlockSettingsPopup.value = true
-    
-    console.log(`[useBlocks] 블록 ${blockId} 선택됨, 설정창 열림`)
   }
 
   /**
    * 블록 위치 업데이트
    */
   function handleUpdateBlockPosition({ id, x, y }) {
-    console.log(`[useBlocks] 블록 ${id} 위치 업데이트: (${x}, ${y})`)
-    
     const block = blocks.value.find(b => String(b.id) === String(id))
     if (block) {
       block.x = x
       block.y = y
-      console.log(`[useBlocks] 블록 ${id} 위치 업데이트 완료`)
     } else {
       console.error(`[useBlocks] 블록 ID ${id}를 찾을 수 없습니다!`)
-      console.log(`[useBlocks] 현재 블록 목록:`, blocks.value.map(b => ({ id: b.id, name: b.name })))
+    }
+  }
+
+  /**
+   * 커넥터 위치 업데이트
+   */
+  function handleUpdateConnectorPosition({ blockId, connectorId, x, y }) {
+    const block = blocks.value.find(b => String(b.id) === String(blockId))
+    if (block && block.connectionPoints) {
+      const connector = block.connectionPoints.find(cp => String(cp.id) === String(connectorId))
+      if (connector) {
+        connector.x = x
+        connector.y = y
+      } else {
+        console.error(`[useBlocks] 커넥터 ID ${connectorId}를 찾을 수 없습니다!`)
+      }
+    } else {
+      console.error(`[useBlocks] 블록 ID ${blockId}를 찾을 수 없습니다!`)
     }
   }
 
@@ -124,7 +128,6 @@ export function useBlocks() {
    * 블록 설정창 닫기
    */
   function closeBlockSettingsPopup() {
-    console.log(`[useBlocks] 블록 설정창 닫기`)
     showBlockSettingsPopup.value = false
     // selectedBlockId는 유지 (하이라이트 효과를 위해)
   }
@@ -236,7 +239,6 @@ export function useBlocks() {
       )
       
       if (!existingConnection) {
-        console.log(`[useBlocks] 자동 연결 생성:`, newConn)
         connections.value.push(newConn)
       }
     })
@@ -246,8 +248,6 @@ export function useBlocks() {
    * 블록 설정 저장
    */
   function saveBlockSettings(blockId, newActions, maxCapacity, blockName) {
-    console.log(`[useBlocks] 블록 ${blockId} 설정 저장:`, { newActions, maxCapacity, blockName })
-    
     const block = blocks.value.find(b => String(b.id) === String(blockId))
     if (block) {
       block.actions = newActions
@@ -263,8 +263,6 @@ export function useBlocks() {
       
       // 액션에서 자동 연결 생성
       createAutoConnections(blockId, newActions)
-      
-      console.log(`[useBlocks] 블록 ${blockId} 설정 저장 완료`)
     }
   }
 
@@ -272,8 +270,6 @@ export function useBlocks() {
    * 커넥터 클릭 처리
    */
   function handleConnectorClicked({ blockId, connectorId }) {
-    console.log(`[useBlocks] 커넥터 클릭됨: 블록 ${blockId}, 커넥터 ${connectorId}`)
-    
     const block = blocks.value.find(b => String(b.id) === String(blockId))
     if (!block) {
       console.error(`[useBlocks] 블록 ID ${blockId}를 찾을 수 없습니다`)
@@ -301,17 +297,12 @@ export function useBlocks() {
       actions: connector.actions || []
     }
     showConnectorSettingsPopup.value = true
-    
-    console.log(`[useBlocks] 커넥터 ${connectorId} 선택됨, 설정창 열림`, {
-      actions: connector.actions?.length || 0
-    })
   }
 
   /**
    * 커넥터 설정창 닫기
    */
   function closeConnectorSettingsPopup() {
-    console.log(`[useBlocks] 커넥터 설정창 닫기`)
     showConnectorSettingsPopup.value = false
     // selectedConnectorInfo는 유지 (하이라이트 효과를 위해)
   }
@@ -320,8 +311,6 @@ export function useBlocks() {
    * 커넥터 설정 저장
    */
   function saveConnectorSettings(blockId, connectorId, newActions, newName) {
-    console.log(`[useBlocks] 커넥터 ${connectorId} 설정 저장:`, { newActions, newName })
-    
     const block = blocks.value.find(b => String(b.id) === String(blockId))
     if (!block) return
 
@@ -337,8 +326,6 @@ export function useBlocks() {
       
       // 커넥터 액션에서 자동 연결 생성
       createAutoConnectionsFromConnector(blockId, connectorId, newActions)
-      
-      console.log(`[useBlocks] 커넥터 ${connectorId} 설정 저장 완료`)
     }
   }
   
@@ -362,7 +349,6 @@ export function useBlocks() {
       )
       
       if (!existingConnection) {
-        console.log(`[useBlocks] 커넥터에서 자동 연결 생성:`, newConn)
         connections.value.push(newConn)
       }
     })
@@ -396,7 +382,6 @@ export function useBlocks() {
     }
 
     blocks.value.push(newBlock)
-    console.log(`[useBlocks] 블록 복사됨:`, newBlock)
   }
 
   /**
@@ -422,7 +407,6 @@ export function useBlocks() {
         selectedBlockId.value = null
       }
       
-      console.log(`[useBlocks] 블록 ${blockId} 삭제됨`)
     }
   }
 
@@ -440,7 +424,6 @@ export function useBlocks() {
     }
 
     addConnectorToBlock(block, connectorData)
-    console.log(`[useBlocks] 커넥터 추가됨:`, connectorData)
   }
 
   /**
@@ -459,8 +442,6 @@ export function useBlocks() {
     const oldName = block.name
     block.name = newName
     updateBlockReferences(blocks.value, oldName, newName)
-    
-    console.log(`[useBlocks] 블록 이름 변경: ${oldName} → ${newName}`)
   }
 
   /**
@@ -485,16 +466,12 @@ export function useBlocks() {
     const oldName = connector.name
     connector.name = newName
     updateConnectorReferences(blocks.value, block.name, oldName, newName)
-    
-    console.log(`[useBlocks] 커넥터 이름 변경: ${oldName} → ${newName}`)
   }
 
   /**
    * 모든 블록 액션에서 자동 연결 생성
    */
   function refreshAllAutoConnections() {
-    console.log('[useBlocks] 모든 블록에서 자동 연결 새로고침 시작')
-    
     // 자동 생성된 연결들 제거 (수동 생성된 연결은 유지)
     const manualConnections = connections.value.filter(conn => !conn.auto_generated)
     
@@ -536,15 +513,12 @@ export function useBlocks() {
     })
     
     connections.value = manualConnections
-    console.log(`[useBlocks] 자동 연결 새로고침 완료: ${connections.value.length}개 연결`)
   }
 
   /**
    * 초기 시나리오 설정
    */
   function setupInitialBlocks(baseConfig, currentSettings) {
-    console.log('[useBlocks] 기본 블록 설정 로드')
-    
     if (baseConfig.blocks) {
       blocks.value = baseConfig.blocks.map(block => {
         const processedBlock = {
@@ -580,8 +554,6 @@ export function useBlocks() {
                 script: processedBlock.script
               }
             });
-            
-            console.log('[useBlocks] 블록', processedBlock.name, '에 script 타입 액션 추가');
           }
         }
         
@@ -592,16 +564,12 @@ export function useBlocks() {
     if (baseConfig.connections) {
       connections.value = baseConfig.connections
     }
-    
-    console.log(`[useBlocks] ${blocks.value.length}개 블록, ${connections.value.length}개 연결 로드됨`)
   }
 
   /**
    * 설정 업데이트로 블록 크기 조정
    */
   function updateBlocksForSettings(newSettings) {
-    console.log('[useBlocks] 설정 변경에 따른 블록 업데이트')
-    
     blocks.value = blocks.value.map(b => ({
       ...b,
       width: newSettings.boxSize,
@@ -634,6 +602,7 @@ export function useBlocks() {
     addNewBlockToCanvas,
     handleBlockClicked,
     handleUpdateBlockPosition,
+    handleUpdateConnectorPosition,
     closeBlockSettingsPopup,
     saveBlockSettings,
     handleConnectorClicked,

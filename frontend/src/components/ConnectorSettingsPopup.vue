@@ -12,7 +12,18 @@
     @close="$emit('close-popup')"
     @save="handleSave"
     @name-change="handleNameChange"
-  />
+  >
+    <template #extra-info>
+      <div class="connector-move-info">
+        <div class="info-icon">💡</div>
+        <div class="info-text">
+          커넥터가 선택된 상태에서 드래그하여 위치를 이동할 수 있습니다.
+          <br />
+          <span class="highlight">파란색 점선 원</span>이 표시되면 드래그가 가능합니다.
+        </div>
+      </div>
+    </template>
+  </SettingsBase>
 </template>
 
 <script setup>
@@ -69,4 +80,33 @@ function handleNameChange(newName) {
     newName
   )
 }
-</script> 
+</script>
+
+<style scoped>
+.connector-move-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  background-color: #E3F2FD;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  border: 1px solid #90CAF9;
+}
+
+.info-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.info-text {
+  font-size: 13px;
+  color: #1565C0;
+  line-height: 1.6;
+}
+
+.highlight {
+  font-weight: bold;
+  color: #0D47A1;
+}
+</style> 

@@ -38,6 +38,7 @@
           @select-block="handleBlockClicked"
           @select-connector="handleConnectorClicked"
           @update-block-position="handleUpdateBlockPosition"
+          @update-connector-position="handleUpdateConnectorPosition"
         />
         
         <!-- 디버그 정보 표시 -->
@@ -188,6 +189,7 @@ const {
   addNewBlockToCanvas,
   handleBlockClicked,
   handleUpdateBlockPosition,
+  handleUpdateConnectorPosition,
   closeBlockSettingsPopup,
   saveBlockSettings,
   handleConnectorClicked,
@@ -227,11 +229,8 @@ const {
 
 // 초기 시나리오 설정
 async function setupInitialScenario() {
-  console.log("[App] Setting up initial scenario from base.json...")
-  
   try {
     const baseConfig = await SimulationApi.loadBaseConfig()
-    console.log("[App] Base config loaded:", baseConfig)
     
     // 설정 적용
     if (baseConfig.settings) {
@@ -243,8 +242,6 @@ async function setupInitialScenario() {
     
     // 신호 설정 적용
     setupInitialSignals(baseConfig)
-    
-    console.log("[App] Initial scenario setup completed")
   } catch (error) {
     console.error("[App] Failed to setup initial scenario:", error)
     alert(`초기 설정 로드 실패: ${error.message}`)
@@ -253,8 +250,6 @@ async function setupInitialScenario() {
 
 // 설정 업데이트 처리
 function handleUpdateSettings(newSettings) {
-  console.log('[App] 설정 업데이트:', newSettings)
-  
   currentSettings.value = { ...currentSettings.value, ...newSettings }
   
   // 블록 크기 업데이트
@@ -267,7 +262,6 @@ function handleUpdateSettings(newSettings) {
 async function updateBackendSettings(settings) {
   try {
     await SimulationApi.updateSettings(settings)
-    console.log('[App] 백엔드 설정 업데이트 완료')
   } catch (error) {
     console.error('[App] 백엔드 설정 업데이트 실패:', error)
   }
@@ -299,15 +293,10 @@ async function handleStepSimulation() {
 }
 
 async function handleStepBasedRun(options) {
-  console.log('[App] 스텝 기반 실행 시작:', options)
-  
   // 첫 번째 스텝인 경우에만 설정 데이터 전송, 이후에는 null
   const setupData = isFirstStep.value ? getSimulationSetupData() : null
   
   await startStepBasedExecution(setupData, (result) => {
-    // 스텝 완료 시 추가 처리
-    console.log('[App] 스텝 완료:', result)
-    
     // 신호 상태 업데이트
     if (result.current_signals) {
       updateSignalsFromSimulation(result.current_signals)
@@ -363,11 +352,6 @@ function getSimulationSetupData() {
     initial_signals[signal.name] = signal.value
   })
   
-  console.log('[App] 시뮬레이션 설정 데이터 생성:', {
-    blocks: apiBlocks.length,
-    connections: apiConnections.length,
-    initial_signals
-  })
   
   return {
     blocks: apiBlocks,
@@ -445,8 +429,6 @@ function handleExportConfiguration() {
 
 function handleImportConfiguration(config) {
   try {
-    console.log('[App] 설정 가져오기 시작:', config);
-    
     if (config.blocks) {
       // 블록 로드 시 script 필드가 있으면 script 타입 액션으로 변환
       blocks.value = config.blocks.map(block => {
@@ -471,18 +453,14 @@ function handleImportConfiguration(config) {
                 script: processedBlock.script
               }
             });
-            
-            console.log('[App] 블록', processedBlock.name, '에 script 타입 액션 추가');
           }
         }
         
         return processedBlock;
       });
-      console.log('[App] 블록 설정 로드:', config.blocks.length);
     }
     if (config.connections) {
       connections.value = config.connections;
-      console.log('[App] 연결 설정 로드:', config.connections.length);
     }
     if (config.globalSignals) {
       // 신호를 로드할 때 value를 initialValue로 리셋
@@ -491,14 +469,10 @@ function handleImportConfiguration(config) {
         // initialValue가 정의되어 있으면 그것을 사용, 아니면 기존 value 사용
         value: signal.initialValue !== undefined ? signal.initialValue : signal.value
       }));
-      console.log('[App] 전역 신호 설정 로드:', config.globalSignals.length);
     }
     if (config.settings) {
       currentSettings.value = { ...currentSettings.value, ...config.settings };
-      console.log('[App] 일반 설정 로드:', config.settings);
     }
-    
-    console.log('[App] 설정 가져오기 완료');
   } catch (error) {
     console.error('[App] 설정 가져오기 실패:', error);
     alert('설정 적용 중 오류가 발생했습니다: ' + error.message);
@@ -516,7 +490,6 @@ function handleEditGlobalSignalWithReferences(data) {
 // 제어판 너비 변경 처리
 function handlePanelWidthChanged(newWidth) {
   controlPanelWidth.value = newWidth
-  console.log('[App] 제어판 너비 변경:', newWidth)
 }
 
 // 디버그 토글

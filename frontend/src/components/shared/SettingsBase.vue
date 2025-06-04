@@ -11,6 +11,9 @@
       </div>
     </div>
 
+    <!-- 추가 정보 슬롯 -->
+    <slot name="extra-info"></slot>
+
     <!-- 기본 정보 섹션 -->
     <div class="settings-section">
       <h4>기본 정보</h4>
@@ -263,29 +266,15 @@ function closeActionEditor() {
 }
 
 function handleActionSave(actionData) {
-  console.log('[SettingsBase] handleActionSave 호출됨', {
-    actionData,
-    editingActionIndex: editingActionIndex.value,
-    currentActionsLength: editableActions.value.length
-  })
-  
   if (editingActionIndex.value >= 0) {
     // 기존 액션 수정 - 새 배열을 생성하여 반응성 보장
     const newActions = [...editableActions.value]
     newActions[editingActionIndex.value] = actionData
     editableActions.value = newActions
-    console.log('[SettingsBase] 기존 액션 수정됨', newActions)
   } else {
     // 새 액션 추가 - 새 배열을 생성하여 반응성 보장
     editableActions.value = [...editableActions.value, actionData]
-    console.log('[SettingsBase] 새 액션 추가됨', editableActions.value)
   }
-  
-  // DOM 업데이트 강제 트리거
-  nextTick(() => {
-    console.log('[SettingsBase] nextTick 후 액션 배열 상태:', editableActions.value.length)
-    console.log('[SettingsBase] 액션 상세:', editableActions.value.map(a => ({ id: a.id, name: a.name, type: a.type })))
-  })
   
   // 액션 편집기 닫기 (기존 액션 수정이든 새 액션 추가든 상관없이)
   closeActionEditor()
@@ -347,10 +336,6 @@ function handleSave() {
 }
 
 function openScriptEditor() {
-  console.log('[SettingsBase] 스크립트 편집기 열기 시도')
-  console.log('[SettingsBase] 현재 editableActions:', editableActions.value)
-  console.log('[SettingsBase] 현재 generatedScript:', generatedScript.value)
-  
   // 강제로 상태 업데이트
   showActionEditor.value = false  // 다른 편집기 닫기
   
@@ -358,26 +343,14 @@ function openScriptEditor() {
   const scriptAction = editableActions.value.find(action => action.type === 'script')
   if (scriptAction && scriptAction.parameters?.script) {
     scriptContent.value = scriptAction.parameters.script
-    console.log('[SettingsBase] script 타입 액션의 스크립트 사용:', scriptContent.value)
   } else {
     // 현재 액션들을 스크립트로 변환하여 편집기에 표시
     scriptContent.value = generatedScript.value
-    console.log('[SettingsBase] 액션에서 생성된 스크립트 사용:', scriptContent.value)
   }
   
   // DOM 업데이트 후 스크립트 편집기 열기
   nextTick(() => {
     showScriptEditor.value = true
-    console.log('[SettingsBase] 스크립트 편집기 상태 (nextTick 후):', {
-      showScriptEditor: showScriptEditor.value,
-      scriptContent: scriptContent.value,
-      hasContent: scriptContent.value.length > 0
-    })
-    
-    // 강제로 반응성 트리거
-    nextTick(() => {
-      console.log('[SettingsBase] 두 번째 nextTick - 최종 상태:', showScriptEditor.value)
-    })
   })
 }
 
@@ -387,12 +360,6 @@ function closeScriptEditor() {
 }
 
 function handleScriptApply(parsedActions, scriptText) {
-  console.log('[SettingsBase] handleScriptApply 호출됨', {
-    parsedActions,
-    currentActionsLength: editableActions.value.length,
-    scriptText: scriptText
-  })
-  
   // 스크립트 편집기에서 가져온 스크립트 내용을 사용하여 script 타입 액션 생성
   const scriptAction = {
     id: `script-${Date.now()}`,
@@ -405,7 +372,6 @@ function handleScriptApply(parsedActions, scriptText) {
   
   // 모든 액션을 script 타입 액션 하나로 교체
   editableActions.value = [scriptAction]
-  console.log('[SettingsBase] script 타입 액션으로 교체됨:', editableActions.value)
   
   // 스크립트 적용 후 자동 저장
   handleSave()
@@ -415,22 +381,12 @@ function handleScriptApply(parsedActions, scriptText) {
 
 // 초기화
 onMounted(() => {
-  console.log('[SettingsBase] onMounted 호출됨', {
-    initialActions: props.initialActions,
-    length: props.initialActions.length
-  })
   editableActions.value = JSON.parse(JSON.stringify(props.initialActions || []))
-  console.log('[SettingsBase] 초기화 완료, editableActions:', editableActions.value.length)
 })
 
 // Props 변경 감지
 watch(() => props.initialActions, (newActions) => {
-  console.log('[SettingsBase] props.initialActions 변경됨', {
-    newActions,
-    length: newActions?.length || 0
-  })
   editableActions.value = JSON.parse(JSON.stringify(newActions || []))
-  console.log('[SettingsBase] watch 업데이트 완료, editableActions:', editableActions.value.length)
 }, { deep: true })
 
 watch(() => props.initialName, (newName) => {

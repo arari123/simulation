@@ -53,6 +53,7 @@ const emit = defineEmits([
   'select-block',
   'select-connector',
   'update-block-position',
+  'update-connector-position',
 ]);
 
 const canvasContainerRef = ref(null);
@@ -68,17 +69,13 @@ const globalEntityIdToNumber = new Map();
 let globalNextEntityNumber = 1;
 
 function initKonva() {
-  console.log("[CanvasArea] initKonva 시작");
-  console.log("[CanvasArea] canvasContainerRef.value:", canvasContainerRef.value);
   
   if (!canvasContainerRef.value) {
-    console.error("[CanvasArea] canvasContainerRef가 없습니다!");
     return;
   }
 
   // 기존 stage가 있으면 제거
   if (stage) {
-    console.log("[CanvasArea] 기존 Stage 제거");
     stage.destroy();
     stage = null;
   }
@@ -110,12 +107,6 @@ function initKonva() {
     600 // 최소값
   );
   
-  console.log("[CanvasArea] 컨테이너 크기 감지:", { 
-    clientSize: { width: container.clientWidth, height: container.clientHeight },
-    offsetSize: { width: container.offsetWidth, height: container.offsetHeight },
-    boundingRect: { width: containerRect.width, height: containerRect.height },
-    finalSize: { width, height }
-  });
   
   // 크기가 여전히 0이면 부모 크기 기반 계산
   if (width <= 0 || height <= 0) {
@@ -123,21 +114,18 @@ function initKonva() {
     if (parent) {
       width = Math.max(parent.clientWidth - 50, 800);
       height = Math.max(parent.clientHeight - 50, 600);
-      console.log("[CanvasArea] 부모 크기 기반 계산:", { width, height });
     }
   }
   
-  console.log("[CanvasArea] 최종 캔버스 크기:", { width, height });
 
   try {
     stage = new Konva.Stage({
       container: container,
       width: width,
       height: height,
-      draggable: true,
+      draggable: false, // Stage 드래그 비활성화
     });
 
-    console.log("[CanvasArea] Stage 생성 성공:", stage);
 
     // Stage 컨테이너 스타일 설정
     const stageContainer = stage.container();
@@ -147,27 +135,18 @@ function initKonva() {
       stageContainer.style.width = '100%';
       stageContainer.style.height = '100%';
       stageContainer.style.display = 'block';
-      console.log("[CanvasArea] Stage 컨테이너 스타일 설정 완료");
       
       // Canvas 요소 확인 (디버깅용 색상 제거)
       setTimeout(() => {
         const canvas = stageContainer.querySelector('canvas');
         if (canvas) {
-          console.log("[CanvasArea] Canvas 요소 감지:", {
-            canvasWidth: canvas.width,
-            canvasHeight: canvas.height,
-            canvasStyleWidth: canvas.style.width,
-            canvasStyleHeight: canvas.style.height
-          });
         } else {
-          console.error("[CanvasArea] Canvas 요소를 찾을 수 없습니다!");
         }
       }, 100);
     }
     
     return true; // 성공
   } catch (error) {
-    console.error("[CanvasArea] Stage 생성 실패:", error);
     return false; // 실패
   }
 }
@@ -181,17 +160,17 @@ const dirtyFlags = ref({
   entities: true
 })
 
+// 드래그 중인 커넥터의 임시 위치 저장
+const temporaryConnectorPositions = ref(new Map())
+
 function drawCanvasContent() {
-  console.log("[CanvasArea] drawCanvasContent 시작 - 부분 렌더링 모드");
   
   if (!layer || !stage) {
-    console.error("[CanvasArea] layer 또는 stage가 없습니다!");
     return;
   }
   
   // 엔티티 그룹 초기화 (한 번만 필요)
   if (!entityTextGroup.value) {
-    console.log("[CanvasArea] Creating entityTextGroup in drawCanvasContent");
     entityTextGroup.value = new Konva.Group();
     layer.add(entityTextGroup.value);
     entityTextGroup.value.moveToTop();
@@ -213,7 +192,6 @@ function drawCanvasContent() {
   }
   
   if (props.blocks.length === 0) {
-    console.warn("[CanvasArea] 블록이 없습니다!");
     layer.draw();
     return;
   }
@@ -222,12 +200,23 @@ function drawCanvasContent() {
 }
 
 function updateBlocks() {
-  console.log("[CanvasArea] 블록 부분 업데이트");
   
   // 기존 블록 중 더 이상 존재하지 않는 것들 제거
   const currentBlockIds = new Set(props.blocks.map(b => b.id.toString()));
   for (const [blockId, blockGroup] of blockNodes.value) {
     if (!currentBlockIds.has(blockId)) {
+      // 레이어에서 이 블록의 커넥터들도 제거
+      if (layer) {
+        const connectorsToRemove = [];
+        layer.children.forEach(child => {
+          if (child.attrs && String(child.attrs.blockId) === String(blockId) && 
+              (child.attrs.connectorId || child.attrs.isDragHandle)) {
+            connectorsToRemove.push(child);
+          }
+        });
+        connectorsToRemove.forEach(child => child.destroy());
+      }
+      
       blockGroup.destroy();
       blockNodes.value.delete(blockId);
     }
@@ -255,13 +244,14 @@ function updateSingleBlock(blockData) {
 }
 
 function createBlockGroup(blockData) {
-  console.log(`[CanvasArea] 새 블록 생성: ${blockData.id} (${blockData.name})`);
+  
+  const isBlockSelected = props.selectedBlockId && String(props.selectedBlockId) === String(blockData.id);
   
   const blockGroup = new Konva.Group({
     id: 'block-' + blockData.id.toString(),
     x: blockData.x,
     y: blockData.y,
-    draggable: true,
+    draggable: false, // 초기에는 드래그 불가능
   });
 
   // 블록 사각형
@@ -288,9 +278,28 @@ function updateBlockGroup(blockGroup, blockData) {
   blockGroup.x(blockData.x);
   blockGroup.y(blockData.y);
   
+  // 선택 상태에 따라 드래그 설정
+  const isBlockSelected = props.selectedBlockId && String(props.selectedBlockId) === String(blockData.id);
+  blockGroup.draggable(isBlockSelected);
+  
+  // 레이어에서 이 블록의 커넥터들 정리 (선택된 커넥터가 레이어에 있을 수 있음)
+  if (layer) {
+    const connectorsToRemove = [];
+    layer.children.forEach(child => {
+      if (child.attrs && String(child.attrs.blockId) === String(blockData.id) && 
+          (child.attrs.connectorId || child.attrs.isDragHandle)) {
+        connectorsToRemove.push(child);
+      }
+    });
+    connectorsToRemove.forEach(child => child.destroy());
+  }
+  
   // 내용 업데이트
   blockGroup.destroyChildren();
   addBlockContent(blockGroup, blockData);
+  
+  // 블록 이벤트 리스너 재설정
+  addBlockEventListeners(blockGroup, blockData);
 }
 
 function addBlockContent(blockGroup, blockData) {
@@ -307,7 +316,7 @@ function addBlockContent(blockGroup, blockData) {
   });
   blockGroup.add(rect);
 
-  // 선택된 블록인 경우 하이라이트 테두리 추가
+  // 선택된 블록인 경우 드래그 가능 표시 (파란색 점선)
   if (isBlockSelected) {
     const highlightRect = new Konva.Rect({
       width: (blockData.width || props.currentSettings.boxSize) + 8,
@@ -315,12 +324,13 @@ function addBlockContent(blockGroup, blockData) {
       x: -4,
       y: -4,
       fill: 'transparent',
-      stroke: '#FF6B35',
+      stroke: '#4A90E2', // 파란색으로 변경
       strokeWidth: 3,
       dash: [8, 4],
       opacity: 0.8
     });
     blockGroup.add(highlightRect);
+    
     
     // 선택 인디케이터 (모서리 점)
     const corners = [
@@ -361,11 +371,8 @@ function addBlockContent(blockGroup, blockData) {
     String(entity.current_block_id) === String(blockData.id)
   );
   
-  console.log(`[CanvasArea] Block ${blockData.name}(${blockData.id}) - activeEntityStates:`, props.activeEntityStates);
-  console.log(`[CanvasArea] Block ${blockData.name}(${blockData.id}) - entitiesInThisBlock:`, entitiesInThisBlock);
   
   const capacityTextString = `${entitiesInThisBlock.length}/${blockData.maxCapacity || 1}`;
-  console.log(`[CanvasArea] Block ${blockData.name}(${blockData.id}) - capacityText: ${capacityTextString}`);
   
   const capacityText = new Konva.Text({
     text: capacityTextString,
@@ -386,74 +393,392 @@ function addBlockContent(blockGroup, blockData) {
                         String(props.selectedConnectorInfo.blockId) === String(blockData.id) && 
                         String(props.selectedConnectorInfo.connectorId) === String(cp.id);
       
+      // 현재 커넥터의 실제 위치 찾기 (이동했을 수 있으므로)
+      const currentBlock = props.blocks.find(b => String(b.id) === String(blockData.id));
+      const currentConnector = currentBlock?.connectionPoints?.find(conn => String(conn.id) === String(cp.id));
+      
+      // 임시 위치가 있으면 그것을 사용, 없으면 props에서 가져오기
+      const tempPosKey = `${blockData.id}-${cp.id}`;
+      const tempPos = temporaryConnectorPositions.value.get(tempPosKey);
+      const connectorX = tempPos?.x ?? currentConnector?.x ?? cp.x;
+      const connectorY = tempPos?.y ?? currentConnector?.y ?? cp.y;
+      
+      
       const connectorCircle = new Konva.Circle({
-        x: cp.x,
-        y: cp.y,
+        x: connectorX,
+        y: connectorY,
         radius: isSelected ? 12 : 8, // 선택된 경우 더 크게
         fill: isSelected ? '#FF6B35' : 'orange', // 선택된 경우 다른 색상
         stroke: isSelected ? '#D63031' : 'darkorange',
         strokeWidth: isSelected ? 3 : 2, // 선택된 경우 더 두꺿게
-        draggable: false,
+        draggable: false, // 초기에는 드래그 불가능 (나중에 레이어에서 활성화)
+        stopPropagation: false, // 이벤트 전파 허용
+        connectorId: cp.id, // 커넥터 ID 저장
+        blockId: blockData.id, // 블록 ID 저장
       });
       
-      // 선택된 커넥터에 후광 효과 추가
+      // 커서 스타일 설정
+      connectorCircle.on('mouseenter', () => {
+        if (isSelected) {
+          document.body.style.cursor = 'move';
+        } else {
+          document.body.style.cursor = 'pointer';
+        }
+      });
+      
+      connectorCircle.on('mouseleave', () => {
+        document.body.style.cursor = 'default';
+      });
+      
+      // 선택된 커넥터에만 추가 설정
       if (isSelected) {
-        const haloCircle = new Konva.Circle({
-          x: cp.x,
-          y: cp.y,
-          radius: 16,
-          fill: 'transparent',
-          stroke: '#FF6B35',
-          strokeWidth: 2,
-          dash: [4, 4],
-          opacity: 0.7
+        // 수동 드래그 구현을 위한 변수
+        let isManualDragging = false;
+        let dragStartMousePos = null;
+        let dragStartConnectorPos = null;
+        
+        // 이벤트 핸들러 함수들을 저장하여 나중에 제거할 수 있도록 함
+        const mouseMoveHandler = function() {
+          if (isManualDragging && dragStartMousePos && dragStartConnectorPos) {
+            const currentMousePos = stage.getPointerPosition();
+            if (currentMousePos) {
+              const deltaX = currentMousePos.x - dragStartMousePos.x;
+              const deltaY = currentMousePos.y - dragStartMousePos.y;
+              
+              const newX = dragStartConnectorPos.x + deltaX;
+              const newY = dragStartConnectorPos.y + deltaY;
+              
+              connectorCircle.position({
+                x: newX,
+                y: newY
+              });
+              
+              // 드래그 핸들(파란 점선)도 함께 이동
+              if (layer) {
+                const dragHandle = layer.children.find(child => 
+                  child.attrs && child.attrs.isDragHandle && 
+                  String(child.attrs.connectorId) === String(cp.id) && 
+                  String(child.attrs.blockId) === String(blockData.id)
+                );
+                if (dragHandle) {
+                  dragHandle.position({
+                    x: newX,
+                    y: newY
+                  });
+                }
+              }
+              
+              // 라벨과 배경도 함께 이동 (블록 기준 상대 좌표로 변환)
+              if (connectorCircle.connectorLabel && connectorCircle.labelBg) {
+                const relativePos = {
+                  x: newX - blockGroup.x(),
+                  y: newY - blockGroup.y()
+                };
+                connectorCircle.labelBg.x(relativePos.x - 18);
+                connectorCircle.labelBg.y(relativePos.y - 28);
+                connectorCircle.connectorLabel.x(relativePos.x - 15);
+                connectorCircle.connectorLabel.y(relativePos.y - 25);
+              }
+              
+              // 연결선 실시간 업데이트
+              updateConnectionsForBlock(blockData.id);
+              layer.batchDraw();
+            }
+          }
+        };
+        
+        const mouseUpHandler = function() {
+          if (isManualDragging) {
+            isManualDragging = false;
+            document.body.style.cursor = 'move';
+            
+            // 여기서 영역 제한과 자석 효과 적용
+            applyConstraintsAndSnap();
+            
+            // 이벤트 리스너 제거
+            stage.off('mousemove', mouseMoveHandler);
+            stage.off('mouseup', mouseUpHandler);
+          }
+        };
+        
+        // Stage 드래그 방지를 위해 stopDrag 설정
+        connectorCircle.on('mouseenter', () => {
+          if (stage) stage.draggable(false);
+          document.body.style.cursor = 'move';
         });
-        blockGroup.add(haloCircle);
+        
+        connectorCircle.on('mouseleave', () => {
+          if (!isManualDragging) {
+            document.body.style.cursor = 'default';
+          }
+        });
+        
+        // 마우스 다운 - 수동 드래그 시작
+        connectorCircle.on('mousedown', function(e) {
+          e.cancelBubble = true;
+          if (stage) {
+            isManualDragging = true;
+            dragStartMousePos = stage.getPointerPosition();
+            dragStartConnectorPos = connectorCircle.position();
+            document.body.style.cursor = 'grabbing';
+            
+            
+            // 이벤트 리스너 추가
+            stage.on('mousemove', mouseMoveHandler);
+            stage.on('mouseup', mouseUpHandler);
+          }
+        });
+        
+        // 영역 제한과 자석 효과를 적용하는 함수
+        function applyConstraintsAndSnap() {
+          const blockSize = blockData.width || props.currentSettings.boxSize;
+          const snapThreshold = 25;
+          const margin = 20;
+          
+          const currentBlock = props.blocks.find(b => String(b.id) === String(blockData.id));
+          const blockX = currentBlock?.x || blockData.x || 0;
+          const blockY = currentBlock?.y || blockData.y || 0;
+          
+          const currentPos = connectorCircle.position();
+          let constrainedX = currentPos.x;
+          let constrainedY = currentPos.y;
+          
+          // 1단계: 영역 제한
+          const relativeX = currentPos.x - blockX;
+          const relativeY = currentPos.y - blockY;
+          
+          if (relativeX < -margin) {
+            constrainedX = blockX - margin;
+          } else if (relativeX > blockSize + margin) {
+            constrainedX = blockX + blockSize + margin;
+          }
+          
+          if (relativeY < -margin) {
+            constrainedY = blockY - margin;
+          } else if (relativeY > blockSize + margin) {
+            constrainedY = blockY + blockSize + margin;
+          }
+          
+          // 2단계: 자석 효과
+          const constrainedRelativeX = constrainedX - blockX;
+          const constrainedRelativeY = constrainedY - blockY;
+          
+          const distToLeft = Math.abs(constrainedRelativeX);
+          const distToRight = Math.abs(constrainedRelativeX - blockSize);
+          const distToTop = Math.abs(constrainedRelativeY);
+          const distToBottom = Math.abs(constrainedRelativeY - blockSize);
+          
+          let finalX = constrainedX;
+          let finalY = constrainedY;
+          
+          if (distToLeft < snapThreshold && distToLeft <= Math.min(distToRight, distToTop, distToBottom)) {
+            finalX = blockX;
+            finalY = blockY + Math.max(0, Math.min(blockSize, constrainedRelativeY));
+          } else if (distToRight < snapThreshold && distToRight <= Math.min(distToLeft, distToTop, distToBottom)) {
+            finalX = blockX + blockSize;
+            finalY = blockY + Math.max(0, Math.min(blockSize, constrainedRelativeY));
+          } else if (distToTop < snapThreshold && distToTop <= Math.min(distToLeft, distToRight, distToBottom)) {
+            finalY = blockY;
+            finalX = blockX + Math.max(0, Math.min(blockSize, constrainedRelativeX));
+          } else if (distToBottom < snapThreshold && distToBottom <= Math.min(distToLeft, distToRight, distToTop)) {
+            finalY = blockY + blockSize;
+            finalX = blockX + Math.max(0, Math.min(blockSize, constrainedRelativeX));
+          }
+          
+          
+          // 임시 위치 저장 (블록 기준 상대 좌표)
+          const tempPosKey = `${blockData.id}-${cp.id}`;
+          const finalRelativePos = {
+            x: finalX - blockX,
+            y: finalY - blockY
+          };
+          temporaryConnectorPositions.value.set(tempPosKey, finalRelativePos);
+          
+          // 최종 위치로 모든 요소 이동
+          connectorCircle.position({
+            x: finalX,
+            y: finalY
+          });
+          
+          // 드래그 핸들도 최종 위치로 이동
+          if (layer) {
+            const dragHandle = layer.children.find(child => 
+              child.attrs && child.attrs.isDragHandle && 
+              String(child.attrs.connectorId) === String(cp.id) && 
+              String(child.attrs.blockId) === String(blockData.id)
+            );
+            if (dragHandle) {
+              dragHandle.position({
+                x: finalX,
+                y: finalY
+              });
+            }
+          }
+          
+          // 라벨과 배경도 최종 위치로 이동
+          if (connectorCircle.connectorLabel && connectorCircle.labelBg) {
+            connectorCircle.labelBg.x(finalRelativePos.x - 18);
+            connectorCircle.labelBg.y(finalRelativePos.y - 28);
+            connectorCircle.connectorLabel.x(finalRelativePos.x - 15);
+            connectorCircle.connectorLabel.y(finalRelativePos.y - 25);
+          }
+          
+          
+          // emit을 통해 부모 컴포넌트에 위치 업데이트 요청
+          emit('update-connector-position', {
+            blockId: blockData.id,
+            connectorId: cp.id,
+            x: finalRelativePos.x,
+            y: finalRelativePos.y
+          });
+          
+          // 연결선 업데이트
+          updateConnectionsForBlock(blockData.id);
+          
+          // 강제로 다시 그리기
+          layer.batchDraw();
+          
+          // props 업데이트 후 임시 위치 정리
+          setTimeout(() => {
+            temporaryConnectorPositions.value.delete(tempPosKey);
+          }, 100);
+        }
       }
       
-      // 커넥터 클릭 이벤트 - 더 안정적인 이벤트 처리
+            // 드래그 관련 변수
+      let isDragging = false;
+      let connectorLabel = null;
+      let labelBg = null;
+      let dragHandleCircle = null; // 드래그 핸들
+      
+      // 마우스 이벤트로 클릭과 드래그 구분
+      connectorCircle.on('mousedown', (e) => {
+        e.cancelBubble = true;
+        if (e.evt) e.evt.stopPropagation(); // 블록 이벤트 방지
+      });
+      
+      connectorCircle.on('mouseup', (e) => {
+        e.cancelBubble = true;
+        if (e.evt) e.evt.stopPropagation(); // 블록 이벤트 방지
+      });
+      
+      // 커넥터 클릭 이벤트 - 활성화/비활성화
       connectorCircle.on('click', (e) => {
-        e.cancelBubble = true; // 이벤트 버블링 방지
-        e.evt?.stopPropagation(); // 네이티브 이벤트 전파도 중단
-        console.log(`[CanvasArea] 커넥터 클릭됨: Block ${blockData.id}, Connector ${cp.id}`);
-        console.log(`[CanvasArea] Emitting select-connector`);
+        e.cancelBubble = true;
+        if (e.evt) e.evt.stopPropagation(); // 블록 이벤트 방지
         emit('select-connector', {
           blockId: blockData.id,
           connectorId: cp.id
         });
       });
+      // 선택된 커넥터에 드래그 핸들 추가
+      if (isSelected) {
+        // 드래그 핸들 표시 (파란색 테두리)
+        dragHandleCircle = new Konva.Circle({
+          x: cp.x,
+          y: cp.y,
+          radius: 14,
+          stroke: '#4A90E2',
+          strokeWidth: 2,
+          fill: 'transparent',
+          dash: [2, 2],
+          isDragHandle: true, // 정리 시 식별용
+          listening: false // 이벤트 받지 않음
+        });
+        
+        // 커넥터에 드래그 핸들 참조 저장
+        connectorCircle.dragHandleCircle = dragHandleCircle;
+      }
       
-      // 마우스다운/업 이벤트로 클릭 상태 추적
-      let connectorMouseDownTime = 0;
-      connectorCircle.on('mousedown', (e) => {
-        e.cancelBubble = true;
-        e.evt?.stopPropagation();
-        connectorMouseDownTime = Date.now();
-        console.log(`[CanvasArea] 커넥터 마우스다운: Block ${blockData.id}, Connector ${cp.id}`);
-      });
+      // 기존 Konva 드래그 이벤트는 선택된 커넥터에서는 사용하지 않음
       
-      connectorCircle.on('mouseup', (e) => {
-        e.cancelBubble = true;
-        e.evt?.stopPropagation();
-        const clickDuration = Date.now() - connectorMouseDownTime;
-        // 짧은 클릭만 처리 (300ms 이하)
-        if (clickDuration < 300) {
-          console.log(`[CanvasArea] 커넥터 마우스업 (클릭): Block ${blockData.id}, Connector ${cp.id}`);
-          emit('select-connector', {
-            blockId: blockData.id,
-            connectorId: cp.id
+      // 선택된 커넥터는 레이어에 직접 추가하여 독립적으로 드래그 가능하게 함
+      if (isSelected && layer) {
+        // 이미 레이어에 같은 커넥터가 있는지 확인
+        const existingConnector = layer.children.find(child => 
+          child.attrs && String(child.attrs.connectorId) === String(cp.id) && 
+          String(child.attrs.blockId) === String(blockData.id)
+        );
+        
+        if (!existingConnector) {
+          // 현재 커넥터 위치 저장 (제거되기 전에)
+          const currentPos = connectorCircle.position();
+          const currentAbsX = blockGroup.x() + currentPos.x;
+          const currentAbsY = blockGroup.y() + currentPos.y;
+          
+          // 커넥터를 블록그룹에서 제거
+          connectorCircle.remove();
+          
+          // 절대 위치로 설정
+          connectorCircle.position({
+            x: currentAbsX,
+            y: currentAbsY
           });
+          
+          // 커넥터에 블록 참조 저장 (dragBoundFunc에서 사용)
+          connectorCircle.blockGroup = blockGroup;
+          
+          // 레이어에 직접 추가
+          layer.add(connectorCircle);
+          connectorCircle.moveToTop(); // 최상단으로 이동
+          
+          // 수동 드래그를 사용하므로 기본 드래그 비활성화
+          connectorCircle.draggable(false);
+          connectorCircle.listening(true);
+          
+          // 드래그 가능한 영역 표시를 위한 설정
+          connectorCircle.perfectDrawEnabled(false); // 성능 향상
+          
+          // 레이어 다시 그리기 강제 실행
+          layer.batchDraw();
         }
-      });
+      } else {
+        // 선택되지 않은 커넥터는 그룹에 추가
+        blockGroup.add(connectorCircle);
+      }
       
-      blockGroup.add(connectorCircle);
+      // 드래그 핸들 추가
+      if (dragHandleCircle) {
+        if (isSelected && layer) {
+          // 이미 레이어에 드래그 핸들이 있는지 확인
+          const existingHandle = layer.children.find(child => 
+            child.attrs && child.attrs.isDragHandle && 
+            String(child.attrs.connectorId) === String(cp.id) && 
+            String(child.attrs.blockId) === String(blockData.id)
+          );
+          
+          if (!existingHandle) {
+            // 현재 커넥터의 실제 위치 찾기 (임시 위치 포함)
+            const currentBlock = props.blocks.find(b => String(b.id) === String(blockData.id));
+            const currentConnector = currentBlock?.connectionPoints?.find(conn => String(conn.id) === String(cp.id));
+            
+            // 임시 위치가 있으면 그것을 사용, 없으면 props에서 가져오기
+            const tempPosKey = `${blockData.id}-${cp.id}`;
+            const tempPos = temporaryConnectorPositions.value.get(tempPosKey);
+            const connectorX = tempPos?.x ?? currentConnector?.x ?? cp.x;
+            const connectorY = tempPos?.y ?? currentConnector?.y ?? cp.y;
+            
+            // 선택된 커넥터의 드래그 핸들도 레이어에 직접 추가
+            dragHandleCircle.position({
+              x: blockGroup.x() + connectorX,
+              y: blockGroup.y() + connectorY
+            });
+            dragHandleCircle.attrs.connectorId = cp.id;
+            dragHandleCircle.attrs.blockId = blockData.id;
+            layer.add(dragHandleCircle);
+            dragHandleCircle.moveToTop();
+          }
+        } else {
+          blockGroup.add(dragHandleCircle);
+        }
+      }
       
       // 커넥터 라벨 추가 (항상 표시)
       if (cp.name) {
         // 이름이 4글자를 넘으면 잘라서 표시
         const displayName = cp.name.length > 4 ? cp.name.substring(0, 4) : cp.name;
         
-        const connectorLabel = new Konva.Text({
+        connectorLabel = new Konva.Text({
           x: cp.x - 15,
           y: cp.y - 25,
           text: displayName,
@@ -467,7 +792,7 @@ function addBlockContent(blockGroup, blockData) {
         });
         
         // 라벨 배경
-        const labelBg = new Konva.Rect({
+        labelBg = new Konva.Rect({
           x: cp.x - 18,
           y: cp.y - 28,
           width: 36,
@@ -479,9 +804,14 @@ function addBlockContent(blockGroup, blockData) {
           opacity: 0.9
         });
         
+        // 커넥터에 라벨과 배경 참조 저장
+        connectorCircle.labelBg = labelBg;
+        connectorCircle.connectorLabel = connectorLabel;
+        
         blockGroup.add(labelBg);
         blockGroup.add(connectorLabel);
       }
+      
     });
   }
 }
@@ -503,7 +833,6 @@ function addBlockEventListeners(blockGroup, blockData) {
     mouseDownTime = Date.now();
     mouseDownPos = stage.getPointerPosition();
     dragStartPos = { x: blockGroup.x(), y: blockGroup.y() };
-    console.log(`[CanvasArea] Block ${blockData.name} mousedown - 드래그 상태 초기화`);
   });
 
   // 마우스 업 - 클릭 감지를 위한 최종 검증
@@ -527,16 +856,17 @@ function addBlockEventListeners(blockGroup, blockData) {
     
     // 클릭으로 판단: 시간이 짧고(500ms 이하), 마우스 이동이 적고(10px 이하), 드래그 중이 아닌 경우
     if (clickDuration < 500 && mouseMoveDistance < 10 && !isDragging) {
-      console.log(`[CanvasArea] Block ${blockData.name} 클릭 감지됨 (duration: ${clickDuration}ms, distance: ${mouseMoveDistance}px)`);
       emit('select-block', blockData.id);
+      // 블록이 선택되면 드래그 가능하도록 설정
+      if (!blockGroup.draggable()) {
+        blockGroup.draggable(true);
+      }
     } else {
-      console.log(`[CanvasArea] Block ${blockData.name} 클릭이 아님 (duration: ${clickDuration}ms, distance: ${mouseMoveDistance}px, dragging: ${isDragging})`);
     }
   });
 
   // 드래그 시작
   blockGroup.on('dragstart', () => {
-    console.log(`[CanvasArea] Block ${blockData.name} 드래그 시작`);
     // 드래그가 실제로 시작되면 즉시 드래그 상태로 설정
     isDragging = true;
   });
@@ -549,6 +879,33 @@ function addBlockEventListeners(blockGroup, blockData) {
       Math.abs(currentPos.y - dragStartPos.y) > 5
     )) {
       isDragging = true;
+      
+      // 선택된 커넥터가 레이어에 있다면 함께 이동
+      if (props.selectedConnectorInfo && 
+          String(props.selectedConnectorInfo.blockId) === String(blockData.id)) {
+        const connectorId = props.selectedConnectorInfo.connectorId;
+        const connector = blockData.connectionPoints?.find(cp => String(cp.id) === String(connectorId));
+        
+        if (connector && layer) {
+          // 레이어에서 해당 커넥터와 드래그 핸들 찾기
+          const layerChildren = layer.children;
+          layerChildren.forEach(child => {
+            // 커넥터 이동
+            if (child.attrs && child.attrs.connectorId === connectorId && 
+                child.attrs.blockId === blockData.id) {
+              child.x(currentPos.x + connector.x);
+              child.y(currentPos.y + connector.y);
+            }
+            // 드래그 핸들 이동
+            if (child.attrs && child.attrs.isDragHandle && 
+                child.attrs.connectorId === connectorId && 
+                child.attrs.blockId === blockData.id) {
+              child.x(currentPos.x + connector.x);
+              child.y(currentPos.y + connector.y);
+            }
+          });
+        }
+      }
       
       // 실시간 연결선 업데이트 (성능을 위해 throttle)
       if (!blockGroup._dragMoveThrottle) {
@@ -563,7 +920,6 @@ function addBlockEventListeners(blockGroup, blockData) {
 
   // 드래그 종료
   blockGroup.on('dragend', () => {
-    console.log(`[CanvasArea] Block ${blockData.name} 드래그 종료`);
     const newPos = { x: blockGroup.x(), y: blockGroup.y() };
     emit('update-block-position', { 
       id: blockData.id, 
@@ -588,16 +944,60 @@ function addBlockEventListeners(blockGroup, blockData) {
       return;
     }
     
-    console.log(`[CanvasArea] Block ${blockData.name} 클릭 이벤트 (백업), isDragging: ${isDragging}`);
     if (!isDragging) {
-      console.log(`[CanvasArea] Emitting select-block for ${blockData.id} (백업 이벤트)`);
       emit('select-block', blockData.id);
     }
   });
 }
 
+function updateConnectionsForBlock(blockId) {
+  
+  // 해당 블록과 관련된 연결선만 찾아서 업데이트
+  props.connections.forEach(conn => {
+    const fromBlockId = conn.from_block_id || conn.fromBlockId;
+    const toBlockId = conn.to_block_id || conn.toBlockId;
+    
+    // 이 블록과 관련된 연결만 처리
+    if (String(fromBlockId) === String(blockId) || String(toBlockId) === String(blockId)) {
+      const connectionKey = `${fromBlockId}-${conn.from_connector_id || conn.fromConnectorId}-${toBlockId}-${conn.to_connector_id || conn.toConnectorId}`;
+      const existingArrow = connectionNodes.value.get(connectionKey);
+      
+      if (existingArrow) {
+        // 기존 화살표 업데이트
+        const fromBlock = props.blocks.find(b => String(b.id) === String(fromBlockId));
+        const toBlock = props.blocks.find(b => String(b.id) === String(toBlockId));
+        
+        if (fromBlock && toBlock) {
+          const fromConnectorId = conn.from_connector_id || conn.fromConnectorId;
+          const toConnectorId = conn.to_connector_id || conn.toConnectorId;
+          
+          let fromPointData, toPointData;
+          
+          if (fromConnectorId === 'block-action') {
+            fromPointData = { x: (fromBlock.width || props.currentSettings.boxSize) / 2, y: (fromBlock.height || props.currentSettings.boxSize) / 2 };
+          } else {
+            fromPointData = (fromBlock.connectionPoints || []).find(p => p.id === fromConnectorId) || 
+                          {x:(fromBlock.width || props.currentSettings.boxSize)/2, y:(fromBlock.height || props.currentSettings.boxSize)/2};
+          }
+          
+          toPointData = (toBlock.connectionPoints || []).find(p => p.id === toConnectorId) || 
+                        {x:(toBlock.width || props.currentSettings.boxSize)/2, y:(toBlock.height || props.currentSettings.boxSize)/2};
+          
+          const fromAbsX = fromBlock.x + fromPointData.x;
+          const fromAbsY = fromBlock.y + fromPointData.y;
+          const toAbsX = toBlock.x + toPointData.x;
+          const toAbsY = toBlock.y + toPointData.y;
+          
+          existingArrow.points([fromAbsX, fromAbsY, toAbsX, toAbsY]);
+        }
+      }
+    }
+  });
+  
+  layer.batchDraw();
+}
+
 function updateConnections() {
-  console.log("[CanvasArea] 연결 부분 업데이트 - connections 배열 기반");
   
   // 기존 연결선 제거
   connectionNodes.value.forEach(node => node.destroy());
@@ -605,7 +1005,6 @@ function updateConnections() {
   
   // connections 배열만 사용하여 연결선 그리기 (중복 방지)
   props.connections.forEach(conn => {
-    console.log("[CanvasArea] Processing connection:", conn);
     
     // 필드명 통일: from_block_id 또는 fromBlockId 모두 지원
     const fromBlockId = conn.from_block_id || conn.fromBlockId;
@@ -615,7 +1014,6 @@ function updateConnections() {
     
     // 같은 블록 내에서 block-action에서 자기 연결점으로 가는 연결선은 그리지 않음
     if (String(fromBlockId) === String(toBlockId) && fromConnectorId === 'block-action') {
-      console.log(`[CanvasArea] Skipping self-connection: ${fromBlockId}(${fromConnectorId}) -> ${toBlockId}(${toConnectorId})`);
       return;
     }
     
@@ -623,7 +1021,6 @@ function updateConnections() {
     const toBlock = props.blocks.find(b => String(b.id) === String(toBlockId));
 
     if (fromBlock && toBlock) {
-      console.log(`[CanvasArea] Drawing connection: ${fromBlock.name}(${fromConnectorId}) -> ${toBlock.name}(${toConnectorId})`);
       
       let fromPointData, toPointData;
       
@@ -659,15 +1056,12 @@ function updateConnections() {
       const connectionKey = `${fromBlockId}-${fromConnectorId}-${toBlockId}-${toConnectorId}`;
       connectionNodes.value.set(connectionKey, arrow);
       layer.add(arrow);
-      console.log(`[CanvasArea] Arrow added: ${fromBlock.name} -> ${toBlock.name}`);
     } else {
-      console.warn(`[CanvasArea] Block not found for connection:`, conn, "fromBlock:", fromBlock, "toBlock:", toBlock);
     }
   });
 }
 
 function displayTransitEntity(entity, index) {
-  console.log(`[CanvasArea] Displaying transit entity: ${entity.id}`, entity);
   
   // 🔥 연결선 중앙에 transit 엔티티 표시
   // 엔티티의 current_block_name에서 어떤 연결선을 사용할지 판단
@@ -678,14 +1072,12 @@ function displayTransitEntity(entity, index) {
     // 엔티티의 current_block_name이 "투입→공정1" 형태라면 해당 연결선 찾기
     if (entity.current_block_name && entity.current_block_name.includes('→')) {
       const [fromName, toName] = entity.current_block_name.split('→');
-      console.log(`[CanvasArea] Transit from "${fromName}" to "${toName}"`);
       
       connection = props.connections.find(conn => {
         const fromBlock = props.blocks.find(b => String(b.id) === String(conn.from_block_id || conn.fromBlockId));
         const toBlock = props.blocks.find(b => String(b.id) === String(conn.to_block_id || conn.toBlockId));
         const matches = fromBlock && toBlock && fromBlock.name === fromName && toBlock.name === toName;
         if (matches) {
-          console.log(`[CanvasArea] Found matching connection: ${fromBlock.name} → ${toBlock.name}`);
         }
         return matches;
       });
@@ -693,9 +1085,6 @@ function displayTransitEntity(entity, index) {
     
     // 적절한 연결선을 찾지 못했다면 fallback 로직
     if (!connection) {
-      console.log(`[CanvasArea] Could not find matching connection, using fallback logic`);
-      console.log(`[CanvasArea] Available connections:`, props.connections);
-      console.log(`[CanvasArea] Available blocks:`, props.blocks.map(b => ({id: b.id, name: b.name})));
       
       // 가능한 모든 연결선 중에서 첫 번째 사용
       connection = props.connections[0];
@@ -766,7 +1155,6 @@ function displayTransitEntity(entity, index) {
       entityTextGroup.value.add(transitText);
       entityTextGroup.value.add(transitLabel);
       
-      console.log(`[CanvasArea] Added transit entity #${entityNumber} (${entity.id}) at connection middle (${middleX}, ${middleY})`);
     }
   } else {
     // 연결선이 없는 경우 화면 중앙에 표시
@@ -809,21 +1197,16 @@ function displayTransitEntity(entity, index) {
     entityTextGroup.value.add(transitRect);
     entityTextGroup.value.add(transitText);
     
-    console.log(`[CanvasArea] Added transit entity #${entityNumber} (${entity.id}) at screen center`);
   }
 }
 
 function updateEntities() {
-  console.log("[CanvasArea] updateEntities called with", props.activeEntityStates.length, "entities");
-  console.log("[CanvasArea] activeEntityStates detail:", JSON.stringify(props.activeEntityStates, null, 2));
   
   if (!entityTextGroup.value) {
-    console.log("[CanvasArea] Creating entityTextGroup");
     entityTextGroup.value = new Konva.Group();
     layer.add(entityTextGroup.value);
     // 엔티티 그룹을 최상단으로 이동하여 다른 요소들 위에 표시되도록 함
     entityTextGroup.value.moveToTop();
-    console.log("[CanvasArea] EntityTextGroup moved to top");
   }
   
   entityTextGroup.value.destroyChildren();
@@ -838,23 +1221,19 @@ function updateEntities() {
     entitiesByBlock.get(blockId).push(entity);
   });
   
-  console.log("[CanvasArea] Entities by block:", entitiesByBlock);
   
   // 새로운 엔티티에 대해서만 번호 할당
   props.activeEntityStates.forEach(entity => {
     if (!globalEntityIdToNumber.has(entity.id)) {
       globalEntityIdToNumber.set(entity.id, globalNextEntityNumber++);
-      console.log(`[CanvasArea] New entity ${entity.id} assigned number: ${globalEntityIdToNumber.get(entity.id)}`);
     }
   });
   
-  console.log("[CanvasArea] Total entity mappings:", globalEntityIdToNumber.size);
   
   // 각 블록에 엔티티 네모로 표시
   entitiesByBlock.forEach((entities, blockId) => {
     // 🔥 transit 상태 엔티티 처리
     if (blockId === "transit") {
-      console.log(`[CanvasArea] Found ${entities.length} transit entities - will display on connections`);
       entities.forEach((entity, index) => {
         displayTransitEntity(entity, index);
       });
@@ -893,7 +1272,6 @@ function updateEntities() {
         if (entityX >= padding && entityY >= padding && 
             entityX + entitySize <= blockWidth - padding && 
             entityY + entitySize <= blockHeight - padding) {
-          console.log(`[CanvasArea] Creating entity rect for ${entity.id} at (${block.x + entityX}, ${block.y + entityY})`);
           
           // 엔티티 네모 - 더 눈에 잘 띄도록 스타일 강화
           const entityRect = new Konva.Rect({
@@ -913,7 +1291,6 @@ function updateEntities() {
           
           // 엔티티 번호 텍스트 - 전역 매핑에서 번호 가져오기
           const entityNumber = globalEntityIdToNumber.get(entity.id) || 0;
-          console.log(`[CanvasArea] Entity ${entity.id} has number: ${entityNumber}`);
           const fontSize = entities.length === 1 ? 16 : 12; // 14->16, 10->12로 증가
           const entityText = new Konva.Text({
             x: block.x + entityX,
@@ -930,18 +1307,14 @@ function updateEntities() {
           
           entityTextGroup.value.add(entityRect);
           entityTextGroup.value.add(entityText);
-          console.log(`[CanvasArea] Added entity #${entityNumber} (${entity.id}) rect and text to group at position (${block.x + entityX}, ${block.y + entityY}) in block ${block.name}`);
         } else {
-          console.warn(`[CanvasArea] Entity ${entity.id} out of bounds: entityX=${entityX}, entityY=${entityY}, blockWidth=${blockWidth}, blockHeight=${blockHeight}`);
         }
       });
     } else {
       // 🔥 블록을 찾을 수 없는 경우 로그 출력 및 임시 표시
-      console.warn(`[CanvasArea] Block not found for blockId: ${blockId}, entities:`, entities);
       
       // transit이 아닌데 블록이 없는 경우에도 연결선 위에 표시
       entities.forEach((entity, index) => {
-        console.log(`[CanvasArea] Displaying unmatched entity ${entity.id} on connections`);
         displayTransitEntity(entity, index);
       });
     }
@@ -950,13 +1323,10 @@ function updateEntities() {
   // 엔티티 그룹을 다시 최상단으로 이동하여 확실히 보이도록 함
   if (entityTextGroup.value) {
     entityTextGroup.value.moveToTop();
-    console.log(`[CanvasArea] Entity update complete. Group children count: ${entityTextGroup.value.children.length}`);
-    console.log(`[CanvasArea] EntityTextGroup z-index position: ${entityTextGroup.value.zIndex()}`);
   }
   
   // Force redraw after updating entities
   layer.draw();
-  console.log("[CanvasArea] Layer redraw completed after entity update");
 }
 
 function drawGrid() {
@@ -1045,17 +1415,12 @@ function resizeCanvas() {
   const width = Math.max(container.clientWidth || container.offsetWidth || containerRect.width, 200);
   const height = Math.max(container.clientHeight || container.offsetHeight || containerRect.height, 200);
   
-  console.log("[CanvasArea] resizeCanvas - 새로운 크기:", { width, height, containerRect });
   
   // 현재 Stage 크기와 비교해서 변경된 경우만 업데이트
   const currentWidth = stage.width();
   const currentHeight = stage.height();
   
   if (Math.abs(currentWidth - width) > 1 || Math.abs(currentHeight - height) > 1) {
-    console.log("[CanvasArea] 크기 변경 감지:", { 
-      from: { width: currentWidth, height: currentHeight }, 
-      to: { width, height } 
-    });
     
     // Stage 크기 업데이트
     stage.width(width);
@@ -1078,18 +1443,10 @@ function resizeCanvas() {
       canvas.width = width;
       canvas.height = height;
       
-      console.log("[CanvasArea] Canvas 강제 크기 설정 완료:", {
-        canvasWidth: canvas.width,
-        canvasHeight: canvas.height,
-        canvasStyleWidth: canvas.style.width,
-        canvasStyleHeight: canvas.style.height,
-        containerSize: { width, height }
-      });
     }
     
     drawGrid();
     stage.batchDraw();
-    console.log("[CanvasArea] 캔버스 크기 업데이트 완료:", { width, height });
   }
 }
 
@@ -1134,7 +1491,6 @@ function centerViewOnBlocks() {
   const newX = stageCenterX - centerX;
   const newY = stageCenterY - centerY;
   
-  console.log(`[CanvasArea] 블록 중심: (${centerX}, ${centerY}), 스테이지 이동: (${newX}, ${newY})`);
   
   stage.position({ x: newX, y: newY });
   stage.batchDraw();
@@ -1147,11 +1503,11 @@ function addStageEventListeners() {
   
   // 배경 클릭 처리
   stage.on('mousedown', (e) => {
-    console.log(`[CanvasArea] 🎯 스테이지 마우스다운 - 대상:`, e.target?.constructor?.name || 'unknown');
-    
     // 배경 클릭 감지 (Stage 자체를 클릭한 경우)
     if (e.target === stage) {
-      console.log(`[CanvasArea] 배경 클릭 감지 - 선택 해제`);
+      // 커서를 기본값으로 리셋
+      document.body.style.cursor = 'default';
+      
       // 선택 해제를 위해 부모 컴포넌트에 이벤트 전송
       setTimeout(() => {
         if (props.selectedBlockId || props.selectedConnectorInfo) {
@@ -1160,16 +1516,6 @@ function addStageEventListeners() {
       }, 50); // 다른 클릭 이벤트가 처리된 후 실행
     }
   });
-
-  stage.on('dragstart', (e) => {
-    console.log(`[CanvasArea] 🎯 스테이지 드래그 시작 - 대상:`, e.target?.constructor?.name || 'unknown');
-  });
-
-  stage.on('dragmove', (e) => {
-    console.log(`[CanvasArea] 🎯 스테이지 드래그무브 - 대상:`, e.target?.constructor?.name || 'unknown');
-  });
-
-  console.log("[CanvasArea] Stage 이벤트 리스너 설정 완료");
 }
 
 // Wheel 이벤트 리스너 추가
@@ -1201,7 +1547,6 @@ function addWheelEventListener() {
       drawGrid();
     });
     
-    console.log("[CanvasArea] Wheel 이벤트 리스너 설정 완료");
   }
 }
 
@@ -1221,7 +1566,6 @@ watch(() => props.currentSettings.fontSize, () => {
 
 // 성능 최적화된 watch - 분리된 감시
 watch(() => props.blocks, (newBlocks, oldBlocks) => {
-  console.log("[CanvasArea] blocks 변경됨");
   
   // 블록 위치가 변경되었는지 확인
   let positionChanged = false;
@@ -1231,7 +1575,6 @@ watch(() => props.blocks, (newBlocks, oldBlocks) => {
       const oldBlock = oldBlocks.find(b => b.id === newBlock.id);
       if (oldBlock && (oldBlock.x !== newBlock.x || oldBlock.y !== newBlock.y)) {
         positionChanged = true;
-        console.log(`[CanvasArea] Block ${newBlock.name} 위치 변경: (${oldBlock.x},${oldBlock.y}) → (${newBlock.x},${newBlock.y})`);
         break;
       }
     }
@@ -1257,7 +1600,6 @@ watch(() => props.blocks, (newBlocks, oldBlocks) => {
 }, { deep: true, flush: 'post' });
 
 watch(() => props.connections, () => {
-  console.log("[CanvasArea] connections 변경됨");
   dirtyFlags.value.connections = true;
   if (stage) {
     drawCanvasContent();
@@ -1266,7 +1608,6 @@ watch(() => props.connections, () => {
 }, { deep: true, flush: 'post' });
 
 watch(() => props.currentSettings, () => {
-  console.log("[CanvasArea] Settings changed");
   dirtyFlags.value.blocks = true;
   dirtyFlags.value.connections = true;
   if (stage) {
@@ -1276,13 +1617,11 @@ watch(() => props.currentSettings, () => {
 }, { deep: true, flush: 'post' });
 
 watch(() => props.activeEntityStates, () => {
-  console.log("[CanvasArea] activeEntityStates 변경됨:", props.activeEntityStates);
   
   // 엔티티가 모두 사라지면 전역 매핑 초기화 (리셋)
   if (props.activeEntityStates.length === 0) {
     globalEntityIdToNumber.clear();
     globalNextEntityNumber = 1;
-    console.log("[CanvasArea] 엔티티 매핑 초기화됨");
   }
   
   dirtyFlags.value.entities = true;
@@ -1291,20 +1630,54 @@ watch(() => props.activeEntityStates, () => {
   }
 }, { deep: true });
 
+// 레이어에서 선택된 커넥터 정리
+function cleanupSelectedConnectors() {
+  if (!layer) return;
+  
+  // 레이어의 자식 요소 중 커넥터와 관련 요소들 제거
+  const children = layer.children.slice(); // 복사본 생성
+  children.forEach(child => {
+    // 커넥터 원, 드래그 핸들, 라벨 등 모두 제거
+    if (child.attrs && (child.attrs.connectorId || child.attrs.isDragHandle)) {
+      child.destroy();
+    }
+    // Circle 타입이면서 파란색 점선인 경우도 제거 (드래그 핸들)
+    if (child.className === 'Circle' && child.attrs.stroke === '#4A90E2') {
+      child.destroy();
+    }
+  });
+  
+  layer.batchDraw();
+}
+
 // 선택 상태 변경 시 즉시 화면 업데이트 - 더 빠른 반응을 위해 sync 플러시 사용
-watch(() => [props.selectedBlockId, props.selectedConnectorInfo], () => {
-  console.log("[CanvasArea] Selection changed - blockId:", props.selectedBlockId, "connectorInfo:", props.selectedConnectorInfo);
+watch(() => [props.selectedBlockId, props.selectedConnectorInfo], ([newBlockId, newConnectorInfo], [oldBlockId, oldConnectorInfo]) => {
   if (stage) {
+    // 항상 이전 선택을 정리
+    cleanupSelectedConnectors();
+    
+    // 커넥터가 선택 해제되었으면 커서 리셋
+    if (oldConnectorInfo && !newConnectorInfo) {
+      document.body.style.cursor = 'default';
+    }
+    
     // 선택 상태만 변경되었으므로 블록 부분만 업데이트
     dirtyFlags.value.blocks = true;
-    updateBlocks();
-    layer.draw();
+    drawCanvasContent();
+    
+    // 커넥터가 선택된 경우 해당 블록 강제 업데이트
+    if (props.selectedConnectorInfo && props.selectedConnectorInfo.blockId) {
+      const blockId = String(props.selectedConnectorInfo.blockId);
+      const block = props.blocks.find(b => String(b.id) === blockId);
+      if (block) {
+        updateSingleBlock(block);
+      }
+    }
   }
-}, { deep: true, flush: 'sync' }); // sync로 변경하여 즉시 반응
+}, { deep: true, flush: 'sync' });
 
 // 캔버스 컨테이너 크기에 영향을 주는 요소들 감시
 watch(() => [props.showBlockSettingsPopup, props.showConnectorSettingsPopup], () => {
-  console.log("[CanvasArea] Settings sidebar visibility changed");
   // 설정창 표시 상태가 변경되면 약간의 지연 후 리사이즈
   setTimeout(() => {
     debouncedResize();
@@ -1318,36 +1691,16 @@ function getStage() {
 defineExpose({ getStage });
 
 onMounted(() => {
-  console.log("[CanvasArea] onMounted 시작");
-  console.log("[CanvasArea] 받은 props:", {
-    blocksCount: props.blocks.length,
-    connectionsCount: props.connections.length,
-    currentSettings: props.currentSettings
-  });
-  console.log("[CanvasArea] DOM 요소 상태:");
-  console.log("  - canvasContainerRef:", canvasContainerRef.value);
-  console.log("  - canvasContainerRef 부모:", canvasContainerRef.value?.parentElement);
-  console.log("  - canvasContainerRef 클래스:", canvasContainerRef.value?.className);
-  console.log("  - canvasContainerRef 크기:", {
-    offsetWidth: canvasContainerRef.value?.offsetWidth,
-    offsetHeight: canvasContainerRef.value?.offsetHeight,
-    clientWidth: canvasContainerRef.value?.clientWidth,
-    clientHeight: canvasContainerRef.value?.clientHeight,
-    scrollWidth: canvasContainerRef.value?.scrollWidth,
-    scrollHeight: canvasContainerRef.value?.scrollHeight
-  });
   
   // 초기화 재시도 로직
   let retryCount = 0;
   const maxRetries = 5;
   
   function tryInitialize() {
-    console.log(`[CanvasArea] 초기화 시도 ${retryCount + 1}/${maxRetries}`);
     
     const success = initKonva();
     
     if (success && stage) {
-      console.log("[CanvasArea] Stage 생성 성공, 레이어 추가");
       
       // 레이어 생성 및 추가
       layer = new Konva.Layer();
@@ -1358,7 +1711,6 @@ onMounted(() => {
       gridLayer.moveToBottom();
       drawGrid();
 
-      console.log("[CanvasArea] 레이어 추가 완료, 컨텐츠 그리기");
       drawCanvasContent();
       
       // 이벤트 리스너 추가
@@ -1374,14 +1726,11 @@ onMounted(() => {
       // wheel 이벤트 리스너 추가
       addWheelEventListener();
       
-      console.log("[CanvasArea] 캔버스 초기화 완전히 완료!");
     } else {
       retryCount++;
       if (retryCount < maxRetries) {
-        console.log(`[CanvasArea] 초기화 실패, ${500 * retryCount}ms 후 재시도...`);
         setTimeout(tryInitialize, 500 * retryCount);
       } else {
-        console.error("[CanvasArea] 최대 재시도 횟수 초과, 초기화 실패!");
       }
     }
   }
@@ -1394,19 +1743,16 @@ onMounted(() => {
     if (window.ResizeObserver && canvasContainerRef.value) {
       resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          console.log("[CanvasArea] ResizeObserver 감지:", entry.contentRect);
           debouncedResize();
         }
       });
       
       resizeObserver.observe(canvasContainerRef.value);
-      console.log("[CanvasArea] ResizeObserver 설정 완료");
     }
   }, 300);
   
   // window resize 이벤트 리스너 추가 (ResizeObserver 백업용)
   const handleResize = () => {
-    console.log("[CanvasArea] window resize 이벤트");
     debouncedResize();
   };
   

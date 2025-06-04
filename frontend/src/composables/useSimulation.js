@@ -33,8 +33,6 @@ export function useSimulation() {
    * 시뮬레이션 상태 초기화
    */
   function resetSimulationState() {
-    console.log('[useSimulation] 시뮬레이션 상태 초기화')
-    
     dispatchedProductsFromSim.value = 0
     processTimeFromSim.value = 0
     currentStepCount.value = 0
@@ -64,8 +62,6 @@ export function useSimulation() {
     if (stepHistory.value.length > maxHistorySize) {
       stepHistory.value.shift()
     }
-    
-    console.log(`[useSimulation] 스텝 ${currentStepCount.value} 상태 저장됨`)
   }
 
   /**
@@ -89,11 +85,9 @@ export function useSimulation() {
       processTimeFromSim.value = previousState.processTime
       activeEntityStates.value = JSON.parse(JSON.stringify(previousState.entityStates))
       
-      console.log(`[useSimulation] 스텝 ${currentStepCount.value}로 되돌아감`)
     } else {
       // 첫 번째 스텝으로 되돌아감
       resetSimulationState()
-      console.log('[useSimulation] 첫 번째 스텝으로 되돌아감')
     }
     
     isSimulationEnded.value = false
@@ -105,8 +99,6 @@ export function useSimulation() {
    */
   async function executeStep(setupData) {
     try {
-      console.log(`[useSimulation] 스텝 ${currentStepCount.value + 1} 실행 시작`)
-      
       // 현재 상태를 히스토리에 저장
       if (!isFirstStep.value) {
         saveCurrentStateToHistory()
@@ -123,7 +115,6 @@ export function useSimulation() {
       if (result && typeof result === 'object') {
         updateSimulationState(result)
         isFirstStep.value = false
-        console.log(`[useSimulation] 스텝 ${currentStepCount.value} 완료:`, result)
         return { success: true, result }
       } else {
         console.error('[useSimulation] 스텝 실행 실패: 잘못된 응답 형식')
@@ -140,8 +131,6 @@ export function useSimulation() {
    */
   async function executeBatchSteps(setupData, stepCount = 10) {
     try {
-      console.log(`[useSimulation] 배치 스텝 ${stepCount}개 실행 시작`)
-      
       // 현재 상태를 히스토리에 저장
       if (!isFirstStep.value) {
         saveCurrentStateToHistory()
@@ -155,11 +144,10 @@ export function useSimulation() {
         stepCount
       )
       
-      // 결과 처리 - 백엔드에서는 BatchStepResult 모델을 반환하므로 success 필드가 없음
+      // 결과 처리 - 백엔드에서는 BatchStepResult 모델을 반환하므로 success 편드가 없음
       if (result && typeof result === 'object') {
         updateSimulationState(result)
         isFirstStep.value = false
-        console.log(`[useSimulation] 배치 스텝 완료:`, result)
         return { success: true, result }
       } else {
         console.error('[useSimulation] 배치 스텝 실행 실패: 잘못된 응답 형식')
@@ -210,7 +198,6 @@ export function useSimulation() {
         (result.event_description.includes('시뮬레이션 완료') || 
          result.event_description.includes('더 이상 실행할 이벤트가 없습니다'))) {
       isSimulationEnded.value = true
-      console.log('[useSimulation] 시뮬레이션 종료됨')
     }
   }
 
@@ -220,8 +207,6 @@ export function useSimulation() {
   async function startStepBasedExecution(setupData, onStepComplete, options = {}) {
     isFullExecutionRunning.value = true
     shouldStopFullExecution.value = false
-    
-    console.log('[useSimulation] 스텝 기반 전체 실행 시작', options)
     
     try {
       let currentSetupData = setupData // 첫 번째 스텝에만 setupData 사용
@@ -247,7 +232,6 @@ export function useSimulation() {
         if (options.mode === 'quantity' && options.value) {
           const processedCount = dispatchedProductsFromSim.value - initialDispatchedProducts
           if (processedCount >= options.value) {
-            console.log(`[useSimulation] 목표 수량 달성: ${processedCount}/${options.value}개`)
             shouldStopFullExecution.value = true
             break
           }
@@ -267,14 +251,7 @@ export function useSimulation() {
       isFullExecutionRunning.value = false
       shouldStopFullExecution.value = false
       
-      if (isSimulationEnded.value) {
-        console.log('[useSimulation] 전체 실행 완료 - 시뮬레이션 종료')
-      } else if (options.mode === 'quantity') {
-        const processedCount = dispatchedProductsFromSim.value
-        console.log(`[useSimulation] 수량 기반 실행 완료 - 총 ${processedCount}개 처리`)
-      } else {
-        console.log('[useSimulation] 전체 실행 중단됨')
-      }
+      // 실행 완료
     }
   }
 
@@ -283,7 +260,6 @@ export function useSimulation() {
    * 전체 실행 중단
    */
   function stopFullExecution() {
-    console.log('[useSimulation] 전체 실행 중단 요청')
     shouldStopFullExecution.value = true
   }
 
@@ -292,8 +268,6 @@ export function useSimulation() {
    */
   async function resetSimulation() {
     try {
-      console.log('[useSimulation] 시뮬레이션 초기화 시작')
-      
       // 🚀 성능 모니터링과 함께 백엔드 초기화
       await performanceMonitor.measureApiCall(
         'resetSimulation',
@@ -303,7 +277,6 @@ export function useSimulation() {
       // 프론트엔드 상태 초기화
       resetSimulationState()
       
-      console.log('[useSimulation] 시뮬레이션 초기화 완료')
       return { success: true }
     } catch (error) {
       console.error('[useSimulation] 시뮬레이션 초기화 실패:', error)
