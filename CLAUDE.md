@@ -72,6 +72,8 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 - 200 line limit with rotation (keeps last 100 lines)
 - Contains server events, API calls, simulation debug logs
 - Reset on simulation reset via `/simulation/reset`
+- **Primary debugging tool** - Always check logs when issues occur
+- Log format: `YYYY-MM-DD HH:MM:SS - logger_name - LEVEL - message`
 
 ## Architecture Overview
 
@@ -195,6 +197,7 @@ if 공정2 load enable = true
 6. **Preserve existing functionality** - When adding new features, create separate modules to avoid breaking current code
 7. **Intuitive script commands** - Commands should be easy to understand for non-programmers
 8. **Add new functions, don't modify** - When adding script commands, create new functions instead of modifying existing ones
+9. **NO HARDCODED VALUES** - All timing, delays, and configuration must come from scripts or config files
 
 ## Recent Major Changes
 

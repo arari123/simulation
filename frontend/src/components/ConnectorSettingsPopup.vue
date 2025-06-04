@@ -12,6 +12,7 @@
     @close="$emit('close-popup')"
     @save="handleSave"
     @name-change="handleNameChange"
+    @delete-connector="handleDeleteConnector"
   >
     <template #extra-info>
       <div class="connector-move-info">
@@ -43,7 +44,8 @@ const props = defineProps({
 const emit = defineEmits([
   'close-popup',
   'save-connector-settings',
-  'change-connector-name'
+  'change-connector-name',
+  'delete-connector'
 ])
 
 // 현재 블록 찾기
@@ -78,6 +80,13 @@ function handleNameChange(newName) {
     props.connectorInfo.blockId, 
     props.connectorInfo.connectorId, 
     newName
+  )
+}
+
+function handleDeleteConnector() {
+  emit('delete-connector', 
+    props.connectorInfo.blockId, 
+    props.connectorInfo.connectorId
   )
 }
 </script>

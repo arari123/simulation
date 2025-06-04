@@ -160,9 +160,9 @@ class IndependentBlock:
                     print(f"DEBUG: Block {self.name} set signal {signal_name} = {bool_value}")
                 current_line += 1
             
-            # go to 명령은 무시 (이미 엔티티가 이동했으므로)
-            elif line.startswith('go to '):
-                print(f"DEBUG: Block {self.name} skipping go to command in remaining script")
+            # go to/go from 명령은 무시 (이미 엔티티가 이동했으므로)
+            elif line.startswith('go to ') or line.startswith('go from '):
+                print(f"DEBUG: Block {self.name} skipping go command in remaining script")
                 current_line += 1
             
             else:
@@ -215,14 +215,31 @@ class IndependentBlock:
         # 스크립트에서 이동 지연 시간 추출
         transit_delay = 0
         for line in self.script_lines:
-            if line.strip().startswith('go to '):
-                parts = line.strip().split(',')
+            stripped_line = line.strip()
+            
+            # go to 명령어 처리
+            if stripped_line.startswith('go to '):
+                parts = stripped_line.split(',')
                 if len(parts) > 1:
                     try:
                         transit_delay = int(parts[1].strip())
+                        break
                     except:
-                        transit_delay = 0
-                break
+                        pass
+            
+            # go from 명령어 처리 (새로운 형식)
+            elif stripped_line.startswith('go from '):
+                # go from R to 공정1.L,3 형태에서 딜레이 추출
+                if ' to ' in stripped_line and ',' in stripped_line:
+                    # "to" 이후 부분에서 딜레이 찾기
+                    to_part = stripped_line.split(' to ', 1)[1]
+                    if ',' in to_part:
+                        delay_part = to_part.split(',')[1].strip()
+                        try:
+                            transit_delay = int(delay_part)
+                            break
+                        except:
+                            pass
         
         # 정확한 생성 주기 계산: 이동 시간만 고려
         generation_cycle = transit_delay  # 이동 시간과 동일하게 설정

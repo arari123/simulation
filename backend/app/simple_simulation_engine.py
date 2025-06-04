@@ -71,16 +71,38 @@ class SimpleSimulationEngine:
         block_id = str(block_config['id'])
         block_name = block_config['name']
         
-        # 스크립트 추출
+        # 스크립트 추출 - actions의 script 타입을 우선 사용
         script_lines = []
-        if 'script' in block_config:
-            logger.info(f"Block {block_name} has script field: {block_config['script'][:50]}...")
-            script_lines = block_config['script'].split('\n')
-            logger.info(f"Block {block_name} parsed {len(script_lines)} script lines")
-        elif 'actions' in block_config:
-            # 기존 actions에서 스크립트 생성
-            logger.info(f"Block {block_name} converting actions to script")
+        
+        # 1. actions에서 script 타입 액션 찾기 (최우선)
+        if 'actions' in block_config:
+            for action in block_config['actions']:
+                # Pydantic 모델인 경우 딕셔너리로 변환
+                if hasattr(action, 'model_dump'):
+                    action_dict = action.model_dump()
+                elif hasattr(action, 'dict'):
+                    action_dict = action.dict()
+                else:
+                    action_dict = action
+                
+                if isinstance(action_dict, dict) and action_dict.get('type') == 'script':
+                    script = action_dict.get('parameters', {}).get('script', '')
+                    if script:
+                        logger.info(f"Block {block_name} using script from actions: {script[:50]}...")
+                        script_lines = script.split('\n')
+                        logger.info(f"Block {block_name} parsed {len(script_lines)} script lines from actions")
+                        break
+        
+        # 2. script 타입 액션이 없으면 다른 actions 변환
+        if not script_lines and 'actions' in block_config:
+            logger.info(f"Block {block_name} converting non-script actions to script")
             script_lines = self._convert_actions_to_script(block_config['actions'])
+        
+        # 3. actions가 없거나 비어있으면 script 필드 사용 (하위 호환성)
+        if not script_lines and 'script' in block_config:
+            logger.info(f"Block {block_name} using legacy script field: {block_config['script'][:50]}...")
+            script_lines = block_config['script'].split('\n')
+            logger.info(f"Block {block_name} parsed {len(script_lines)} script lines from legacy field")
         
         # 커넥터에서 스크립트 추출 (ex4.json 형식 지원)
         if not script_lines and 'connectionPoints' in block_config:
@@ -160,13 +182,8 @@ class SimpleSimulationEngine:
                             script_lines.append(line.strip())
             
             elif action_type == 'script':
-                # script 타입 액션 처리
-                script = params.get('script', '')
-                if script:
-                    # 스크립트를 라인별로 추가
-                    for line in script.split('\n'):
-                        if line.strip():
-                            script_lines.append(line.strip())
+                # script 타입 액션은 _create_block에서 별도 처리하므로 여기서는 건너뛰기
+                continue
         
         return script_lines
     

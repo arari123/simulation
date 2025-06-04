@@ -145,8 +145,19 @@
 
     <!-- 푸터 액션 -->
     <div class="settings-footer">
-      <button @click="handleSave" class="save-btn">저장</button>
-      <button @click="$emit('close')" class="cancel-btn">닫기</button>
+      <div class="footer-left">
+        <button 
+          v-if="entityType === 'connector'" 
+          @click="handleDeleteConnector" 
+          class="delete-connector-btn"
+        >
+          🗑️ 커넥터 삭제
+        </button>
+      </div>
+      <div class="footer-right">
+        <button @click="handleSave" class="save-btn">저장</button>
+        <button @click="$emit('close')" class="cancel-btn">닫기</button>
+      </div>
     </div>
   </div>
 </template>
@@ -175,7 +186,7 @@ const props = defineProps({
 })
 
 // Emits 정의
-const emit = defineEmits(['close', 'save', 'nameChange', 'maxCapacityChange', 'connectorAdd'])
+const emit = defineEmits(['close', 'save', 'nameChange', 'maxCapacityChange', 'connectorAdd', 'deleteConnector'])
 
 // 상태 관리
 const localName = ref(props.initialName)
@@ -405,6 +416,14 @@ function addConnector() {
   }
   
   emit('connectorAdd', newConnector)
+}
+
+function handleDeleteConnector() {
+  const confirmMessage = `"${localName.value}" 커넥터를 정말 삭제하시겠습니까?\n\n삭제하면 다음 항목들이 함께 제거됩니다:\n- 이 커넥터의 모든 액션\n- 이 커넥터와 연결된 모든 연결선\n\n이 작업은 되돌릴 수 없습니다.`
+  
+  if (confirm(confirmMessage)) {
+    emit('deleteConnector')
+  }
 }
 
 
@@ -733,9 +752,19 @@ watch(() => props.initialMaxCapacity, (newCapacity) => {
   background: #f8f9fa;
   border-top: 1px solid #e9ecef;
   display: flex;
-  justify-content: flex-end;
-  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
   margin-top: auto;
+}
+
+.footer-left {
+  display: flex;
+  gap: 10px;
+}
+
+.footer-right {
+  display: flex;
+  gap: 10px;
 }
 
 .save-btn {
@@ -754,5 +783,20 @@ watch(() => props.initialMaxCapacity, (newCapacity) => {
   border: none;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.delete-connector-btn {
+  padding: 8px 16px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.delete-connector-btn:hover {
+  background: #c82333;
 }
 </style> 

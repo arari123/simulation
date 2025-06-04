@@ -93,6 +93,62 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
         }
       }
     }
+    else if (lowerLine.startsWith('go from ')) {
+      // 새로운 "go from 커넥터명 to 블록명.커넥터명" 형식
+      const goFromPattern = /^go\s+from\s+([^\s]+)\s+to\s+(.+)$/i
+      const match = line.match(goFromPattern)
+      
+      if (!match) {
+        errors.push(`라인 ${lineNum}: 잘못된 go from 형식 (예: go from R to 블록명.L)`)
+      } else {
+        const fromConnector = match[1].trim()
+        const toTarget = match[2].trim()
+        
+        // 출발 커넥터 유효성 검사
+        if (currentBlock && currentBlock.connectionPoints) {
+          const foundConnector = currentBlock.connectionPoints.find(cp => cp.name === fromConnector)
+          if (!foundConnector) {
+            const availableConnectors = currentBlock.connectionPoints.map(cp => cp.name).filter(name => name).join(', ')
+            errors.push(`라인 ${lineNum}: 현재 블록에 "${fromConnector}" 커넥터가 없습니다 (사용 가능: ${availableConnectors || '없음'})`)
+          }
+        }
+        
+        // 도착 대상 파싱 및 검사
+        let targetPath = toTarget
+        let delay = null
+        
+        if (toTarget.includes(',')) {
+          const parts = toTarget.split(',')
+          targetPath = parts[0].trim()
+          delay = parts[1].trim()
+          
+          // 딜레이 형식 검사
+          if (delay && !/^(\d+(\.\d+)?|\d+-\d+)$/.test(delay)) {
+            errors.push(`라인 ${lineNum}: 잘못된 딜레이 형식 "${delay}" (예: 3, 2-5)`)
+          }
+        }
+        
+        // 도착 대상 검사
+        if (targetPath.includes('.')) {
+          const [blockName, connectorName] = targetPath.split('.')
+          const targetBlock = allBlocks.find(b => b.name.toLowerCase() === blockName.trim().toLowerCase())
+          
+          if (!targetBlock) {
+            errors.push(`라인 ${lineNum}: 존재하지 않는 블록: ${blockName}`)
+          } else {
+            const targetConnector = targetBlock.connectionPoints?.find(cp => 
+              cp.name.toLowerCase() === connectorName.trim().toLowerCase()
+            )
+            
+            if (!targetConnector) {
+              errors.push(`라인 ${lineNum}: 블록 "${blockName}"에 "${connectorName}" 커넥터가 없습니다`)
+            }
+          }
+        } else {
+          errors.push(`라인 ${lineNum}: go from 명령의 도착지는 "블록명.커넥터명" 형식이어야 합니다`)
+        }
+      }
+    }
     else if (lowerLine.startsWith('go to ')) {
       const target = line.replace(/go to /i, '').trim()
       if (!target) {
@@ -285,6 +341,134 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
           parameters: { 
             signal_name: signalName, 
             expected_value: value.toLowerCase() === 'true'
+          }
+        })
+      }
+    }
+    else if (lowerLine.startsWith('go from ')) {
+      // 새로운 "go from 커넥터명 to 블록명.커넥터명" 형식 파싱
+      const goFromPattern = /^go\s+from\s+([^\s]+)\s+to\s+(.+)$/i
+      const match = line.match(goFromPattern)
+      
+      if (!match) {
+        actions.push({
+          id: `script-action-${actionCounter++}`,
+          name: `❌ 오류: ${line}`,
+          type: 'script_error',
+          parameters: { 
+            originalLine: line,
+            lineNumber: lineNumber,
+            error: `잘못된 go from 형식`
+          }
+        })
+        continue
+      }
+      
+      const fromConnector = match[1].trim()
+      const toTarget = match[2].trim()
+      
+      // 출발 커넥터 유효성 검사
+      let fromConnectorId = null
+      if (currentBlock && currentBlock.connectionPoints) {
+        const foundConnector = currentBlock.connectionPoints.find(cp => cp.name === fromConnector)
+        if (foundConnector) {
+          fromConnectorId = foundConnector.id
+        } else {
+          actions.push({
+            id: `script-action-${actionCounter++}`,
+            name: `❌ 오류: ${line}`,
+            type: 'script_error',
+            parameters: { 
+              originalLine: line,
+              lineNumber: lineNumber,
+              error: `존재하지 않는 출발 커넥터: ${fromConnector}`
+            }
+          })
+          continue
+        }
+      }
+      
+      // 도착 대상 파싱
+      let targetPath = toTarget
+      let delay = '0'
+      
+      if (toTarget.includes(',')) {
+        const parts = toTarget.split(',')
+        targetPath = parts[0].trim()
+        const delayPart = parts[1].trim()
+        
+        if (/^(\d+(\.\d+)?|\d+-\d+)$/.test(delayPart)) {
+          delay = delayPart
+        } else {
+          actions.push({
+            id: `script-action-${actionCounter++}`,
+            name: `❌ 오류: ${line}`,
+            type: 'script_error',
+            parameters: { 
+              originalLine: line,
+              lineNumber: lineNumber,
+              error: `잘못된 딜레이 형식: ${delayPart}`
+            }
+          })
+          continue
+        }
+      }
+      
+      // 도착 대상 처리 (반드시 "블록명.커넥터명" 형식)
+      if (targetPath.includes('.')) {
+        const [blockName, connectorName] = targetPath.split('.')
+        const targetBlock = allBlocks.find(b => b.name.toLowerCase() === blockName.trim().toLowerCase())
+        
+        if (!targetBlock) {
+          actions.push({
+            id: `script-action-${actionCounter++}`,
+            name: `❌ 오류: ${line}`,
+            type: 'script_error',
+            parameters: { 
+              originalLine: line,
+              lineNumber: lineNumber,
+              error: `존재하지 않는 블록: ${blockName}`
+            }
+          })
+          continue
+        }
+        
+        const targetConnector = targetBlock.connectionPoints?.find(cp => 
+          cp.name.toLowerCase() === connectorName.trim().toLowerCase()
+        )
+        
+        if (!targetConnector) {
+          actions.push({
+            id: `script-action-${actionCounter++}`,
+            name: `❌ 오류: ${line}`,
+            type: 'script_error',
+            parameters: { 
+              originalLine: line,
+              lineNumber: lineNumber,
+              error: `블록 "${blockName}"에 "${connectorName}" 커넥터가 없습니다`
+            }
+          })
+          continue
+        }
+        
+        // go from 명령은 항상 conditional_branch로 처리 (스크립트 형태로 백엔드에 전달)
+        actions.push({
+          id: `script-action-${actionCounter++}`,
+          name: `${fromConnector}에서 ${blockName}.${connectorName}로 이동`,
+          type: 'conditional_branch',
+          parameters: { 
+            script: line  // 전체 go from 명령을 스크립트로 저장
+          }
+        })
+      } else {
+        actions.push({
+          id: `script-action-${actionCounter++}`,
+          name: `❌ 오류: ${line}`,
+          type: 'script_error',
+          parameters: { 
+            originalLine: line,
+            lineNumber: lineNumber,
+            error: `go from 명령의 도착지는 "블록명.커넥터명" 형식이어야 합니다`
           }
         })
       }

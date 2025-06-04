@@ -28,11 +28,15 @@
         <div class="help-section">
           <h4>이동 명령어</h4>
           <ul>
+            <li><strong>새로운 형식 (권장)</strong></li>
+            <li><code>go from R to 블록명.L</code> - R 커넥터에서 다른 블록의 L 커넥터로 이동</li>
+            <li><code>go from L to 블록명.R,3</code> - L 커넥터에서 3초 딜레이와 함께 이동</li>
+            <li><code>go from 3 to 공정2.L,2-5</code> - 커넥터 '3'에서 2~5초 랜덤 딜레이와 함께 이동</li>
+            <li><strong>기존 형식 (하위 호환)</strong></li>
             <li><code>go to self.R</code> - 현재 블록의 R 커넥터로 이동</li>
-            <li><code>go to self.L</code> - 현재 블록의 L 커넥터로 이동</li>
-            <li><code>go to 블록명.커넥터명</code> - 다른 블록의 커넥터로 이동</li>
+            <li><code>go to 블록명.커넥터명</code> - 다른 블록의 커넥터로 이동 (블록 중앙에서 시작)</li>
             <li><code>go to 블록명.커넥터명,3</code> - 3초 딜레이와 함께 이동</li>
-            <li><code>go to 블록명.커넥터명,2-5</code> - 2~5초 랜덤 딜레이와 함께 이동</li>
+            <li><strong>기타</strong></li>
             <li><code>jump to 액션번호</code> - 지정된 액션으로 점프</li>
             <li><code>jump to 레이블명</code> - 지정된 레이블로 점프</li>
           </ul>

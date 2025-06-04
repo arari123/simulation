@@ -192,38 +192,111 @@ export function useBlocks() {
     
     if (!script) return connections
     
-    // "go to 블록명.커넥터명" 패턴 찾기
-    const goToRegex = /go\s+to\s+([^.\s]+)\.([^,\s]+)/gi
+    console.log(`[extractConnectionsFromScript] 소스 블록 ${sourceBlockId}에서 스크립트 분석:`, script.substring(0, 100))
+    
+    // 현재 블록 찾기 (출발 커넥터 찾기 위해)
+    const sourceBlock = blocks.value.find(b => String(b.id) === String(sourceBlockId))
+    
+    // "go from 커넥터명 to 블록명.커넥터명" 패턴 찾기 (새로운 형식)
+    const goFromToRegex = /go\s+from\s+([^\s]+)\s+to\s+([^.\s]+)\.([^,\s]+)/gi
     let match
     
-    while ((match = goToRegex.exec(script)) !== null) {
-      const targetBlockName = match[1].trim()
-      const targetConnectorName = match[2].trim()
+    while ((match = goFromToRegex.exec(script)) !== null) {
+      const fromConnectorName = match[1].trim()
+      const targetBlockName = match[2].trim()
+      const targetConnectorName = match[3].trim()
       
-      // 자기 자신에 대한 참조가 아닌 경우만
+      console.log(`[extractConnectionsFromScript] go from ${fromConnectorName} to ${targetBlockName}.${targetConnectorName} 명령 발견`)
+      
+      // 출발 커넥터 찾기
+      let fromConnectorId = null
+      if (sourceBlock && sourceBlock.connectionPoints) {
+        const fromConnector = sourceBlock.connectionPoints.find(cp => cp.name === fromConnectorName)
+        fromConnectorId = fromConnector?.id
+        
+        if (!fromConnector) {
+          console.log(`[extractConnectionsFromScript] 출발 커넥터 '${fromConnectorName}' 찾을 수 없음`)
+          continue
+        }
+      }
+      
+      // 대상 블록과 커넥터 찾기
       if (targetBlockName !== 'self') {
         const targetBlock = blocks.value.find(b => b.name === targetBlockName)
         if (targetBlock) {
+          console.log(`[extractConnectionsFromScript] 대상 블록 찾음: ${targetBlock.name} (ID: ${targetBlock.id})`)
+          
           // 대상 커넥터 찾기
           let targetConnectorId = null
           if (targetBlock.connectionPoints) {
             const targetConnector = targetBlock.connectionPoints.find(cp => cp.name === targetConnectorName)
             targetConnectorId = targetConnector?.id
+            
+            if (targetConnector) {
+              console.log(`[extractConnectionsFromScript] 대상 커넥터 찾음: ${targetConnector.name} (ID: ${targetConnector.id})`)
+            } else {
+              console.log(`[extractConnectionsFromScript] 커넥터 '${targetConnectorName}' 찾을 수 없음`)
+              continue
+            }
           }
           
-          if (targetConnectorId) {
-            connections.push({
+          if (fromConnectorId && targetConnectorId) {
+            const newConnection = {
               from_block_id: String(sourceBlockId),
-              from_connector_id: "block-action", // 스크립트에서 시작
+              from_connector_id: fromConnectorId, // 실제 출발 커넥터 ID 사용
               to_block_id: String(targetBlock.id),
               to_connector_id: targetConnectorId,
-              from_conditional_script: true // 조건부 스크립트에서 생성된 연결 표시
-            })
+              from_conditional_script: true
+            }
+            console.log(`[extractConnectionsFromScript] 연결 생성:`, newConnection)
+            connections.push(newConnection)
+          }
+        } else {
+          console.log(`[extractConnectionsFromScript] 블록 '${targetBlockName}' 찾을 수 없음`)
+        }
+      }
+    }
+    
+    // 기존 "go to 블록명.커넥터명" 패턴도 계속 지원 (하위 호환성)
+    const goToRegex = /go\s+to\s+([^.\s]+)\.([^,\s]+)/gi
+    goToRegex.lastIndex = 0 // 정규식 재설정
+    
+    while ((match = goToRegex.exec(script)) !== null) {
+      // go from이 아닌 경우만 처리
+      const fullMatch = match[0]
+      if (!fullMatch.includes('from')) {
+        const targetBlockName = match[1].trim()
+        const targetConnectorName = match[2].trim()
+        
+        console.log(`[extractConnectionsFromScript] go to 명령 발견 (기존 형식): ${targetBlockName}.${targetConnectorName}`)
+        
+        // 자기 자신에 대한 참조가 아닌 경우만
+        if (targetBlockName !== 'self') {
+          const targetBlock = blocks.value.find(b => b.name === targetBlockName)
+          if (targetBlock) {
+            let targetConnectorId = null
+            if (targetBlock.connectionPoints) {
+              const targetConnector = targetBlock.connectionPoints.find(cp => cp.name === targetConnectorName)
+              targetConnectorId = targetConnector?.id
+            }
+            
+            if (targetConnectorId) {
+              const newConnection = {
+                from_block_id: String(sourceBlockId),
+                from_connector_id: "block-action", // 기존 형식은 블록 중앙에서 시작
+                to_block_id: String(targetBlock.id),
+                to_connector_id: targetConnectorId,
+                from_conditional_script: true
+              }
+              console.log(`[extractConnectionsFromScript] 연결 생성 (기존 형식):`, newConnection)
+              connections.push(newConnection)
+            }
           }
         }
       }
     }
     
+    console.log(`[extractConnectionsFromScript] 총 ${connections.length}개 연결 추출 완료`)
     return connections
   }
   
@@ -231,6 +304,11 @@ export function useBlocks() {
    * 자동 연결 생성
    */
   function createAutoConnections(blockId, actions) {
+    // 이 블록에서 시작하는 자동 생성 연결들을 모두 제거
+    connections.value = connections.value.filter(conn => 
+      !(String(conn.from_block_id) === String(blockId) && conn.auto_generated)
+    )
+    
     const newConnections = extractConnectionsFromActions(actions, blockId)
     
     newConnections.forEach(newConn => {
@@ -268,8 +346,15 @@ export function useBlocks() {
         updateBlockReferences(blocks.value, oldName, blockName)
       }
       
-      // 액션에서 자동 연결 생성
-      createAutoConnections(blockId, newActions)
+      // 스크립트 타입 액션이 있으면 전체 연결 새로고침
+      const hasScriptAction = newActions.some(action => action.type === 'script')
+      if (hasScriptAction) {
+        console.log('[saveBlockSettings] 스크립트 액션 감지 - 전체 연결 새로고침')
+        refreshAllAutoConnections()
+      } else {
+        // 일반 액션은 기존처럼 처리
+        createAutoConnections(blockId, newActions)
+      }
     }
   }
 
@@ -421,6 +506,7 @@ export function useBlocks() {
    * 커넥터 추가
    */
   function handleAddConnector(blockId, connectorData) {
+    console.log('[handleAddConnector] 호출됨:', { blockId, connectorData })
     const block = blocks.value.find(b => String(b.id) === String(blockId))
     if (!block) return
 
@@ -430,10 +516,12 @@ export function useBlocks() {
       return
     }
 
-    addCustomConnectorToBlock(block, connectorData)
+    const newConnector = addCustomConnectorToBlock(block, connectorData)
+    console.log('[handleAddConnector] 커넥터 추가 완료:', newConnector)
     
-    // 새 커넥터 추가 후 모든 연결선 새로고침
-    refreshAllAutoConnections()
+    // 새 커넥터 추가 시 연결선 새로고침하지 않음
+    // (커넥터를 추가했다고 해서 자동으로 연결이 생성되지는 않음)
+    // refreshAllAutoConnections()
   }
 
 
@@ -480,31 +568,76 @@ export function useBlocks() {
   }
 
   /**
+   * 커넥터 삭제
+   */
+  function handleDeleteConnector(blockId, connectorId) {
+    const block = blocks.value.find(b => String(b.id) === String(blockId))
+    if (!block || !block.connectionPoints) return
+
+    const connectorIndex = block.connectionPoints.findIndex(cp => String(cp.id) === String(connectorId))
+    if (connectorIndex === -1) return
+
+    const connector = block.connectionPoints[connectorIndex]
+    
+    console.log(`[handleDeleteConnector] 커넥터 삭제: ${block.name}.${connector.name}`)
+    
+    // 1. 이 커넥터와 관련된 모든 연결선 제거
+    const removedConnections = connections.value.filter(conn => 
+      (String(conn.from_block_id) === String(blockId) && String(conn.from_connector_id) === String(connectorId)) ||
+      (String(conn.to_block_id) === String(blockId) && String(conn.to_connector_id) === String(connectorId))
+    )
+    
+    connections.value = connections.value.filter(conn => 
+      !(String(conn.from_block_id) === String(blockId) && String(conn.from_connector_id) === String(connectorId)) &&
+      !(String(conn.to_block_id) === String(blockId) && String(conn.to_connector_id) === String(connectorId))
+    )
+    
+    console.log(`[handleDeleteConnector] ${removedConnections.length}개 연결선 제거`)
+    
+    // 2. 커넥터를 블록에서 제거
+    block.connectionPoints.splice(connectorIndex, 1)
+    
+    // 3. 설정창 닫기
+    if (selectedConnectorInfo.value && 
+        String(selectedConnectorInfo.value.blockId) === String(blockId) && 
+        String(selectedConnectorInfo.value.connectorId) === String(connectorId)) {
+      showConnectorSettingsPopup.value = false
+      selectedConnectorInfo.value = null
+    }
+    
+    // 4. 자동 연결 새로고침 (스크립트에서 참조하는 커넥터가 삭제된 경우 대응)
+    refreshAllAutoConnections()
+    
+    console.log(`[handleDeleteConnector] 커넥터 삭제 완료`)
+  }
+
+  /**
    * 모든 블록 액션에서 자동 연결 생성
    */
   function refreshAllAutoConnections() {
-    // 자동 생성된 연결들 제거 (수동 생성된 연결은 유지)
-    const manualConnections = connections.value.filter(conn => !conn.auto_generated)
+    console.log('[refreshAllAutoConnections] 시작')
+    console.log('[refreshAllAutoConnections] 현재 연결 수:', connections.value.length)
+    
+    // 강제로 모든 연결을 제거하고 처음부터 다시 생성 (중복 문제 해결)
+    connections.value = []
+    console.log('[refreshAllAutoConnections] 모든 연결 제거 후:', connections.value.length)
+    
+    // 새로운 자동 연결을 위한 배열
+    const newAutoConnections = []
     
     // 모든 블록의 액션 분석
     blocks.value.forEach(block => {
       // 블록 레벨 액션에서 연결 추출
       if (block.actions && block.actions.length > 0) {
         const blockConnections = extractConnectionsFromActions(block.actions, block.id)
+        console.log(`[refreshAllAutoConnections] ${block.name} 블록에서 ${blockConnections.length}개 연결 추출`)
         blockConnections.forEach(conn => {
           conn.auto_generated = true // 자동 생성 표시
-          
-          // 중복 확인
-          const duplicate = manualConnections.find(existing => 
-            String(existing.from_block_id) === String(conn.from_block_id) &&
-            String(existing.from_connector_id) === String(conn.from_connector_id) &&
-            String(existing.to_block_id) === String(conn.to_block_id) &&
-            String(existing.to_connector_id) === String(conn.to_connector_id)
-          )
-          
-          if (!duplicate) {
-            manualConnections.push(conn)
-          }
+          console.log('[refreshAllAutoConnections] 블록 연결:', {
+            from: `${conn.from_block_id}(${conn.from_connector_id})`,
+            to: `${conn.to_block_id}(${conn.to_connector_id})`
+          })
+          newAutoConnections.push(conn)
         })
       }
       
@@ -516,25 +649,38 @@ export function useBlocks() {
             connectorConnections.forEach(conn => {
               conn.from_connector_id = connector.id // 실제 커넥터 ID 사용
               conn.auto_generated = true // 자동 생성 표시
-              
-              // 중복 확인
-              const duplicate = manualConnections.find(existing => 
-                String(existing.from_block_id) === String(conn.from_block_id) &&
-                String(existing.from_connector_id) === String(conn.from_connector_id) &&
-                String(existing.to_block_id) === String(conn.to_block_id) &&
-                String(existing.to_connector_id) === String(conn.to_connector_id)
-              )
-              
-              if (!duplicate) {
-                manualConnections.push(conn)
-              }
+              newAutoConnections.push(conn)
             })
           }
         })
       }
     })
     
-    connections.value = manualConnections
+    // 중복 제거
+    const uniqueConnections = []
+    newAutoConnections.forEach(newConn => {
+      const isDuplicate = uniqueConnections.some(existing => 
+        String(existing.from_block_id) === String(newConn.from_block_id) &&
+        String(existing.from_connector_id) === String(newConn.from_connector_id) &&
+        String(existing.to_block_id) === String(newConn.to_block_id) &&
+        String(existing.to_connector_id) === String(newConn.to_connector_id)
+      )
+      
+      if (!isDuplicate) {
+        uniqueConnections.push(newConn)
+      } else {
+        console.log('[refreshAllAutoConnections] 중복 연결 무시:', {
+          from: `${newConn.from_block_id}(${newConn.from_connector_id})`,
+          to: `${newConn.to_block_id}(${newConn.to_connector_id})`
+        })
+      }
+    })
+    
+    // 최종 연결 목록 = 고유한 자동 연결만
+    connections.value = uniqueConnections
+    
+    console.log('[refreshAllAutoConnections] 최종 연결 개수:', connections.value.length)
+    console.log('[refreshAllAutoConnections] 모든 연결이 자동 생성으로 처리됨')
   }
 
   /**
@@ -584,7 +730,11 @@ export function useBlocks() {
     }
 
     if (baseConfig.connections) {
-      connections.value = baseConfig.connections
+      // 모든 초기 연결을 자동 생성된 것으로 표시
+      connections.value = baseConfig.connections.map(conn => ({
+        ...conn,
+        auto_generated: true
+      }))
     }
   }
 
@@ -635,6 +785,7 @@ export function useBlocks() {
     handleAddConnector,
     handleChangeBlockName,
     handleChangeConnectorName,
+    handleDeleteConnector,
     refreshAllAutoConnections,
     setupInitialBlocks,
     updateBlocksForSettings

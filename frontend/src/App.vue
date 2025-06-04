@@ -92,6 +92,7 @@
             @close-popup="closeConnectorSettingsPopup"
             @save-connector-settings="saveConnectorSettings"
             @change-connector-name="handleChangeConnectorName"
+            @delete-connector="handleDeleteConnector"
           />
         </template>
       </div>
@@ -200,6 +201,7 @@ const {
   handleAddConnector,
   handleChangeBlockName,
   handleChangeConnectorName,
+  handleDeleteConnector,
   setupInitialBlocks,
   updateBlocksForSettings,
   refreshAllAutoConnections
@@ -242,6 +244,12 @@ async function setupInitialScenario() {
     
     // 신호 설정 적용
     setupInitialSignals(baseConfig)
+    
+    // 초기 로드 후 자동 연결 새로고침 (모든 연결을 자동 생성으로 다시 생성)
+    setTimeout(() => {
+      console.log('[App] 초기 로드 완료 - 자동 연결 새로고침')
+      refreshAllAutoConnections()
+    }, 100)
   } catch (error) {
     console.error("[App] Failed to setup initial scenario:", error)
     alert(`초기 설정 로드 실패: ${error.message}`)

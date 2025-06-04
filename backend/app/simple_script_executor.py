@@ -159,7 +159,23 @@ class SimpleScriptExecutor:
             condition = line[5:].strip()
             return 'wait', condition
         
-        # go to 명령
+        # go from 명령 (새로운 형식)
+        if line.startswith('go from '):
+            # go from R to 공정1.L,3 형태 파싱
+            go_from_pattern = r'^go\s+from\s+([^\s]+)\s+to\s+(.+)$'
+            import re
+            match = re.match(go_from_pattern, line, re.IGNORECASE)
+            if match:
+                from_connector = match.group(1).strip()
+                to_target = match.group(2).strip()
+                # go from은 go to와 동일하게 처리 (출발 커넥터 정보는 프론트엔드에서 연결선 생성용)
+                return 'go_to', to_target
+            else:
+                # 파싱 실패 시 기본 처리
+                target = line[8:].strip()  # "go from " 제거
+                return 'go_to', target
+        
+        # go to 명령 (기존 형식)
         if line.startswith('go to '):
             target = line[6:].strip()
             return 'go_to', target
