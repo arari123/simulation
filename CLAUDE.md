@@ -221,3 +221,16 @@ if 공정2 load enable = true
   - Backend rounds all time values to 1 decimal place
   - Wait command check interval reduced from 0.1s to 0.01s
   - Source block generation timing aligned with transit delays
+
+### 2025-06-04: Connector Drag Feature Implementation ✅
+- **Complete Connector Position Movement**: Fully functional drag-and-drop for connectors
+  - Manual drag system to prevent premature drag end issues
+  - Free movement within block boundaries with magnetic snap to edges
+  - Temporary position storage for smooth prop updates
+  - Synchronized movement of connector, drag handle (blue dotted circle), and labels
+  - Event listener cleanup to prevent duplicate executions
+- **Technical Implementation**: 
+  - Used Konva.js manual mouse event handling instead of built-in drag
+  - Temporary position mapping (`temporaryConnectorPositions`) for seamless UI updates
+  - Constraint and snap algorithm for automatic edge alignment
+  - Real-time connection line updates during drag operations
