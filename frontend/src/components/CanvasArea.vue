@@ -1549,7 +1549,7 @@ function addWheelEventListener() {
       stage.position(newPos);
       stage.batchDraw();
       drawGrid();
-    });
+    }, { passive: false });
     
   }
 }
