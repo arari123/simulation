@@ -136,6 +136,25 @@ export function addConnectorToBlock(block, position, customName = null, settings
   return newConnector;
 }
 
+// 블록에 사용자 정의 커넥터 추가 (새로운 함수)
+export function addCustomConnectorToBlock(block, connectorData) {
+  if (!block.connectionPoints) {
+    block.connectionPoints = [];
+  }
+  
+  // 커넥터 데이터 검증 및 기본값 설정
+  const newConnector = {
+    id: connectorData.id || `connector-${Date.now()}`,
+    name: connectorData.name || `연결점${block.connectionPoints.length + 1}`,
+    x: connectorData.x || 50,
+    y: connectorData.y || 50,
+    actions: connectorData.actions || []
+  };
+  
+  block.connectionPoints.push(newConnector);
+  return newConnector;
+}
+
 // 블록 찾기 (ID 또는 이름으로)
 export function findBlockById(blocks, id) {
   return blocks.find(block => String(block.id) === String(id));

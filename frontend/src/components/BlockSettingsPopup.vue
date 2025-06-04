@@ -6,6 +6,7 @@
     :initial-name="blockData.name"
     :initial-actions="blockData.actions || []"
     :initial-max-capacity="blockData.maxCapacity || 1"
+    :initial-connectors="blockData.connectionPoints || []"
     :all-signals="allSignals"
     :all-blocks="allBlocks"
     :current-block="blockData"
@@ -14,6 +15,7 @@
     @save="handleSave"
     @name-change="handleNameChange"
     @max-capacity-change="handleMaxCapacityChange"
+    @connector-add="handleConnectorAdd"
   />
 </template>
 
@@ -56,5 +58,10 @@ function handleNameChange(newName) {
 
 function handleMaxCapacityChange(newCapacity) {
   emit('save-block-settings', props.blockData.id, props.blockData.actions || [], newCapacity, props.blockData.name)
+}
+
+// 커넥터 관련 이벤트 핸들러
+function handleConnectorAdd(newConnector) {
+  emit('add-connector', props.blockData.id, newConnector)
 }
 </script>

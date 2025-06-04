@@ -70,6 +70,7 @@
             📝 스크립트 편집기
           </button>
           <button @click="openActionEditor" class="add-action-btn">+ 액션 추가</button>
+          <button v-if="entityType === 'block'" @click="addConnector" class="add-connector-btn">+ 연결점 추가</button>
         </div>
       </div>
 
@@ -103,6 +104,7 @@
         </div>
       </div>
     </div>
+
 
     <!-- 스크립트 미리보기 섹션 -->
     <div class="settings-section">
@@ -163,6 +165,7 @@ const props = defineProps({
   initialName: { type: String, required: true },
   initialActions: { type: Array, default: () => [] },
   initialMaxCapacity: { type: Number, default: 1 },
+  initialConnectors: { type: Array, default: () => [] }, // 커넥터 목록
   allSignals: { type: Array, default: () => [] },
   allBlocks: { type: Array, default: () => [] },
   currentBlock: { type: Object, default: null },
@@ -172,7 +175,7 @@ const props = defineProps({
 })
 
 // Emits 정의
-const emit = defineEmits(['close', 'save', 'nameChange', 'maxCapacityChange'])
+const emit = defineEmits(['close', 'save', 'nameChange', 'maxCapacityChange', 'connectorAdd'])
 
 // 상태 관리
 const localName = ref(props.initialName)
@@ -378,6 +381,32 @@ function handleScriptApply(parsedActions, scriptText) {
   
   closeScriptEditor()
 }
+
+// 커넥터 관리 함수들
+function addConnector() {
+  const connectorName = prompt('연결점 이름을 입력하세요:', `연결점${(props.initialConnectors?.length || 0) + 1}`)
+  
+  if (!connectorName || !connectorName.trim()) {
+    return // 취소하거나 빈 이름인 경우
+  }
+  
+  // 중복 이름 체크
+  const isDuplicate = props.initialConnectors?.some(conn => conn.name === connectorName.trim())
+  if (isDuplicate) {
+    alert('같은 이름의 연결점이 이미 있습니다.')
+    return
+  }
+  
+  const newConnector = {
+    id: `connector-${Date.now()}`,
+    name: connectorName.trim(),
+    x: 50, // 기본 위치
+    y: 50
+  }
+  
+  emit('connectorAdd', newConnector)
+}
+
 
 // 초기화
 onMounted(() => {
@@ -641,6 +670,22 @@ watch(() => props.initialMaxCapacity, (newCapacity) => {
   color: #6c757d;
   padding: 40px 20px;
   font-style: italic;
+}
+
+/* 연결점 추가 버튼 스타일 */
+.add-connector-btn {
+  background: #17a2b8;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.add-connector-btn:hover {
+  background: #138496;
 }
 
 .script-preview {

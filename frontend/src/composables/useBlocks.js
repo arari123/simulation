@@ -7,6 +7,7 @@ import { ref, computed } from 'vue'
 import {
   createNewBlock,
   addConnectorToBlock,
+  addCustomConnectorToBlock,
   validateBlockName,
   validateConnectorName,
   updateBlockReferences,
@@ -423,8 +424,9 @@ export function useBlocks() {
       return
     }
 
-    addConnectorToBlock(block, connectorData)
+    addCustomConnectorToBlock(block, connectorData)
   }
+
 
   /**
    * 블록 이름 변경
