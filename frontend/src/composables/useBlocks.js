@@ -493,7 +493,18 @@ export function useBlocks() {
         const blockConnections = extractConnectionsFromActions(block.actions, block.id)
         blockConnections.forEach(conn => {
           conn.auto_generated = true // 자동 생성 표시
-          manualConnections.push(conn)
+          
+          // 중복 확인
+          const duplicate = manualConnections.find(existing => 
+            String(existing.from_block_id) === String(conn.from_block_id) &&
+            String(existing.from_connector_id) === String(conn.from_connector_id) &&
+            String(existing.to_block_id) === String(conn.to_block_id) &&
+            String(existing.to_connector_id) === String(conn.to_connector_id)
+          )
+          
+          if (!duplicate) {
+            manualConnections.push(conn)
+          }
         })
       }
       
