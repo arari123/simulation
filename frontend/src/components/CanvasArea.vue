@@ -27,6 +27,10 @@ const props = defineProps({
     type: Object,
     default: () => ({ boxSize: 100, fontSize: 14 })
   },
+  blocksWithErrors: {
+    type: Map,
+    default: () => new Map()
+  },
   activeEntityStates: {
     type: Array,
     default: () => []
@@ -414,6 +418,39 @@ function addBlockContent(blockGroup, blockData) {
     blockGroup.add(warningBg);
     // 경고 텍스트를 배경 위에 올리기
     warningText.moveToTop();
+  }
+
+  // 스크립트 오류 표시
+  const blockError = props.blocksWithErrors.get(blockData.id);
+  if (blockError) {
+    // 오류가 있는 블록의 테두리를 빨간색으로 변경
+    rect.stroke('red');
+    rect.strokeWidth(3);
+    
+    // 오류 아이콘 표시
+    const errorIcon = new Konva.Text({
+      text: '❌',
+      fontSize: props.currentSettings.fontSize * 0.8,
+      fill: 'red',
+      x: (blockData.width || props.currentSettings.boxSize) - 20,
+      y: 5,
+      fontStyle: 'bold'
+    });
+    blockGroup.add(errorIcon);
+    
+    // 오류 개수 표시
+    const errorCountText = new Konva.Text({
+      text: `${blockError.errorCount}개 오류`,
+      fontSize: props.currentSettings.fontSize * 0.4,
+      fill: 'red',
+      x: (blockData.width || props.currentSettings.boxSize) - 40,
+      y: 25,
+      fontStyle: 'bold'
+    });
+    blockGroup.add(errorCountText);
+    
+    // 오류 툴팁 (마우스 오버 시 표시용 데이터 추가)
+    blockGroup.errorDetails = blockError.errors;
   }
 
   // 커넥터 추가
@@ -981,6 +1018,65 @@ function addBlockEventListeners(blockGroup, blockData) {
     
     if (!isDragging) {
       emit('select-block', blockData.id);
+    }
+  });
+
+  // 마우스 오버 시 오류 정보 표시
+  let errorTooltip = null;
+  
+  blockGroup.on('mouseenter', () => {
+    if (blockGroup.errorDetails && blockGroup.errorDetails.length > 0) {
+      // 기존 툴팁이 있다면 제거
+      if (errorTooltip) {
+        errorTooltip.destroy();
+      }
+      
+      // 오류 툴팁 생성
+      const tooltip = new Konva.Label({
+        x: 10,
+        y: -50,
+        opacity: 0.95
+      });
+      
+      tooltip.add(new Konva.Tag({
+        fill: '#fff',
+        stroke: '#ff0000',
+        strokeWidth: 1,
+        shadowColor: 'black',
+        shadowBlur: 6,
+        shadowOffset: { x: 3, y: 3 },
+        shadowOpacity: 0.3,
+        cornerRadius: 5,
+        pointerDirection: 'down',
+        pointerWidth: 10,
+        pointerHeight: 10
+      }));
+      
+      const errorText = `스크립트 오류 (${blockGroup.errorDetails.length}개):\n` + 
+                       blockGroup.errorDetails.slice(0, 3).join('\n') +
+                       (blockGroup.errorDetails.length > 3 ? '\n...' : '');
+      
+      tooltip.add(new Konva.Text({
+        text: errorText,
+        fontFamily: 'Arial',
+        fontSize: 11,
+        padding: 8,
+        fill: '#333',
+        width: 250,
+        wrap: 'word'
+      }));
+      
+      blockGroup.add(tooltip);
+      errorTooltip = tooltip;
+      layer.draw();
+    }
+  });
+  
+  blockGroup.on('mouseleave', () => {
+    if (errorTooltip) {
+      errorTooltip.destroy();
+      errorTooltip = null;
+      layer.draw();
     }
   });
 }

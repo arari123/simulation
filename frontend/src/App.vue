@@ -34,6 +34,7 @@
           :active-entity-states="activeEntityStates"
           :showBlockSettingsPopup="showBlockSettingsPopup"
           :showConnectorSettingsPopup="showConnectorSettingsPopup"
+          :blocks-with-errors="blocksWithErrors"
           ref="canvasAreaRef"
           @select-block="handleBlockClicked"
           @select-connector="handleConnectorClicked"
@@ -185,6 +186,7 @@ const {
   allProcessBlocks,
   selectedBlockData,
   currentConnectorData,
+  blocksWithErrors,
   
   // 메서드
   addNewBlockToCanvas,

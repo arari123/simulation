@@ -1,23 +1,40 @@
+// 주석을 제거하는 헬퍼 함수
+function removeComment(line) {
+  const commentIndex = line.indexOf('//')
+  if (commentIndex !== -1) {
+    return line.substring(0, commentIndex).trim()
+  }
+  return line.trim()
+}
+
 // 스크립트 검증 함수
 export function validateScript(script, allSignals, allBlocks, currentBlock, entityType) {
   const errors = []
   const lines = script.split('\n')
   
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim()
+    const originalLine = lines[i].trim()
     const lineNum = i + 1
-    const lowerLine = line.toLowerCase()
     
     // 빈 줄이나 주석은 건너뛰기
-    if (!line || line.startsWith('//')) {
+    if (!originalLine || originalLine.startsWith('//')) {
+      continue
+    }
+    
+    // 주석 제거 후 검증
+    const line = removeComment(originalLine)
+    const lowerLine = line.toLowerCase()
+    
+    // 주석 제거 후 빈 줄이면 건너뛰기
+    if (!line) {
       continue
     }
     
     if (lowerLine.startsWith('delay ')) {
       const delayPart = line.replace(/delay /i, '').trim()
-      // 숫자, 숫자-숫자, 또는 변수명 형태 허용
-      if (!/^(\d+(\.\d+)?|\d+-\d+|[a-zA-Z_][a-zA-Z0-9_]*)$/.test(delayPart)) {
-        errors.push(`라인 ${lineNum}: 잘못된 딜레이 형식 "${delayPart}" (예: 5, 3-10)`)
+      // 숫자 또는 숫자 범위만 허용 (변수명 제외)
+      if (!/^(\d+(\.\d+)?|\d+-\d+)$/.test(delayPart)) {
+        errors.push(`라인 ${lineNum}: 잘못된 딜레이 형식 "${delayPart}" (예: 5, 3.5, 3-10)`)
       }
     }
     else if (lowerLine.startsWith('jump to ')) {

@@ -18,6 +18,7 @@ import {
   generateBlockId,
   generateConnectorId
 } from '../utils/BlockManager.js'
+import { validateScript } from '../utils/ScriptUtils.js'
 
 export function useBlocks() {
   // 블록 및 연결 상태
@@ -731,6 +732,78 @@ export function useBlocks() {
     }))
   }
 
+  /**
+   * 블록의 스크립트 오류 검사
+   */
+  function getBlockScriptErrors(block) {
+    const errors = []
+    
+    // 모든 신호명 수집 (현재는 빈 배열, 추후 확장 가능)
+    const allSignals = []
+    
+    // 블록 액션의 스크립트 검사
+    if (block.actions && block.actions.length > 0) {
+      for (const action of block.actions) {
+        if (action.type === 'script' && action.parameters?.script) {
+          const validationResult = validateScript(
+            action.parameters.script,
+            allSignals,
+            blocks.value,
+            block,
+            'block'
+          )
+          if (!validationResult.valid) {
+            errors.push(...validationResult.errors.map(err => `블록 스크립트: ${err}`))
+          }
+        }
+      }
+    }
+    
+    // 커넥터 액션의 스크립트 검사
+    if (block.connectionPoints && block.connectionPoints.length > 0) {
+      for (const connector of block.connectionPoints) {
+        if (connector.actions && connector.actions.length > 0) {
+          for (const action of connector.actions) {
+            if (action.type === 'script' && action.parameters?.script) {
+              const validationResult = validateScript(
+                action.parameters.script,
+                allSignals,
+                blocks.value,
+                block,
+                'connector'
+              )
+              if (!validationResult.valid) {
+                errors.push(...validationResult.errors.map(err => `커넥터 "${connector.name}": ${err}`))
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    return errors
+  }
+
+  /**
+   * 모든 블록의 스크립트 오류 상태 계산
+   */
+  const blocksWithErrors = computed(() => {
+    const errorMap = new Map()
+    
+    for (const block of blocks.value) {
+      const errors = getBlockScriptErrors(block)
+      if (errors.length > 0) {
+        errorMap.set(block.id, {
+          block,
+          errors,
+          errorCount: errors.length
+        })
+      }
+    }
+    
+    return errorMap
+  })
+
   return {
     // 상태
     blocks,
@@ -744,6 +817,7 @@ export function useBlocks() {
     allProcessBlocks,
     selectedBlockData,
     currentConnectorData,
+    blocksWithErrors,
     
     // 메서드
     addNewBlockToCanvas,
@@ -763,6 +837,7 @@ export function useBlocks() {
     handleDeleteConnector,
     refreshAllAutoConnections,
     setupInitialBlocks,
-    updateBlocksForSettings
+    updateBlocksForSettings,
+    getBlockScriptErrors
   }
 } 

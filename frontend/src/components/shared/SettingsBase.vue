@@ -165,7 +165,13 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import ActionEditor from './ActionEditor.vue'
-import ScriptEditor from './ScriptEditor.vue'
+// 스크립트 편집기 버전 선택
+const USE_NEW_SCRIPT_EDITOR = true // 환경 변수나 설정으로 변경 가능
+
+import ScriptEditorLegacy from './ScriptEditorLegacy.vue'
+import ScriptEditorV2 from '../script/ScriptEditorV2.vue'
+
+const ScriptEditor = USE_NEW_SCRIPT_EDITOR ? ScriptEditorV2 : ScriptEditorLegacy
 import { convertActionToScript } from '../../utils/BlockManager.js'
 
 // Props 정의

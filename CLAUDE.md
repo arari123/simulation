@@ -207,6 +207,14 @@ if 공정2 load enable = true
 - **Move Connectors**: Drag blue dotted circle when connector is selected
 - **Automatic Cleanup**: Deleting connector removes all related connections and script references
 
+### Script Editor v2 (CodeMirror 6)
+- **Advanced Features**: Syntax highlighting, real-time error checking, undo/redo
+- **Error Visualization**: Red underlines on specific problematic words/phrases
+- **Language Support**: Custom simulation script language definition
+- **Error Detection**: Blocks with script errors show red borders and ❌ icons
+- **Tooltips**: Mouse-over error details with precise error messages
+- **Performance**: Debounced validation (300ms) for smooth editing experience
+
 ## Common Issues & Solutions
 
 ### Entity Numbers Changing
@@ -278,6 +286,25 @@ if 공정2 load enable = true
 - `test_if_wait_conditions.json` - 종합 조건 테스트용 (테스트 필요)
 
 ## Recent Major Changes
+
+### 2025-06-06: Advanced Script Editor v2 & Error Visualization ✅
+- **Complete Script Editor Replacement**: Revolutionary CodeMirror 6-based editor
+  - Professional-grade editing experience with syntax highlighting
+  - Real-time grammar checking with precise error positioning
+  - Support for Undo/Redo (Ctrl+Z, Ctrl+Y), Tab indentation, line numbers
+  - Custom language definition for simulation scripts
+  - Advanced error display with red underlines on specific words/phrases
+- **Visual Error Detection System**: Instant script error identification
+  - Blocks with script errors display red borders and ❌ icons
+  - Error count display (`3개 오류`) on problematic blocks
+  - Mouse-over tooltips showing detailed error information
+  - Automatic validation on JSON file load
+  - Covers both block actions and connector actions
+- **Enhanced Script Validation**: Improved accuracy and user experience
+  - Comment-aware validation (ignores `// comments`)
+  - Precise error positioning on exact problematic tokens
+  - Support for all script commands including AND/OR conditions
+  - Stricter delay validation (numbers only, no variable names)
 
 ### 2025-06-06: 용량 초과 경고 시스템 및 스크립트 검증 개선
 - **용량 초과 경고 시스템**: 블록 용량 초과로 엔티티 이동 실패 시 경고 메시지 표시
