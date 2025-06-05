@@ -335,7 +335,8 @@ class SimpleSimulationEngine:
                     'custom_attributes': list(getattr(e, 'custom_attributes', set()))
                 } for e in block.entities_in_block],
                 'entities_count': status['entities_count'],
-                'total_processed': status['total_processed']
+                'total_processed': status['total_processed'],
+                'warnings': status.get('warnings', [])  # 경고 메시지 포함
             }
             total_entities += status['entities_count']
             total_processed += status['total_processed']

@@ -33,6 +33,9 @@ class IndependentBlock:
         # 블록 간 연결 정보
         self.output_connections: Dict[str, str] = {}  # connector_name -> target_block_id
         
+        # 경고 시스템
+        self.warnings: List[Dict[str, Any]] = []  # 용량 관련 경고 메시지
+        
     def set_as_source(self, generation_interval: float = 1.0):
         """소스 블록으로 설정"""
         self.is_source = True
@@ -46,6 +49,22 @@ class IndependentBlock:
     def add_output_connection(self, connector_name: str, target_block_id: str):
         """출력 연결 추가"""
         self.output_connections[connector_name] = target_block_id
+    
+    def add_capacity_warning(self, env, target_block_name: str, entity_id: str):
+        """용량 초과로 인한 이동 실패 경고 추가"""
+        warning = {
+            'type': 'capacity_full',
+            'message': f"'{target_block_name}' 블록 용량 초과로 엔티티 {entity_id} 이동 실패",
+            'timestamp': round(env.now, 1),
+            'target_block': target_block_name
+        }
+        self.warnings.append(warning)
+        logger.warning(f"[{self.name}] {warning['message']}")
+    
+    def clear_old_warnings(self, env, max_age: float = 5.0):
+        """오래된 경고 메시지 제거 (5초 후)"""
+        current_time = env.now
+        self.warnings = [w for w in self.warnings if current_time - w['timestamp'] <= max_age]
     
     def can_accept_entity(self) -> bool:
         """엔티티를 받을 수 있는지 확인"""
@@ -84,7 +103,7 @@ class IndependentBlock:
                 continue
             
             # 스크립트 라인 실행
-            result = yield from self.script_executor.execute_script_line(env, line, entity)
+            result = yield from self.script_executor.execute_script_line(env, line, entity, self.name)
             
             # 결과 처리
             if result == 'movement':
@@ -116,7 +135,7 @@ class IndependentBlock:
                             current_line += 1
                             continue
                         
-                        sub_result = yield from self.script_executor.execute_script_line(env, stripped_line, entity)
+                        sub_result = yield from self.script_executor.execute_script_line(env, stripped_line, entity, self.name)
                         
                         if sub_result == 'movement':
                             # if 블록 내에서 이동이 발생하면 즉시 리턴
@@ -219,6 +238,9 @@ class IndependentBlock:
         """블록별 독립 프로세스"""
         while True:
             try:
+                # 오래된 경고 정리
+                self.clear_old_warnings(env)
+                
                 # 소스 블록의 경우 엔티티 생성
                 if self.is_source:
                     yield from self._source_process(env, entity_queue, engine_ref)
@@ -272,44 +294,19 @@ class IndependentBlock:
             if env.now < self.next_generation_time:
                 yield env.timeout(self.next_generation_time - env.now)
             
-            # 블록에 엔티티가 없을 때만 새로 생성
+            # 소스 블록 자체가 가득 찼으면 엔티티 생성하지 않음
+            if not self.can_accept_entity():
+                logger.debug(f"Source block {self.name} is full, skipping entity generation")
+                yield env.timeout(1.0)  # 1초 대기로 변경하여 로그 빈도 줄임
+                continue
+            
+            # 블록에 엔티티가 없을 때만 새로 생성 (기존 로직 유지)
             if len(self.entities_in_block) == 0:
-                # 대상 블록 용량 체크를 위해 먼저 목표 블록 찾기
-                target_block_name = None
-                for line in self.script_lines:
-                    if 'go to' in line:
-                        parts = line.split('go to', 1)[1].strip()
-                        if ',' in parts:
-                            parts = parts.split(',')[0]
-                        if '.' in parts:
-                            target_block_name = parts.split('.')[0].strip()
-                        else:
-                            target_block_name = parts.strip()
-                        break
-                    elif 'go from' in line and ' to ' in line:
-                        # go from R to 공정1.L,3 형태 처리
-                        parts = line.split(' to ', 1)[1].strip()
-                        if ',' in parts:
-                            parts = parts.split(',')[0]
-                        if '.' in parts:
-                            target_block_name = parts.split('.')[0].strip()
-                        else:
-                            target_block_name = parts.strip()
-                        break
-                
-                # 대상 블록이 가득 찬 경우 대기
-                if target_block_name:
-                    target_block_id = engine_ref.get_block_id_by_name(target_block_name)
-                    if target_block_id and target_block_id in engine_ref.blocks:
-                        target_block = engine_ref.blocks[target_block_id]
-                        if not target_block.can_accept_entity():
-                            yield env.timeout(0.1)
-                            continue
-                
                 entity = SimpleEntity()
                 entity.created_at = round(env.now, 1)
                 
                 if self.add_entity(entity):
+                    logger.debug(f"Source block {self.name} created entity {entity.id}")
                     
                     # 다음 생성 시간 설정 (현재 시간 + 생성 주기)
                     self.next_generation_time = round(env.now + generation_cycle, 1)
@@ -331,14 +328,21 @@ class IndependentBlock:
                                 target_block_id = resolved_id
                         
                         if target_block_id and target_block_id in engine_ref.blocks:
-                            self.remove_entity(entity)
-                            yield from engine_ref.move_entity_to_block(env, entity, target_block_id)
-                            
-                            # 소스 블록은 남은 스크립트를 실행하지 않음
-                            # (각 엔티티마다 전체 스크립트를 새로 실행해야 함)
+                            target_block = engine_ref.blocks[target_block_id]
+                            # 대상 블록이 가득 차 있어도 이동 시도
+                            if target_block.can_accept_entity():
+                                self.remove_entity(entity)
+                                yield from engine_ref.move_entity_to_block(env, entity, target_block_id)
+                            else:
+                                # 이동할 수 없으면 소스 블록에 남겨둠, 경고 추가
+                                self.add_capacity_warning(env, target_block.name, entity.id)
+                                logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in source block {self.name}")
                         else:
-                            # 이동할 수 없으면 엔티티 제거
+                            # 대상 블록을 찾을 수 없으면 엔티티 제거
+                            logger.warning(f"Target block not found, removing entity {entity.id}")
                             self.remove_entity(entity)
+                else:
+                    logger.warning(f"Failed to add entity to source block {self.name}")
             
             # 다음 생성까지 대기
             yield env.timeout(0.01)  # 매우 짧은 간격으로 확인
@@ -368,8 +372,15 @@ class IndependentBlock:
                     target_block_id = resolved_id
                     
             if target_block_id and target_block_id in engine_ref.blocks:
-                self.remove_entity(entity)
-                yield from engine_ref.move_entity_to_block(env, entity, target_block_id)
+                target_block = engine_ref.blocks[target_block_id]
+                # 대상 블록이 엔티티를 받을 수 있는지 확인
+                if target_block.can_accept_entity():
+                    self.remove_entity(entity)
+                    yield from engine_ref.move_entity_to_block(env, entity, target_block_id)
+                else:
+                    # 용량 초과로 이동 실패, 경고 추가
+                    self.add_capacity_warning(env, target_block.name, entity.id)
+                    logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
                 
                 # 이동 후 남은 스크립트는 실행하지 않음
                 # (엔티티가 이미 다른 블록으로 이동했으므로)
@@ -394,5 +405,6 @@ class IndependentBlock:
             'total_processed': self.total_processed,
             'is_source': self.is_source,
             'is_sink': self.is_sink,
-            'capacity': f"{len(self.entities_in_block)}/{self.max_capacity}"
+            'capacity': f"{len(self.entities_in_block)}/{self.max_capacity}",
+            'warnings': self.warnings  # 경고 메시지 포함
         }

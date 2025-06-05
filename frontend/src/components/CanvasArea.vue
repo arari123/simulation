@@ -385,6 +385,37 @@ function addBlockContent(blockGroup, blockData) {
   });
   blockGroup.add(capacityText);
 
+  // 경고 메시지 표시 (용량 초과 등)
+  if (blockData.warnings && blockData.warnings.length > 0) {
+    const latestWarning = blockData.warnings[blockData.warnings.length - 1]; // 가장 최근 경고
+    const warningText = new Konva.Text({
+      text: `⚠️ 용량 초과`,
+      fontSize: props.currentSettings.fontSize * 0.5,
+      fill: 'red',
+      align: 'center',
+      width: blockData.width || props.currentSettings.boxSize,
+      x: 0,
+      y: (props.currentSettings.fontSize * 1.8 + 10),
+      fontStyle: 'bold'
+    });
+    blockGroup.add(warningText);
+    
+    // 경고 배경 (선택적)
+    const warningBg = new Konva.Rect({
+      width: (blockData.width || props.currentSettings.boxSize) - 4,
+      height: props.currentSettings.fontSize * 0.7,
+      x: 2,
+      y: (props.currentSettings.fontSize * 1.8 + 8),
+      fill: 'rgba(255, 0, 0, 0.1)',
+      stroke: 'red',
+      strokeWidth: 1,
+      cornerRadius: 3
+    });
+    blockGroup.add(warningBg);
+    // 경고 텍스트를 배경 위에 올리기
+    warningText.moveToTop();
+  }
+
   // 커넥터 추가
   if (blockData.connectionPoints) {
     blockData.connectionPoints.forEach(cp => {

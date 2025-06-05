@@ -47,9 +47,36 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
     else if (lowerLine.startsWith('wait ')) {
       const waitPart = line.replace(/wait /i, '').trim()
       
-      // Check if it contains 'or' operator for complex conditions
-      if (waitPart.toLowerCase().includes(' or ')) {
-        // Complex wait condition with OR - validate each part
+      // product type 조건은 유효함
+      if (waitPart.includes('product type =')) {
+        // product type 조건은 항상 유효함
+      }
+      // AND 조건 처리
+      else if (waitPart.toLowerCase().includes(' and ')) {
+        const conditions = waitPart.split(/\s+and\s+/i)
+        for (const condition of conditions) {
+          if (!condition.includes(' = ')) {
+            errors.push(`라인 ${lineNum}: 잘못된 대기 조건 형식 "${condition}" (예: 신호명 = true)`)
+          } else {
+            const parts = condition.trim().split(' = ')
+            if (parts.length === 2) {
+              const signalName = parts[0].trim()
+              const value = parts[1].trim().toLowerCase()
+              
+              // 신호 이름 유효성 검사
+              if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
+                errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
+              }
+              
+              if (value !== 'true' && value !== 'false') {
+                errors.push(`라인 ${lineNum}: 신호 값은 true 또는 false여야 합니다`)
+              }
+            }
+          }
+        }
+      }
+      // OR 조건 처리
+      else if (waitPart.toLowerCase().includes(' or ')) {
         const conditions = waitPart.split(/\s+or\s+/i)
         for (const condition of conditions) {
           if (!condition.includes(' = ')) {
@@ -231,7 +258,39 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
     else if (lowerLine.startsWith('if ')) {
       // 조건부 실행의 신호 이름도 검사
       const condition = line.replace(/if /i, '').trim()
-      if (condition.includes(' = ')) {
+      
+      // product type 조건은 유효함
+      if (condition.includes('product type =')) {
+        // product type 조건은 항상 유효함
+      }
+      // AND 조건 처리
+      else if (condition.includes(' and ') && condition.includes(' = ')) {
+        const conditions = condition.split(' and ')
+        for (const cond of conditions) {
+          const condParts = cond.trim().split(' = ')
+          if (condParts.length === 2) {
+            const signalName = condParts[0].trim()
+            if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
+              errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
+            }
+          }
+        }
+      }
+      // OR 조건 처리
+      else if (condition.includes(' or ') && condition.includes(' = ')) {
+        const conditions = condition.split(' or ')
+        for (const cond of conditions) {
+          const condParts = cond.trim().split(' = ')
+          if (condParts.length === 2) {
+            const signalName = condParts[0].trim()
+            if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
+              errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
+            }
+          }
+        }
+      }
+      // 단일 조건
+      else if (condition.includes(' = ')) {
         const parts = condition.split(' = ')
         if (parts.length === 2) {
           const signalName = parts[0].trim()
@@ -240,6 +299,16 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
           }
         }
       }
+    }
+    else if (lowerLine.startsWith('log ')) {
+      const logMessage = line.replace(/log /i, '').trim()
+      if (!logMessage) {
+        errors.push(`라인 ${lineNum}: 로그 메시지가 지정되지 않았습니다`)
+      }
+      // 따옴표 검사는 선택사항이므로 에러로 처리하지 않음
+    }
+    else if (line.includes('product type +=') || line.includes('product type -=')) {
+      // product type 명령은 항상 유효함
     }
     else {
       errors.push(`라인 ${lineNum}: 인식되지 않는 명령어 "${line}"`)
@@ -261,15 +330,17 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
   // Check if the entire script is a multi-line conditional script
   // This happens when editing an existing conditional_branch action
   const firstLine = lines[0]?.trim().toLowerCase() || ''
-  const hasComplexWait = firstLine.startsWith('wait ') && firstLine.includes(' or ')
+  const hasComplexWait = firstLine.startsWith('wait ') && (firstLine.includes(' or ') || firstLine.includes(' and '))
   const hasIfStatement = lines.some(line => line.trim().toLowerCase().startsWith('if '))
+  const hasProductType = lines.some(line => line.includes('product type +=') || line.includes('product type -='))
+  const hasLog = lines.some(line => line.trim().toLowerCase().startsWith('log '))
   
-  // If script contains complex wait or if statements, treat entire script as conditional branch
-  if (hasComplexWait || hasIfStatement) {
+  // If script contains complex wait, if statements, product type, or log commands, treat entire script as script type
+  if (hasComplexWait || hasIfStatement || hasProductType || hasLog) {
     actions.push({
       id: `script-action-${actionCounter++}`,
-      name: '조건부 실행',
-      type: 'conditional_branch',
+      name: '스크립트 실행',
+      type: 'script',
       parameters: { 
         script: script  // Keep the entire script as-is
       }
@@ -320,13 +391,13 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
     else if (lowerLine.startsWith('wait ')) {
       const waitPart = line.replace(/wait /i, '').trim()
       
-      // Check if it contains 'or' operator for complex conditions
-      if (waitPart.toLowerCase().includes(' or ')) {
-        // Complex wait with OR - treat as conditional branch
+      // product type 조건이나 복잡한 조건은 script type으로 처리
+      if (waitPart.includes('product type =') || waitPart.toLowerCase().includes(' or ') || waitPart.toLowerCase().includes(' and ')) {
+        // Complex wait - treat as script
         actions.push({
           id: `script-action-${actionCounter++}`,
           name: `복합 대기 조건`,
-          type: 'conditional_branch',
+          type: 'script',
           parameters: { 
             script: line  // Store the entire wait line as script
           }
@@ -667,12 +738,38 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
       // If we reach here, it means there's a parsing error
       actions.push({
         id: `script-action-${actionCounter++}`,
-        name: `❌ 오류: ${line}`,
-        type: 'script_error',
+        name: `조건부 실행`,
+        type: 'script',
         parameters: { 
-          originalLine: line,
-          lineNumber: lineNumber,
-          error: `조건문은 스크립트 전체를 조건부 실행으로 처리해야 합니다`
+          script: line
+        }
+      })
+    }
+    else if (lowerLine.startsWith('log ')) {
+      const logMessage = line.replace(/log /i, '').trim()
+      // 따옴표 제거
+      const cleanMessage = logMessage.replace(/^"|"$/g, '')
+      
+      actions.push({
+        id: `script-action-${actionCounter++}`,
+        name: `로그: ${cleanMessage}`,
+        type: 'script',
+        parameters: { 
+          script: line
+        }
+      })
+    }
+    else if (line.includes('product type +=') || line.includes('product type -=')) {
+      const isAdd = line.includes('product type +=')
+      const operation = isAdd ? '추가' : '제거'
+      const params = line.split(isAdd ? 'product type +=' : 'product type -=')[1].trim()
+      
+      actions.push({
+        id: `script-action-${actionCounter++}`,
+        name: `제품 타입 ${operation}: ${params}`,
+        type: 'script',
+        parameters: { 
+          script: line
         }
       })
     }

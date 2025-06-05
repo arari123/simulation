@@ -288,7 +288,7 @@ function handleAddProcessBlock(name) {
 async function handleStepSimulation() {
   // 첫 번째 스텝인 경우에만 설정 데이터 전송, 이후에는 null
   const setupData = isFirstStep.value ? getSimulationSetupData() : null
-  const result = await executeStep(setupData)
+  const result = await executeStep(setupData, updateBlockWarnings)
   
   if (!result.success) {
     alert(`시뮬레이션 실행 실패: ${result.error}`)
@@ -300,6 +300,23 @@ async function handleStepSimulation() {
   }
 }
 
+// 블록 경고 상태 업데이트
+function updateBlockWarnings(blockStates) {
+  if (!blockStates) return
+  
+  // 각 블록의 경고 정보를 업데이트
+  blocks.value.forEach(block => {
+    const blockState = blockStates[block.id]
+    if (blockState && blockState.warnings) {
+      // 기존 블록 데이터에 경고 정보 추가
+      block.warnings = blockState.warnings
+    } else {
+      // 경고가 없으면 기존 경고 제거
+      block.warnings = []
+    }
+  })
+}
+
 async function handleStepBasedRun(options) {
   // 첫 번째 스텝인 경우에만 설정 데이터 전송, 이후에는 null
   const setupData = isFirstStep.value ? getSimulationSetupData() : null
@@ -309,7 +326,7 @@ async function handleStepBasedRun(options) {
     if (result.current_signals) {
       updateSignalsFromSimulation(result.current_signals)
     }
-  }, options)
+  }, options, updateBlockWarnings)
 }
 
 

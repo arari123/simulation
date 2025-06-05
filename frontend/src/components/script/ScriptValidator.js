@@ -10,19 +10,27 @@ export function validateScript(script, props) {
   const errors = []
   const lines = script.split('\n')
   
+  console.log('[ScriptValidator] validateScript 시작:', { script, props })
+  
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
     const lineNum = i + 1
     const lowerLine = line.toLowerCase() // 대소문자 구분 없는 검사를 위해 추가
     
+    console.log(`[ScriptValidator] 라인 ${lineNum} 검증:`, { line, lowerLine })
+    
     // 빈 줄이나 주석은 건너뛰기
     if (!line || line.startsWith('//')) {
+      console.log(`[ScriptValidator] 라인 ${lineNum} 건너뛰기 (빈 줄 또는 주석)`)
       continue
     }
     
     const lineErrors = validateScriptLine(line, lowerLine, lineNum, props)
+    console.log(`[ScriptValidator] 라인 ${lineNum} 검증 결과:`, lineErrors)
     errors.push(...lineErrors)
   }
+  
+  console.log('[ScriptValidator] validateScript 완료:', { valid: errors.length === 0, errors })
   
   return {
     valid: errors.length === 0,
@@ -48,7 +56,7 @@ function validateScriptLine(line, lowerLine, lineNum, props) {
       errors.push(`라인 ${lineNum}: jump to 대상이 지정되지 않았습니다`)
     }
   }
-  else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ')) {
+  else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !line.trim().toLowerCase().startsWith('log ')) {
     const signalErrors = validateSignalAssignment(line, lineNum, props)
     errors.push(...signalErrors)
   }
@@ -56,13 +64,20 @@ function validateScriptLine(line, lowerLine, lineNum, props) {
     const waitErrors = validateWaitStatement(line, lineNum, props)
     errors.push(...waitErrors)
   }
-  else if (lowerLine.startsWith('go to ')) {
+  else if (lowerLine.startsWith('go to ') || lowerLine.startsWith('go from ')) {
     const gotoErrors = validateGotoStatement(line, lineNum, props)
     errors.push(...gotoErrors)
   }
   else if (lowerLine.startsWith('if ')) {
     const ifErrors = validateIfStatement(line, lineNum, props)
     errors.push(...ifErrors)
+  }
+  else if (line.trim().toLowerCase().startsWith('log ')) {
+    const logErrors = validateLogStatement(line, lineNum)
+    errors.push(...logErrors)
+  }
+  else if (line.includes('product type +=') || line.includes('product type -=')) {
+    // product type 명령은 유효함 - 에러 없음
   }
   else {
     errors.push(`라인 ${lineNum}: 인식되지 않는 명령어 "${line}"`)
@@ -104,10 +119,49 @@ function validateWaitStatement(line, lineNum, props) {
   const errors = []
   const waitPart = line.replace(/wait /i, '').trim()
   
-  if (!waitPart.includes(' = ')) {
+  // product type 조건 체크
+  if (waitPart.includes('product type =')) {
+    // product type 조건은 항상 유효함
+    return errors
+  }
+  
+  // AND 조건 체크
+  if (waitPart.includes(' and ')) {
+    const conditions = waitPart.split(' and ')
+    for (const condition of conditions) {
+      const condErrors = validateSingleWaitCondition(condition.trim(), lineNum, props)
+      errors.push(...condErrors)
+    }
+    return errors
+  }
+  
+  // OR 조건 체크
+  if (waitPart.includes(' or ')) {
+    const conditions = waitPart.split(' or ')
+    for (const condition of conditions) {
+      const condErrors = validateSingleWaitCondition(condition.trim(), lineNum, props)
+      errors.push(...condErrors)
+    }
+    return errors
+  }
+  
+  // 단일 조건 체크
+  const condErrors = validateSingleWaitCondition(waitPart, lineNum, props)
+  errors.push(...condErrors)
+  
+  return errors
+}
+
+/**
+ * 단일 wait 조건 검증
+ */
+function validateSingleWaitCondition(condition, lineNum, props) {
+  const errors = []
+  
+  if (!condition.includes(' = ')) {
     errors.push(`라인 ${lineNum}: 잘못된 대기 형식 (예: wait 신호명 = true)`)
   } else {
-    const parts = waitPart.split(' = ')
+    const parts = condition.split(' = ')
     if (parts.length === 2) {
       const signalName = parts[0].trim()
       const value = parts[1].trim().toLowerCase()
@@ -131,7 +185,23 @@ function validateWaitStatement(line, lineNum, props) {
  */
 function validateGotoStatement(line, lineNum, props) {
   const errors = []
-  const target = line.replace(/go to /i, '').trim()
+  let target = ''
+  
+  // go from 처리
+  if (line.toLowerCase().startsWith('go from ')) {
+    const goFromPattern = /^go\s+from\s+([^\s]+)\s+to\s+(.+)$/i
+    const match = line.match(goFromPattern)
+    if (match) {
+      target = match[2].trim()
+    } else {
+      errors.push(`라인 ${lineNum}: 잘못된 go from 형식 (예: go from R to 블록명.커넥터명,3)`)
+      return errors
+    }
+  }
+  // go to 처리
+  else {
+    target = line.replace(/go to /i, '').trim()
+  }
   
   if (!target) {
     errors.push(`라인 ${lineNum}: go to 대상이 지정되지 않았습니다`)
@@ -249,16 +319,82 @@ function validateIfStatement(line, lineNum, props) {
   const errors = []
   const condition = line.replace(/if /i, '').trim()
   
+  // product type 조건 체크
+  if (condition.includes('product type =')) {
+    // product type 조건은 항상 유효함
+    return errors
+  }
+  
+  // AND 조건 체크
+  if (condition.includes(' and ')) {
+    const conditions = condition.split(' and ')
+    for (const cond of conditions) {
+      const condErrors = validateSingleIfCondition(cond.trim(), lineNum, props)
+      errors.push(...condErrors)
+    }
+    return errors
+  }
+  
+  // OR 조건 체크
+  if (condition.includes(' or ')) {
+    const conditions = condition.split(' or ')
+    for (const cond of conditions) {
+      const condErrors = validateSingleIfCondition(cond.trim(), lineNum, props)
+      errors.push(...condErrors)
+    }
+    return errors
+  }
+  
+  // 단일 조건 체크
+  const condErrors = validateSingleIfCondition(condition, lineNum, props)
+  errors.push(...condErrors)
+  
+  return errors
+}
+
+/**
+ * 단일 if 조건 검증
+ */
+function validateSingleIfCondition(condition, lineNum, props) {
+  const errors = []
+  
   if (condition.includes(' = ')) {
     const parts = condition.split(' = ')
     if (parts.length === 2) {
       const signalName = parts[0].trim()
+      const value = parts[1].trim().toLowerCase()
+      
       if (props.allSignals && props.allSignals.length > 0 && !props.allSignals.includes(signalName)) {
         errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
+      }
+      
+      if (value !== 'true' && value !== 'false') {
+        errors.push(`라인 ${lineNum}: 신호 값은 true 또는 false여야 합니다`)
       }
     }
   }
   
+  return errors
+}
+
+/**
+ * log 문 검증
+ */
+function validateLogStatement(line, lineNum) {
+  const errors = []
+  const trimmedLine = line.trim()
+  const logPart = trimmedLine.replace(/^log /i, '').trim()
+  
+  // 디버깅을 위한 로그
+  console.log('Log validation:', { line, trimmedLine, logPart, lineNum })
+  
+  // 로그 메시지가 있는지 확인
+  if (!logPart) {
+    errors.push(`라인 ${lineNum}: 로그 메시지가 지정되지 않았습니다`)
+  }
+  // 따옴표 검사는 선택적이므로 오류로 처리하지 않음
+  
+  console.log('Log validation result:', errors)
   return errors
 }
 
@@ -305,11 +441,17 @@ function parseScriptLineToAction(line, lowerLine, lineNumber, actionCounter, pro
   else if (lowerLine.startsWith('wait ')) {
     return parseWaitAction(line, actionCounter)
   }
-  else if (lowerLine.startsWith('go to ')) {
+  else if (lowerLine.startsWith('go to ') || lowerLine.startsWith('go from ')) {
     return parseGotoAction(line, lowerLine, lineNumber, actionCounter, props)
   }
   else if (lowerLine.startsWith('if ')) {
     return parseConditionalAction(line, actionCounter, props.script || line)
+  }
+  else if (lowerLine.startsWith('log ')) {
+    return parseLogAction(line, actionCounter)
+  }
+  else if (line.includes('product type +=') || line.includes('product type -=')) {
+    return parseProductTypeAction(line, actionCounter)
   }
   else {
     return parseErrorAction(line, lineNumber, actionCounter, '인식되지 않는 명령어')
@@ -363,6 +505,28 @@ function parseSignalUpdateAction(line, actionCounter) {
  */
 function parseWaitAction(line, actionCounter) {
   const waitPart = line.replace(/wait /i, '').trim()
+  
+  // product type 조건
+  if (waitPart.includes('product type =')) {
+    return {
+      id: `script-action-${actionCounter}`,
+      name: `${waitPart} 대기`,
+      type: 'script',
+      parameters: { script: line }
+    }
+  }
+  
+  // AND/OR 조건이 있는 경우
+  if (waitPart.includes(' and ') || waitPart.includes(' or ')) {
+    return {
+      id: `script-action-${actionCounter}`,
+      name: `${waitPart} 대기`,
+      type: 'script',
+      parameters: { script: line }
+    }
+  }
+  
+  // 단일 신호 조건
   if (waitPart.includes(' = ')) {
     const [signalName, value] = waitPart.split(' = ').map(s => s.trim())
     return {
@@ -382,7 +546,23 @@ function parseWaitAction(line, actionCounter) {
  * go to 액션 파싱
  */
 function parseGotoAction(line, lowerLine, lineNumber, actionCounter, props) {
-  const target = line.replace(/go to /i, '').trim()
+  let target = ''
+  
+  // go from 처리
+  if (lowerLine.startsWith('go from ')) {
+    const goFromPattern = /^go\s+from\s+([^\s]+)\s+to\s+(.+)$/i
+    const match = line.match(goFromPattern)
+    if (match) {
+      target = match[2].trim()
+    } else {
+      return parseErrorAction(line, lineNumber, actionCounter, '잘못된 go from 형식')
+    }
+  }
+  // go to 처리
+  else {
+    target = line.replace(/go to /i, '').trim()
+  }
+  
   let targetPath = target
   let delay = '0'
   
@@ -536,5 +716,37 @@ function parseErrorAction(line, lineNumber, actionCounter, error) {
       lineNumber: lineNumber,
       error: error
     }
+  }
+}
+
+/**
+ * log 액션 파싱
+ */
+function parseLogAction(line, actionCounter) {
+  const logMessage = line.replace(/log /i, '').trim()
+  // 따옴표 제거
+  const cleanMessage = logMessage.replace(/^"|"$/g, '')
+  
+  return {
+    id: `script-action-${actionCounter}`,
+    name: `로그: ${cleanMessage}`,
+    type: 'script',
+    parameters: { script: line }
+  }
+}
+
+/**
+ * product type 액션 파싱
+ */
+function parseProductTypeAction(line, actionCounter) {
+  const isAdd = line.includes('product type +=')
+  const operation = isAdd ? '추가' : '제거'
+  const params = line.split(isAdd ? 'product type +=' : 'product type -=')[1].trim()
+  
+  return {
+    id: `script-action-${actionCounter}`,
+    name: `제품 타입 ${operation}: ${params}`,
+    type: 'script',
+    parameters: { script: line }
   }
 } 

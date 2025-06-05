@@ -5,7 +5,10 @@
 import simpy
 import re
 import random
+import logging
 from typing import Generator, Dict, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 def parse_delay_value(duration_str: str) -> float:
     """딜레이 값을 파싱합니다."""
@@ -25,6 +28,7 @@ class SimpleScriptExecutor:
     
     def __init__(self, signal_manager=None):
         self.signal_manager = signal_manager
+        self.simulation_logs = []  # 시뮬레이션 로그 저장
         self.command_functions = {
             'delay': self.execute_delay,
             'signal_set': self.execute_signal_set,
@@ -34,7 +38,8 @@ class SimpleScriptExecutor:
             'jump': self.execute_jump,
             'wait': self.execute_wait,
             'product_type_add': self.execute_product_type_add,
-            'product_type_remove': self.execute_product_type_remove
+            'product_type_remove': self.execute_product_type_remove,
+            'log': self.execute_log
         }
     
     def execute_delay(self, env: simpy.Environment, delay_str: str) -> Generator:
@@ -59,6 +64,21 @@ class SimpleScriptExecutor:
                 if current_value == expected_bool:
                     break
             yield env.timeout(0.01)  # 0.01초마다 체크
+    
+    def _evaluate_single_signal_condition(self, condition: str) -> bool:
+        """단일 신호 조건 평가 헬퍼 함수"""
+        if ' = ' not in condition:
+            return False
+        
+        parts = condition.split(' = ', 1)
+        signal_name = parts[0].strip()
+        expected_value = parts[1].strip().lower() == 'true'
+        
+        if self.signal_manager:
+            current_value = self.signal_manager.get_signal(signal_name, False)
+            return current_value == expected_value
+        
+        return False
     
     def execute_wait(self, env: simpy.Environment, condition: str, entity: Any = None) -> Generator:
         """wait 명령 실행 (신호 및 엔티티 속성 대기 지원, OR/AND 조건 지원)"""
@@ -107,6 +127,19 @@ class SimpleScriptExecutor:
                     if attr_condition in entity.custom_attributes:
                         return
                 
+                yield env.timeout(0.01)
+        
+        # 일반 신호 AND 조건 처리 (새로 추가)
+        elif ' and ' in condition and ' = ' in condition:
+            conditions = condition.split(' and ')
+            while True:
+                all_satisfied = True
+                for cond in conditions:
+                    if not self._evaluate_single_signal_condition(cond.strip()):
+                        all_satisfied = False
+                        break
+                if all_satisfied:
+                    return
                 yield env.timeout(0.01)
         
         # 기존 OR 조건 처리 (신호)
@@ -209,15 +242,25 @@ class SimpleScriptExecutor:
             else:
                 return attr_condition in entity.custom_attributes
         
-        # 기존 신호 체크 로직
+        # 일반 신호 AND 조건 체크 (새로 추가)
+        elif ' and ' in condition and ' = ' in condition:
+            conditions = condition.split(' and ')
+            for cond in conditions:
+                if not self._evaluate_single_signal_condition(cond.strip()):
+                    return False
+            return True
+        
+        # 일반 신호 OR 조건 체크 (새로 추가)
+        elif ' or ' in condition and ' = ' in condition:
+            conditions = condition.split(' or ')
+            for cond in conditions:
+                if self._evaluate_single_signal_condition(cond.strip()):
+                    return True
+            return False
+        
+        # 기존 신호 체크 로직 (단일 조건)
         elif ' = ' in condition:
-            parts = condition.split(' = ', 1)
-            signal_name = parts[0].strip()
-            expected_value = parts[1].strip().lower() == 'true'
-            
-            if self.signal_manager:
-                current_value = self.signal_manager.get_signal(signal_name, False)
-                return current_value == expected_value
+            return self._evaluate_single_signal_condition(condition)
         
         return False
     
@@ -276,6 +319,24 @@ class SimpleScriptExecutor:
             attributes = [attr.strip() for attr in params_str.split(',') if attr.strip()]
             for attr in attributes:
                 entity.custom_attributes.discard(attr)
+        
+        yield env.timeout(0)
+    
+    def execute_log(self, env: simpy.Environment, message: str, block_name: str = None) -> Generator:
+        """log 명령어 실행"""
+        timestamp = f"{env.now:.1f}"
+        log_entry = f"[{timestamp}s] {f'[{block_name}]' if block_name else ''} {message}"
+        
+        # 백엔드 로그
+        logger.info(f"시뮬레이션 로그: {log_entry}")
+        
+        # 프론트엔드로 전송할 로그 저장
+        if hasattr(self, 'simulation_logs'):
+            self.simulation_logs.append({
+                'time': env.now,
+                'block': block_name,
+                'message': message
+            })
         
         yield env.timeout(0)
     
@@ -344,9 +405,17 @@ class SimpleScriptExecutor:
             params = line.split('product type -=', 1)[1].strip()
             return 'product_type_remove', params
         
+        # log 명령
+        if line.startswith('log '):
+            message = line[4:].strip()
+            # 따옴표 제거
+            if message.startswith('"') and message.endswith('"'):
+                message = message[1:-1]
+            return 'log', message
+        
         return None, None
     
-    def execute_script_line(self, env: simpy.Environment, line: str, entity: Any) -> Generator:
+    def execute_script_line(self, env: simpy.Environment, line: str, entity: Any, block_name: str = None) -> Generator:
         """단일 스크립트 라인 실행"""
         command, params = self.parse_script_line(line)
         
@@ -376,5 +445,11 @@ class SimpleScriptExecutor:
         
         elif command == 'product_type_remove':
             yield from self.execute_product_type_remove(env, params, entity)
+        
+        elif command == 'log':
+            # 블록 이름은 매개변수로 전달받거나 엔티티에서 가져옴
+            if block_name is None and entity:
+                block_name = getattr(entity, 'current_block_name', None)
+            yield from self.execute_log(env, params, block_name)
         
         return 'continue'

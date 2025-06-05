@@ -1,0 +1,111 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "name": "투입",
+      "type": "source",
+      "x": 100,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[투입] 테스트 엔티티 생성\"\nproduct type += test(red)\ngo from R to OR대기.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "2",
+      "name": "신호제어A",
+      "type": "source",
+      "x": 100,
+      "y": 300,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[신호제어A] 신호 제어 시작\"\ndelay 8\nlog \"[신호제어A] 신호A를 true로 변경\"\n신호A = true"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "3",
+      "name": "신호제어B",
+      "type": "source",
+      "x": 100,
+      "y": 450,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[신호제어B] 신호 제어 시작\"\ndelay 5\nlog \"[신호제어B] 신호B를 true로 변경\"\n신호B = true"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "4",
+      "name": "OR대기",
+      "type": "process",
+      "x": 300,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 5,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[OR대기] WAIT OR 조건 테스트 시작\"\nif 신호A = true\n    log \"[OR대기] 현재 신호A = true\"\nif 신호B = true\n    log \"[OR대기] 현재 신호B = true\"\nwait 신호A = true or 신호B = true\nlog \"✅ [OR대기] WAIT OR 조건 통과 (A 또는 B 중 하나가 true)\"\ngo from R to 배출.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50},
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "5",
+      "name": "배출",
+      "type": "sink",
+      "x": 500,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "actions": [],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50}
+      ]
+    }
+  ],
+  "connections": [
+    {"from_block_id": "1", "from_connector_id": "R", "to_block_id": "4", "to_connector_id": "L"},
+    {"from_block_id": "4", "from_connector_id": "R", "to_block_id": "5", "to_connector_id": "L"}
+  ],
+  "globalSignals": [
+    {"name": "신호A", "value": false},
+    {"name": "신호B", "value": false}
+  ],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 14
+  }
+}

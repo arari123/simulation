@@ -1,0 +1,91 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "name": "투입",
+      "type": "source",
+      "x": 100,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[투입] 테스트 엔티티 생성\"\nproduct type += test(red)\ngo from R to AND대기.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "2",
+      "name": "신호제어",
+      "type": "source",
+      "x": 100,
+      "y": 300,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[신호제어] 신호 제어 시작\"\ndelay 5\nlog \"[신호제어] 신호B를 true로 변경\"\n신호B = true\ndelay 3\nlog \"[신호제어] 신호D를 true로 변경\"\n신호D = true"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "3",
+      "name": "AND대기",
+      "type": "process",
+      "x": 300,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 5,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[AND대기] WAIT AND 조건 테스트 시작\"\nif 신호B = true\n    log \"[AND대기] 현재 신호B = true\"\nif 신호D = true\n    log \"[AND대기] 현재 신호D = true\"\nwait 신호B = true and 신호D = true\nlog \"✅ [AND대기] WAIT AND 조건 통과 (B=true, D=true)\"\ngo from R to 배출.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50},
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "4",
+      "name": "배출",
+      "type": "sink",
+      "x": 500,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "actions": [],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50}
+      ]
+    }
+  ],
+  "connections": [
+    {"from_block_id": "1", "from_connector_id": "R", "to_block_id": "3", "to_connector_id": "L"},
+    {"from_block_id": "3", "from_connector_id": "R", "to_block_id": "4", "to_connector_id": "L"}
+  ],
+  "globalSignals": [
+    {"name": "신호B", "value": false},
+    {"name": "신호D", "value": false}
+  ],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 14
+  }
+}

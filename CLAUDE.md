@@ -30,6 +30,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Make targeted fixes** based on the specific issues shown in logs
 - **Avoid obsessing over initial state** - work with what's currently happening
 
+### 🚨 CRITICAL: Simulation Debugging Principles 🚨
+**NEVER MODIFY JSON FILES TO "FIX" SIMULATION LOGIC ISSUES**
+
+When users report simulation abnormal behavior:
+1. **DO NOT modify JSON configuration files** to make the simulation "work somehow"
+2. **DO NOT add hardcoding to the engine** to force simulation progress
+3. **ACCEPT logical deadlocks** - If the simulation environment has logical errors that prevent entity movement, let it remain stuck
+4. **PRESERVE debugging capability** - Modifying JSON to bypass issues makes future debugging impossible
+
+**Why this is critical:**
+- JSON modifications hide root causes instead of solving them
+- Users need to understand when their simulation logic has errors
+- Deadlocks and stuck states are valuable debugging information
+- The simulation should faithfully reflect the configured logic, even if flawed
+
+**Correct approach:**
+- Analyze and explain WHY the simulation is stuck
+- Point out the logical errors in the configuration
+- Let users decide how to fix their simulation logic
+- Only modify engine code for actual bugs, not to bypass user logic errors
+
 ## Project Overview
 
 Vue.js 3 + FastAPI 제조 공정 시뮬레이션 - A high-performance manufacturing process simulation web application that allows users to visually design and simulate manufacturing processes using drag-and-drop blocks and connectors.
@@ -116,7 +137,11 @@ delay 5                           # Wait 5 seconds
 신호명 = true                     # Set signal
 wait 신호명 = true                # Wait for signal
 wait A = true or B = true         # OR condition wait
+wait A = true and B = true        # AND condition wait (NEW)
 if 신호명 = true                  # Conditional (indent sub-actions)
+if A = true and B = true          # AND condition (NEW)
+if A = true or B = true           # OR condition (NEW)
+log "메시지"                      # Log message (NEW)
 go to 블록명.커넥터명             # Move to another block
 go to 블록명.커넥터명,3           # Move with 3s transit delay
 go from 커넥터명 to 블록명.커넥터명,3  # Move from specific connector (recommended)
@@ -225,7 +250,42 @@ if 공정2 load enable = true
 8. **Add new functions, don't modify** - When adding script commands, create new functions instead of modifying existing ones
 9. **NO HARDCODED VALUES** - All timing, delays, and configuration must come from scripts or config files
 
+## 🧪 테스트 필요 사항
+
+### 조건부 명령어 동작 테스트 (우선순위: 중)
+다음 조건부 명령어들의 정상 동작 확인이 필요함:
+
+**IF 조건문:**
+- `if 신호A = true` (기본 단일 조건)
+- `if 신호A = true and 신호B = true` (AND 조건 - 새로 구현됨)
+- `if 신호A = true or 신호B = true` (OR 조건 - 기존 구현)
+- `if product type = test` (엔티티 속성 조건)
+- `if product type = test and flip` (혼합 조건)
+
+**WAIT 조건문:**
+- `wait 신호A = true` (기본 단일 조건)
+- `wait 신호A = true and 신호B = true` (AND 조건 - 새로 구현됨)
+- `wait 신호A = true or 신호B = true` (OR 조건 - ✅ 테스트 완료)
+- `wait product type = test` (엔티티 속성 조건)
+- `wait product type = test and flip` (혼합 조건)
+
+**테스트 현황:**
+- ✅ OR 대기 조건: 정상 동작 확인 완료
+- ⏳ 나머지 조건들: 테스트 대기중
+
+**테스트 파일:**
+- `test_or_wait_simple.json` - OR 조건 테스트용 (완료)
+- `test_if_wait_conditions.json` - 종합 조건 테스트용 (테스트 필요)
+
 ## Recent Major Changes
+
+### 2025-06-06: 용량 초과 경고 시스템 및 스크립트 검증 개선
+- **용량 초과 경고 시스템**: 블록 용량 초과로 엔티티 이동 실패 시 경고 메시지 표시
+  - 백엔드: 경고 생성, 5초 후 자동 삭제, 1초 간격 로그로 스팸 방지
+  - 프론트엔드: 블록 근처에 "⚠️ 용량 초과" 시각적 표시
+- **스크립트 검증 개선**: 들여쓰기된 log 명령어 오류 인식 문제 수정
+  - log 명령어가 신호 설정 명령어로 잘못 인식되던 문제 해결
+  - 들여쓰기 상황에서의 정확한 명령어 구분 로직 개선
 
 ### 2025-06-03: Simple Engine v3
 - Complete engine rewrite (90% code reduction)

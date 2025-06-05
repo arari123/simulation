@@ -1,0 +1,167 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "name": "투입",
+      "type": "source",
+      "x": 100,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "// 기존 기능 테스트\nlog \"[투입] 엔티티 생성\"\nproduct type += test(red)\ndelay 1\n\n// 새 기능 테스트용 신호 설정\n신호A = true\n신호B = false\n신호C = true\n\ngo from R to 기존테스트.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "R", "name": "R", "x": 100, "y": 50},
+        {"id": "B", "name": "B", "x": 50, "y": 100}
+      ]
+    },
+    {
+      "id": "2", 
+      "name": "기존테스트",
+      "type": "process",
+      "x": 300,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 5,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[기존테스트] 기존 IF 단일 조건 테스트\"\nif 신호A = true\n    log \"✅ 기존 IF 단일 조건 통과\"\n\nlog \"[기존테스트] 기존 WAIT OR 조건 테스트\"\nwait 신호B = true or 신호C = true\nlog \"✅ 기존 WAIT OR 조건 통과\"\n\nlog \"[기존테스트] 엔티티 속성 AND 조건 테스트\"\nproduct type += flip\nif product type = test and flip\n    log \"✅ 엔티티 IF AND 조건 통과\"\n\ngo from R to 신규테스트.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50},
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "3",
+      "name": "신규테스트", 
+      "type": "process",
+      "x": 500,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 5,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[신규테스트] 새 IF AND 조건 테스트\"\nif 신호A = true and 신호C = true\n    log \"✅ 새 IF AND 조건 통과 (A=true, C=true)\"\n\nif 신호A = true and 신호B = true\n    log \"❌ 이 메시지는 출력되면 안됨 (B=false)\"\n\nlog \"[신규테스트] 새 IF OR 조건 테스트\"\nif 신호A = true or 신호B = true\n    log \"✅ 새 IF OR 조건 통과 (A=true)\"\n\nif 신호B = true or 신호D = true\n    log \"❌ 이 메시지는 출력되면 안됨 (B,D=false)\"\n\ngo from R to AND대기테스트.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50},
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "4",
+      "name": "AND대기테스트",
+      "type": "process", 
+      "x": 700,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 10,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[AND대기테스트] 엔티티 도착\"\n\n// control 타입 엔티티는 신호 제어 역할\nif product type = control\n    log \"[AND대기테스트] 신호 제어 엔티티 확인\"\n    delay 5\n    log \"[신호제어] 신호B를 true로 변경\"\n    신호B = true\n    delay 3\n    log \"[신호제어] 신호D를 true로 변경\"\n    신호D = true\n    log \"[신호제어] AND 조건 충족됨\"\n    go from R to 배출.L,1\n\n// test 타입 엔티티는 AND 조건 대기\nif product type = test\n    log \"[AND대기테스트] 테스트 엔티티 - AND 조건 대기 시작\"\n    wait 신호B = true and 신호D = true\n    log \"✅ 새 WAIT AND 조건 통과 (B=true, D=true)\"\n    go from R to 복합테스트.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50},
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "5",
+      "name": "신호제어",
+      "type": "source",
+      "x": 300,
+      "y": 300,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "script", 
+          "parameters": {
+            "script": "// AND 대기 테스트를 위한 신호 제어 엔티티\nlog \"[신호제어] 신호 제어 엔티티 생성\"\nproduct type += control\n\ngo from R to AND대기테스트.L,2"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50},
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "6",
+      "name": "복합테스트",
+      "type": "process",
+      "x": 900,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 5,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "log \"[복합테스트] 3개 이상 AND 조건 테스트\"\nif 신호A = true and 신호C = true and 신호B = true and 신호D = true\n    log \"✅ 4개 AND 조건 통과\"\n\nlog \"[복합테스트] 3개 이상 OR 조건 테스트\"\n신호E = false\nif 신호E = true or 신호B = true or 신호F = true\n    log \"✅ 3개 OR 조건 통과 (B=true)\"\n\nlog \"[복합테스트] 혼합 조건 테스트\"\nwait product type = test and flip\nlog \"✅ 엔티티 속성 WAIT AND 통과\"\n\ngo from R to 배출.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50},
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "7",
+      "name": "배출",
+      "type": "sink",
+      "x": 1100,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "actions": [],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50}
+      ]
+    }
+  ],
+  "connections": [
+    {"from_block_id": "1", "from_connector_id": "R", "to_block_id": "2", "to_connector_id": "L"},
+    {"from_block_id": "2", "from_connector_id": "R", "to_block_id": "3", "to_connector_id": "L"},
+    {"from_block_id": "3", "from_connector_id": "R", "to_block_id": "4", "to_connector_id": "L"},
+    {"from_block_id": "4", "from_connector_id": "R", "to_block_id": "6", "to_connector_id": "L"},
+    {"from_block_id": "6", "from_connector_id": "R", "to_block_id": "7", "to_connector_id": "L"},
+    {"from_block_id": "5", "from_connector_id": "R", "to_block_id": "4", "to_connector_id": "L"}
+  ],
+  "globalSignals": [
+    {"name": "신호A", "value": false},
+    {"name": "신호B", "value": false},
+    {"name": "신호C", "value": false},
+    {"name": "신호D", "value": false},
+    {"name": "신호E", "value": false},
+    {"name": "신호F", "value": false}
+  ],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 14
+  }
+}
