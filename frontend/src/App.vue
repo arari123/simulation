@@ -336,6 +336,7 @@ function getSimulationSetupData() {
     width: block.width,
     height: block.height,
     maxCapacity: block.maxCapacity || 1,
+    capacity: block.maxCapacity || 1,  // ProcessBlockConfig 모델과 호환성을 위해 둘 다 전송
     script: block.script || '',  // script 필드 추가
     actions: block.actions || [],
     connectionPoints: (block.connectionPoints || []).map(cp => ({
@@ -462,6 +463,29 @@ function handleImportConfiguration(config) {
               }
             });
           }
+        }
+        
+        // 모든 액션에 name 필드가 있는지 확인하고 없으면 추가
+        if (processedBlock.actions) {
+          processedBlock.actions = processedBlock.actions.map(action => {
+            if (!action.name) {
+              // 액션 타입에 따른 기본 이름 생성
+              const defaultNames = {
+                'script': '스크립트',
+                'custom_sink': '배출',
+                'delay': '대기',
+                'signal_wait': '신호 대기',
+                'signal_update': '신호 변경',
+                'route_to_connector': '이동',
+                'conditional_branch': '조건부 실행'
+              };
+              return {
+                ...action,
+                name: defaultNames[action.type] || action.type
+              };
+            }
+            return action;
+          });
         }
         
         return processedBlock;

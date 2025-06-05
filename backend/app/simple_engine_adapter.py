@@ -65,15 +65,20 @@ class SimpleEngineAdapter:
     
     def convert_simple_result_to_api_format(self, result: Dict[str, Any]) -> Dict[str, Any]:
         """새 엔진 결과를 기존 API 형식으로 변환"""
-        # 활성 엔티티 변환
+        # 활성 엔티티 변환 (새로운 속성 포함)
         active_entities = []
         for block_id, block_state in result.get('block_states', {}).items():
             for entity_info in block_state.get('entities', []):
-                active_entities.append(EntityState(
-                    id=entity_info['id'],
-                    current_block_id=block_id,
-                    current_block_name=block_state['name']
-                ))
+                # EntityState는 dict로 전달 (frontend에서 직접 사용)
+                entity_dict = {
+                    'id': entity_info['id'],
+                    'current_block_id': block_id,
+                    'current_block_name': block_state['name'],
+                    'state': entity_info.get('state', 'normal'),
+                    'color': entity_info.get('color'),
+                    'custom_attributes': entity_info.get('custom_attributes', [])
+                }
+                active_entities.append(entity_dict)
         
         # 시간을 반올림하여 부동소수점 오차 제거 (소수점 1자리)
         simulation_time = round(result.get('simulation_time', 0), 1)

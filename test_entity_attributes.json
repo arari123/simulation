@@ -1,0 +1,113 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "name": "투입",
+      "type": "source",
+      "x": 100,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "script",
+          "name": "투입 스크립트",
+          "parameters": {
+            "script": "delay 2\nproduct type += flip(red)\ngo to 공정1.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "2",
+      "name": "공정1",
+      "type": "process",
+      "x": 300,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "script",
+          "name": "공정1 스크립트",
+          "parameters": {
+            "script": "delay 3\nif product type = flip\n    product type += 1c(blue)\n    go to 공정2.L,2\ndelay 1\ngo to 공정2.L,2"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50},
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "3",
+      "name": "공정2",
+      "type": "process",
+      "x": 500,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "script",
+          "name": "공정2 스크립트",
+          "parameters": {
+            "script": "wait product type = flip and 1c\nproduct type -= flip\nproduct type += (green)\ndelay 2\ngo to 배출.L,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50},
+        {"id": "R", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": "4",
+      "name": "배출",
+      "type": "sink",
+      "x": 700,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "actions": [
+        {
+          "type": "custom_sink",
+          "name": "배출 처리",
+          "parameters": {}
+        }
+      ],
+      "connectionPoints": [
+        {"id": "L", "name": "L", "x": 0, "y": 50}
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from_block_id": "1",
+      "from_connector_id": "R",
+      "to_block_id": "2",
+      "to_connector_id": "L"
+    },
+    {
+      "from_block_id": "2",
+      "from_connector_id": "R",
+      "to_block_id": "3",
+      "to_connector_id": "L"
+    },
+    {
+      "from_block_id": "3",
+      "from_connector_id": "R",
+      "to_block_id": "4",
+      "to_connector_id": "L"
+    }
+  ],
+  "globalSignals": [],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 14
+  }
+}

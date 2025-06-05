@@ -57,6 +57,10 @@ class EntityState(BaseModel): # 엔티티 상태를 위한 모델
     current_block_id: Optional[str] = None
     current_block_name: Optional[str] = None
     # current_action_name: Optional[str] = None # 추후 확장 가능
+    # 엔티티 속성 추가
+    state: Optional[str] = None  # "normal" | "transit"
+    color: Optional[str] = None  # "gray", "blue", "green", "red", "black", "white"
+    custom_attributes: Optional[List[str]] = []  # ["flip", "1c", etc.]
 
 class SimulationStepResult(BaseModel):
     time: float

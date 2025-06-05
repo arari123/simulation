@@ -1110,6 +1110,19 @@ function displayTransitEntity(entity, index) {
       const middleX = (fromCenterX + toCenterX) / 2 + (index * 30); // 30px씩 옆으로 이동
       const middleY = (fromCenterY + toCenterY) / 2 + (index * 5);  // 5px씩 아래로 이동
       
+      // 엔티티 색상 매핑
+      const colorMap = {
+        'gray': '#808080',
+        'blue': '#0000FF',
+        'green': '#00FF00',
+        'red': '#FF0000',
+        'black': '#000000',
+        'white': '#FFFFFF',
+      };
+      
+      // transit 상태일 때 기본 색상은 보라색, 하지만 entity에 색상이 지정되어 있으면 그것을 사용
+      const entityColor = entity.color && colorMap[entity.color] ? colorMap[entity.color] : '#9B59B6';
+      
       // 🔥 transit 엔티티 표시 - 더 눈에 잘 띄는 스타일
       const entitySize = 35;
       const transitRect = new Konva.Rect({
@@ -1117,7 +1130,7 @@ function displayTransitEntity(entity, index) {
         y: middleY - entitySize / 2,
         width: entitySize,
         height: entitySize,
-        fill: '#9B59B6', // 보라색 - transit 상태 구분
+        fill: entityColor,
         stroke: '#8E44AD', // 진한 보라색 테두리
         strokeWidth: 3,
         cornerRadius: 5, // 모서리 둥글게
@@ -1130,12 +1143,17 @@ function displayTransitEntity(entity, index) {
       // 엔티티 번호 텍스트 - 전역 매핑에서 번호 가져오기
       const entityNumber = globalEntityIdToNumber.get(entity.id) || 0;
       
+      // 텍스트 색상 결정
+      const darkColors = ['black', 'blue', 'red'];
+      const textColor = (entity.color && darkColors.includes(entity.color)) ? 'white' : 
+                       (entity.color === 'white' || entity.color === 'green') ? 'black' : 'white';
+      
       const transitText = new Konva.Text({
         x: middleX - entitySize / 2,
         y: middleY - entitySize / 2,
         text: String(entityNumber),
         fontSize: 14,
-        fill: 'white',
+        fill: textColor,
         fontStyle: 'bold',
         width: entitySize,
         height: entitySize,
@@ -1234,6 +1252,7 @@ function updateEntities() {
   });
   
   
+  
   // 각 블록에 엔티티 네모로 표시
   entitiesByBlock.forEach((entities, blockId) => {
     // 🔥 transit 상태 엔티티 처리
@@ -1277,13 +1296,26 @@ function updateEntities() {
             entityX + entitySize <= blockWidth - padding && 
             entityY + entitySize <= blockHeight - padding) {
           
+          // 엔티티 색상 매핑
+          const colorMap = {
+            'gray': '#808080',
+            'blue': '#0000FF',
+            'green': '#00FF00',
+            'red': '#FF0000',
+            'black': '#000000',
+            'white': '#FFFFFF',
+          };
+          
+          // 엔티티 색상 결정 (color 속성이 있으면 사용, 없으면 기본 주황색)
+          const entityColor = entity.color && colorMap[entity.color] ? colorMap[entity.color] : '#FF6B35';
+          
           // 엔티티 네모 - 더 눈에 잘 띄도록 스타일 강화
           const entityRect = new Konva.Rect({
             x: block.x + entityX,
             y: block.y + entityY,
             width: entitySize,
             height: entitySize,
-            fill: '#FF6B35', // 주황색
+            fill: entityColor,
             stroke: '#D63031', // 진한 빨간색 테두리
             strokeWidth: 2,
             cornerRadius: 1,
@@ -1296,12 +1328,18 @@ function updateEntities() {
           // 엔티티 번호 텍스트 - 전역 매핑에서 번호 가져오기
           const entityNumber = globalEntityIdToNumber.get(entity.id) || 0;
           const fontSize = entities.length === 1 ? 16 : 12; // 14->16, 10->12로 증가
+          
+          // 텍스트 색상 결정 (어두운 배경은 흰색, 밝은 배경은 검은색)
+          const darkColors = ['black', 'blue', 'red'];
+          const textColor = (entity.color && darkColors.includes(entity.color)) ? 'white' : 
+                           (entity.color === 'white' || entity.color === 'green') ? 'black' : 'white';
+          
           const entityText = new Konva.Text({
             x: block.x + entityX,
             y: block.y + entityY,
             text: String(entityNumber),
             fontSize: fontSize,
-            fill: 'white',
+            fill: textColor,
             fontStyle: 'bold',
             width: entitySize,
             height: entitySize,

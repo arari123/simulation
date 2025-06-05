@@ -99,6 +99,9 @@ async def step_simulation_endpoint(config_data: Optional[dict] = None):
                     logger.info(f"📝 설정 중 블록 '{block_name}' 스크립트 필드 존재")
                 else:
                     logger.info(f"📝 설정 중 블록 '{block_name}' 스크립트 필드 없음")
+                # maxCapacity 로깅 추가
+                max_capacity = block.get('maxCapacity', 'Not Set')
+                logger.info(f"📊 블록 '{block_name}' maxCapacity: {max_capacity}")
             
             # ID를 문자열로 변환
             config_data = convert_config_ids_to_strings(config_data)
@@ -208,6 +211,24 @@ def load_base_config():
     except Exception as e:
         logger.error(f"❌ 기본 설정 로드 오류: {e}")
         raise HTTPException(status_code=500, detail=f"기본 설정 로드 오류: {str(e)}")
+
+@router.post("/update-settings")
+def update_settings_endpoint(settings: dict):
+    """시뮬레이션 설정 업데이트"""
+    try:
+        logger.info(f"📝 설정 업데이트 요청: {settings}")
+        
+        # 현재는 설정을 받기만 하고 특별한 처리는 하지 않음
+        # 필요시 여기서 설정을 저장하거나 엔진에 반영할 수 있음
+        
+        return {
+            "message": "설정이 업데이트되었습니다",
+            "settings": settings
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ 설정 업데이트 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"설정 업데이트 오류: {str(e)}")
 
 @router.post("/load-config")
 def load_config_file(file_path: str):

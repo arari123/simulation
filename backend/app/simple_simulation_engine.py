@@ -116,12 +116,14 @@ class SimpleSimulationEngine:
                                 logger.info(f"Extracted script from connector for block {block_name}: {len(script_lines)} lines")
         
         # 블록 생성
+        # ProcessBlockConfig 모델은 'capacity' 필드를 사용하므로 둘 다 확인
+        max_capacity = block_config.get('capacity', block_config.get('maxCapacity', 100))
         block = IndependentBlock(
             block_id=block_id,
             block_name=block_name,
             script_lines=script_lines,
             signal_manager=self.signal_manager,
-            max_capacity=block_config.get('maxCapacity', 100)
+            max_capacity=max_capacity
         )
         
         # 블록 타입 설정
@@ -273,6 +275,7 @@ class SimpleSimulationEngine:
             result['time_advanced'] = round(self.env.now - initial_time, 1)
             result['movement_detected'] = movement_detected
             
+            
             return result
             
         except Exception as e:
@@ -324,7 +327,13 @@ class SimpleSimulationEngine:
             status = block.get_status()
             block_states[block_id] = {
                 'name': status['name'],
-                'entities': [{'id': e.id, 'location': e.current_block} for e in block.entities_in_block],
+                'entities': [{
+                    'id': e.id, 
+                    'location': e.current_block,
+                    'state': getattr(e, 'state', 'normal'),
+                    'color': getattr(e, 'color', None),
+                    'custom_attributes': list(getattr(e, 'custom_attributes', set()))
+                } for e in block.entities_in_block],
                 'entities_count': status['entities_count'],
                 'total_processed': status['total_processed']
             }

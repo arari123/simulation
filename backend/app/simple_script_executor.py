@@ -32,7 +32,9 @@ class SimpleScriptExecutor:
             'go_to': self.execute_go_to,
             'if': self.execute_if,
             'jump': self.execute_jump,
-            'wait': self.execute_wait
+            'wait': self.execute_wait,
+            'product_type_add': self.execute_product_type_add,
+            'product_type_remove': self.execute_product_type_remove
         }
     
     def execute_delay(self, env: simpy.Environment, delay_str: str) -> Generator:
@@ -58,10 +60,57 @@ class SimpleScriptExecutor:
                     break
             yield env.timeout(0.01)  # 0.01초마다 체크
     
-    def execute_wait(self, env: simpy.Environment, condition: str) -> Generator:
-        """wait 명령 실행 (wait 신호명 = true 형태, OR 조건 지원)"""
-        # OR 조건 처리
-        if ' or ' in condition:
+    def execute_wait(self, env: simpy.Environment, condition: str, entity: Any = None) -> Generator:
+        """wait 명령 실행 (신호 및 엔티티 속성 대기 지원, OR/AND 조건 지원)"""
+        # product type 조건 대기
+        if 'product type =' in condition and entity:
+            if not hasattr(entity, 'custom_attributes') or not hasattr(entity, 'state'):
+                yield env.timeout(0.1)
+                return
+            
+            # product type = 뒤의 조건 추출
+            attr_condition = condition.split('product type =', 1)[1].strip()
+            
+            while True:
+                # transit 상태 체크
+                if attr_condition == 'transit':
+                    if entity.state == 'transit':
+                        return
+                
+                # AND 조건 처리
+                elif ' and ' in attr_condition:
+                    conditions = [cond.strip() for cond in attr_condition.split(' and ')]
+                    all_satisfied = True
+                    for cond in conditions:
+                        if cond == 'transit':
+                            if entity.state != 'transit':
+                                all_satisfied = False
+                                break
+                        elif cond not in entity.custom_attributes:
+                            all_satisfied = False
+                            break
+                    if all_satisfied:
+                        return
+                
+                # OR 조건 처리
+                elif ' or ' in attr_condition:
+                    conditions = [cond.strip() for cond in attr_condition.split(' or ')]
+                    for cond in conditions:
+                        if cond == 'transit':
+                            if entity.state == 'transit':
+                                return
+                        elif cond in entity.custom_attributes:
+                            return
+                
+                # 단일 속성 체크
+                else:
+                    if attr_condition in entity.custom_attributes:
+                        return
+                
+                yield env.timeout(0.01)
+        
+        # 기존 OR 조건 처리 (신호)
+        elif ' or ' in condition:
             conditions = condition.split(' or ')
             while True:
                 for cond in conditions:
@@ -89,34 +138,79 @@ class SimpleScriptExecutor:
     
     def execute_go_to(self, env: simpy.Environment, target: str, entity: Any) -> Generator:
         """go to 블록명.커넥터명,딜레이 형태의 명령 실행"""
-        # 딜레이 처리
+        # 타겟 파싱 먼저 수행
+        target_str = target
         delay_time = 0
         if ',' in target:
             parts = target.split(',', 1)
-            target = parts[0].strip()
+            target_str = parts[0].strip()
             delay_str = parts[1].strip()
             delay_time = parse_delay_value(delay_str)
+        
+        if '.' in target_str:
+            block_name, connector_name = target_str.split('.', 1)
+            entity.target_block = block_name.strip()
+            entity.target_connector = connector_name.strip()
+        else:
+            entity.target_block = target_str.strip()
+            entity.target_connector = None
+        
+        # 엔티티 상태를 transit으로 변경
+        if hasattr(entity, 'state'):
+            entity.state = "transit"
         
         # 딜레이 실행
         if delay_time > 0:
             yield env.timeout(delay_time)
         
-        # 타겟 파싱
-        if '.' in target:
-            block_name, connector_name = target.split('.', 1)
-            entity.target_block = block_name.strip()
-            entity.target_connector = connector_name.strip()
-        else:
-            entity.target_block = target.strip()
-            entity.target_connector = None
-        
         # 이동 완료 신호
         entity.movement_requested = True
         yield env.timeout(0)
     
-    def execute_if(self, env: simpy.Environment, condition: str) -> bool:
-        """if 조건문 평가"""
-        if ' = ' in condition:
+    def execute_if(self, env: simpy.Environment, condition: str, entity: Any = None) -> bool:
+        """if 조건문 평가 (엔티티 속성 체크 지원)"""
+        # product type 조건 체크
+        if 'product type =' in condition and entity:
+            if not hasattr(entity, 'custom_attributes') or not hasattr(entity, 'state'):
+                return False
+            
+            # product type = 뒤의 조건 추출
+            attr_condition = condition.split('product type =', 1)[1].strip()
+            
+            # transit 상태 체크
+            if attr_condition == 'transit':
+                return entity.state == 'transit'
+            
+            # AND 조건 처리
+            if ' and ' in attr_condition:
+                conditions = [cond.strip() for cond in attr_condition.split(' and ')]
+                # 모든 속성이 있어야 true
+                for cond in conditions:
+                    if cond == 'transit':
+                        if entity.state != 'transit':
+                            return False
+                    elif cond not in entity.custom_attributes:
+                        return False
+                return True
+            
+            # OR 조건 처리
+            elif ' or ' in attr_condition:
+                conditions = [cond.strip() for cond in attr_condition.split(' or ')]
+                # 하나라도 있으면 true
+                for cond in conditions:
+                    if cond == 'transit':
+                        if entity.state == 'transit':
+                            return True
+                    elif cond in entity.custom_attributes:
+                        return True
+                return False
+            
+            # 단일 속성 체크
+            else:
+                return attr_condition in entity.custom_attributes
+        
+        # 기존 신호 체크 로직
+        elif ' = ' in condition:
             parts = condition.split(' = ', 1)
             signal_name = parts[0].strip()
             expected_value = parts[1].strip().lower() == 'true'
@@ -134,6 +228,56 @@ class SimpleScriptExecutor:
             return line_number - 1  # 0-based 인덱스로 변환
         except ValueError:
             return -1
+    
+    def execute_product_type_add(self, env: simpy.Environment, params_str: str, entity: Any) -> Generator:
+        """product type += attributes(color) 형태의 명령 실행"""
+        if not hasattr(entity, 'custom_attributes') or not hasattr(entity, 'color'):
+            yield env.timeout(0)
+            return
+        
+        # 색상 파싱 (괄호 안의 내용)
+        color = None
+        if '(' in params_str and ')' in params_str:
+            color_match = re.search(r'\(([^)]+)\)', params_str)
+            if color_match:
+                color = color_match.group(1).strip()
+                # 색상 부분 제거
+                params_str = params_str[:params_str.index('(')].strip()
+        
+        # 속성 파싱 (쉼표로 구분)
+        if params_str:
+            attributes = [attr.strip() for attr in params_str.split(',') if attr.strip()]
+            for attr in attributes:
+                entity.custom_attributes.add(attr)
+        
+        # 색상 설정
+        if color:
+            entity.color = color
+        
+        
+        yield env.timeout(0)
+    
+    def execute_product_type_remove(self, env: simpy.Environment, params_str: str, entity: Any) -> Generator:
+        """product type -= attributes 형태의 명령 실행"""
+        if not hasattr(entity, 'custom_attributes'):
+            yield env.timeout(0)
+            return
+        
+        # 색상 초기화 요청 확인
+        if '(' in params_str and ')' in params_str:
+            color_match = re.search(r'\(([^)]+)\)', params_str)
+            if color_match and color_match.group(1).strip() == 'default':
+                entity.color = None
+                # 색상 부분 제거
+                params_str = params_str[:params_str.index('(')].strip()
+        
+        # 속성 제거 (쉼표로 구분)
+        if params_str:
+            attributes = [attr.strip() for attr in params_str.split(',') if attr.strip()]
+            for attr in attributes:
+                entity.custom_attributes.discard(attr)
+        
+        yield env.timeout(0)
     
     def parse_script_line(self, line: str) -> tuple:
         """스크립트 라인을 파싱하여 명령어와 파라미터를 반환"""
@@ -190,6 +334,16 @@ class SimpleScriptExecutor:
             target = line[8:].strip()
             return 'jump', target
         
+        # product type += 명령
+        if 'product type +=' in line:
+            params = line.split('product type +=', 1)[1].strip()
+            return 'product_type_add', params
+        
+        # product type -= 명령
+        if 'product type -=' in line:
+            params = line.split('product type -=', 1)[1].strip()
+            return 'product_type_remove', params
+        
         return None, None
     
     def execute_script_line(self, env: simpy.Environment, line: str, entity: Any) -> Generator:
@@ -203,18 +357,24 @@ class SimpleScriptExecutor:
             yield from self.execute_signal_set(env, params['signal_name'], params['value'])
         
         elif command == 'wait':
-            yield from self.execute_wait(env, params)
+            yield from self.execute_wait(env, params, entity)
         
         elif command == 'go_to':
             yield from self.execute_go_to(env, params, entity)
             return 'movement'  # 이동 신호
         
         elif command == 'if':
-            condition_result = self.execute_if(env, params)
+            condition_result = self.execute_if(env, params, entity)
             return ('if', condition_result)
         
         elif command == 'jump':
             target_line = self.execute_jump(env, params)
             return ('jump', target_line)
+        
+        elif command == 'product_type_add':
+            yield from self.execute_product_type_add(env, params, entity)
+        
+        elif command == 'product_type_remove':
+            yield from self.execute_product_type_remove(env, params, entity)
         
         return 'continue'

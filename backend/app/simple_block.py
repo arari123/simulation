@@ -3,9 +3,12 @@
 각 블록이 완전 독립적으로 동작합니다.
 """
 import simpy
+import logging
 from typing import List, Generator, Optional, Dict, Any
 from .simple_script_executor import SimpleScriptExecutor
 from .simple_entity import SimpleEntity
+
+logger = logging.getLogger(__name__)
 
 class IndependentBlock:
     """완전 독립적인 블록 객체"""
@@ -53,6 +56,9 @@ class IndependentBlock:
         if self.can_accept_entity():
             entity.set_location(self.name)
             entity.reset_movement()
+            # 엔티티 상태를 normal로 복원
+            if hasattr(entity, 'state'):
+                entity.state = "normal"
             self.entities_in_block.append(entity)
             return True
         return False
@@ -78,9 +84,7 @@ class IndependentBlock:
                 continue
             
             # 스크립트 라인 실행
-            print(f"DEBUG: Block {self.name} executing line {current_line}: {line}")
             result = yield from self.script_executor.execute_script_line(env, line, entity)
-            print(f"DEBUG: Block {self.name} line {current_line} result: {result}")
             
             # 결과 처리
             if result == 'movement':
@@ -98,8 +102,28 @@ class IndependentBlock:
                 # if 조건문 처리
                 condition_result = result[1]
                 if condition_result:
-                    # 조건이 참이면 다음 라인 실행
+                    # 조건이 참이면 들여쓰기된 블록 실행
                     current_line += 1
+                    # if 블록 내부의 명령들을 실행하고 movement 발생 시 즉시 리턴
+                    while current_line < len(self.script_lines):
+                        line = self.script_lines[current_line]
+                        # 들여쓰기가 없으면 if 블록 종료
+                        if not line.startswith('\t') and not line.startswith('    '):
+                            break
+                        
+                        stripped_line = line.strip()
+                        if not stripped_line or stripped_line.startswith('//'):
+                            current_line += 1
+                            continue
+                        
+                        sub_result = yield from self.script_executor.execute_script_line(env, stripped_line, entity)
+                        
+                        if sub_result == 'movement':
+                            # if 블록 내에서 이동이 발생하면 즉시 리턴
+                            return current_line
+                        
+                        current_line += 1
+                    # if 블록 실행 완료 후 current_line은 이미 if 블록 밖을 가리킴
                 else:
                     # 조건이 거짓이면 들여쓰기된 블록 스킵
                     current_line = self._skip_indented_block(current_line)
@@ -126,7 +150,6 @@ class IndependentBlock:
                 continue
             
             # 스크립트 라인 실행 (엔티티 없이)
-            print(f"DEBUG: Block {self.name} executing remaining line {current_line}: {line}")
             
             # if 조건문 처리
             if line.startswith('if '):
@@ -142,11 +165,9 @@ class IndependentBlock:
                 
                 if condition_result:
                     # 조건이 참이면 다음 라인 실행
-                    print(f"DEBUG: Block {self.name} if condition True, continuing")
                     current_line += 1
                 else:
                     # 조건이 거짓이면 들여쓰기된 블록 스킵
-                    print(f"DEBUG: Block {self.name} if condition False, skipping block")
                     current_line = self._skip_indented_block(current_line)
             
             # 신호 설정 명령 실행
@@ -157,12 +178,14 @@ class IndependentBlock:
                 bool_value = value.lower() == 'true'
                 if self.signal_manager:
                     self.signal_manager.set_signal(signal_name, bool_value)
-                    print(f"DEBUG: Block {self.name} set signal {signal_name} = {bool_value}")
                 current_line += 1
             
             # go to/go from 명령은 무시 (이미 엔티티가 이동했으므로)
             elif line.startswith('go to ') or line.startswith('go from '):
-                print(f"DEBUG: Block {self.name} skipping go command in remaining script")
+                current_line += 1
+            
+            # product type 명령도 무시 (엔티티가 없으므로)
+            elif 'product type' in line:
                 current_line += 1
             
             else:
@@ -204,13 +227,12 @@ class IndependentBlock:
                     yield from self._regular_process(env, entity_queue, engine_ref)
                     
             except Exception as e:
-                print(f"Block {self.name} process error: {e}")
+                logger.error(f"Block {self.name} process error: {e}")
                 yield env.timeout(0.1)
     
     def _source_process(self, env: simpy.Environment, entity_queue: simpy.Store, 
                        engine_ref) -> Generator:
         """소스 블록 프로세스"""
-        print(f"DEBUG: Source process started for block {self.name}")
         
         # 스크립트에서 이동 지연 시간 추출
         transit_delay = 0
@@ -243,6 +265,7 @@ class IndependentBlock:
         
         # 정확한 생성 주기 계산: 이동 시간만 고려
         generation_cycle = transit_delay  # 이동 시간과 동일하게 설정
+        last_entity_sent = None  # 마지막으로 보낸 엔티티 추적
         
         while True:  # 계속 엔티티 생성
             # 정확한 생성 시간까지 대기
@@ -251,14 +274,42 @@ class IndependentBlock:
             
             # 블록에 엔티티가 없을 때만 새로 생성
             if len(self.entities_in_block) == 0:
+                # 대상 블록 용량 체크를 위해 먼저 목표 블록 찾기
+                target_block_name = None
+                for line in self.script_lines:
+                    if 'go to' in line:
+                        parts = line.split('go to', 1)[1].strip()
+                        if ',' in parts:
+                            parts = parts.split(',')[0]
+                        if '.' in parts:
+                            target_block_name = parts.split('.')[0].strip()
+                        else:
+                            target_block_name = parts.strip()
+                        break
+                    elif 'go from' in line and ' to ' in line:
+                        # go from R to 공정1.L,3 형태 처리
+                        parts = line.split(' to ', 1)[1].strip()
+                        if ',' in parts:
+                            parts = parts.split(',')[0]
+                        if '.' in parts:
+                            target_block_name = parts.split('.')[0].strip()
+                        else:
+                            target_block_name = parts.strip()
+                        break
+                
+                # 대상 블록이 가득 찬 경우 대기
+                if target_block_name:
+                    target_block_id = engine_ref.get_block_id_by_name(target_block_name)
+                    if target_block_id and target_block_id in engine_ref.blocks:
+                        target_block = engine_ref.blocks[target_block_id]
+                        if not target_block.can_accept_entity():
+                            yield env.timeout(0.1)
+                            continue
+                
                 entity = SimpleEntity()
                 entity.created_at = round(env.now, 1)
                 
                 if self.add_entity(entity):
-                    print(f"DEBUG: Entity {entity.id} created in {self.name} at time {round(env.now, 1)}")
-                    print(f"DEBUG: Block {self.name} has {len(self.script_lines)} script lines")
-                    if self.script_lines:
-                        print(f"DEBUG: First script line: {self.script_lines[0]}")
                     
                     # 다음 생성 시간 설정 (현재 시간 + 생성 주기)
                     self.next_generation_time = round(env.now + generation_cycle, 1)
@@ -320,9 +371,10 @@ class IndependentBlock:
                 self.remove_entity(entity)
                 yield from engine_ref.move_entity_to_block(env, entity, target_block_id)
                 
-                # 이동 후 남은 스크립트 실행
-                if current_line + 1 < len(self.script_lines):
-                    yield from self._execute_remaining_script(env, current_line + 1)
+                # 이동 후 남은 스크립트는 실행하지 않음
+                # (엔티티가 이미 다른 블록으로 이동했으므로)
+                # if current_line + 1 < len(self.script_lines):
+                #     yield from self._execute_remaining_script(env, current_line + 1)
             else:
                 # 이동할 수 없으면 엔티티 제거 (싱크로 처리)
                 self.remove_entity(entity)

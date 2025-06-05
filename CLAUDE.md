@@ -122,6 +122,25 @@ go to 블록명.커넥터명,3           # Move with 3s transit delay
 go from 커넥터명 to 블록명.커넥터명,3  # Move from specific connector (recommended)
 jump to 1                         # Jump to line 1
 // comment                        # Comment line
+
+# Entity Attribute Commands (NEW)
+product type += flip(red)         # Add 'flip' attribute and set color to red
+product type += flip,1c(blue)     # Add multiple attributes and set color
+product type += (green)           # Change color only without adding attributes
+product type -= flip              # Remove 'flip' attribute
+product type -= flip,1c           # Remove multiple attributes
+product type -= (default)         # Reset color to default
+
+# Attribute Conditions
+if product type = flip            # Check single attribute
+if product type = flip or 1c      # Check OR condition
+if product type = flip and 1c     # Check AND condition
+if product type = transit         # Check transit state
+
+wait product type = transit       # Wait for transit state
+wait product type = flip          # Wait for attribute
+wait product type = flip or 1c    # Wait with OR condition
+wait product type = flip and 1c   # Wait with AND condition
 ```
 
 ### Example Script
@@ -220,6 +239,45 @@ if 공정2 load enable = true
 - Global entity number mapping
 - Enhanced transit entity visualization
 - Tab key support in script editors
+
+### 2025-06-05: Entity Attributes Feature
+- **Entity Custom Attributes**: Added support for custom entity attributes
+  - Entities can have multiple string attributes (e.g., flip, 1c)
+  - Automatic transit state tracking during movement
+  - Support for 6 colors: gray, blue, green, red, black, white
+- **New Script Commands**:
+  - `product type +=` for adding attributes and colors
+  - `product type -=` for removing attributes
+  - Conditional checks with OR/AND logic
+  - Wait conditions for entity states and attributes
+- **Frontend Color Support**: 
+  - Entities display with assigned colors
+  - Automatic text color adjustment for visibility
+  - Transit entities maintain color during movement
+
+### 2025-06-06: Entity Attribute System Implementation ✅
+- **Complete Entity Attribute System**: Full implementation of custom entity attributes
+  - Added entity state tracking: "normal" and "transit" states
+  - Implemented custom attributes as Set (e.g., flip, 1c)
+  - Added 6 color support: gray, blue, green, red, black, white
+  - Script commands: `product type += attribute(color)` and `product type -= attribute`
+  - Conditional checks: `if/wait product type = attribute1 and attribute2`
+  - OR logic support: `wait product type = flip or product type = 1c`
+- **Backend Enhancements**:
+  - Extended SimpleEntity model with state, custom_attributes, and color fields
+  - Implemented product type command parsers in script executor
+  - Transit state automatically set during entity movement
+  - Attributes persist across block movements
+- **Frontend Updates**:
+  - Dynamic entity color rendering based on backend state
+  - EntityState model includes color and custom_attributes
+  - Visual feedback for entity states during simulation
+- **Bug Fixes**:
+  - Fixed field mapping issue: ProcessBlockConfig uses 'capacity' not 'maxCapacity'
+  - Backend now correctly reads capacity from frontend (was defaulting to 100)
+  - Removed debug console.print() statements from backend
+  - Removed repetitive console.log statements from frontend
+  - Added missing /simulation/update-settings endpoint
 
 ### Recent Fixes (Latest)
 - **Script Priority Fix**: Fixed script action priority in backend engine (2025-06-04)
