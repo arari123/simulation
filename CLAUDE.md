@@ -51,6 +51,27 @@ When users report simulation abnormal behavior:
 - Let users decide how to fix their simulation logic
 - Only modify engine code for actual bugs, not to bypass user logic errors
 
+### 🚨 CRITICAL: Engine Must Execute Scripts As Written 🚨
+**NEVER MODIFY ENGINE TO "FIX" SCRIPT LOGIC ISSUES**
+
+When a script has logical errors:
+1. **DO NOT modify engine behavior** to make problematic scripts "work"
+2. **EXECUTE scripts exactly as written** - Even if they cause problems
+3. **PRESERVE script errors** - They are valuable feedback for users
+4. **NO SPECIAL HANDLING** - Don't add engine logic to prevent script issues
+
+**Examples of WRONG approaches:**
+- "First go to wins" logic to prevent multiple go to commands
+- Stopping script execution mid-way to avoid problems
+- Adding conditions to skip certain script lines
+- Modifying entity behavior to compensate for script errors
+
+**Correct approach:**
+- Execute ALL script lines from start to finish
+- If multiple go to commands exist, the last one applies
+- If script causes infinite loops, let it happen
+- Users must fix their scripts, not the engine
+
 ## Project Overview
 
 Vue.js 3 + FastAPI 제조 공정 시뮬레이션 - A high-performance manufacturing process simulation web application that allows users to visually design and simulate manufacturing processes using drag-and-drop blocks and connectors.
@@ -116,6 +137,27 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 4. **Direct Functions**: Each command maps to a simple function
 5. **Zero Manager Dependencies**: No complex inter-manager communications
 
+### 🚨 CRITICAL: Script Execution Rules 🚨
+**ALWAYS execute scripts from first line to last line**
+
+When an entity arrives at a block (including creation):
+1. **Execute the ENTIRE script** - From first line to last line
+2. **Go to commands do NOT stop execution** - Movement is requested but script continues
+3. **All blocks behave identically** - Force execution blocks follow same rules
+4. **No special cases** - Every block executes its full script on entity arrival
+
+**Example:**
+```
+delay 10
+go to 다음블록
+신호A = true    // This MUST execute even after go to
+```
+
+**Force Execution:**
+- Only difference: Can start without an entity
+- Still executes entire script from start to finish
+- When entity is created, it continues with that entity
+
 ### Frontend Architecture
 **Key Components:**
 - `App.vue` - Main application orchestrator
@@ -147,6 +189,9 @@ go to 블록명.커넥터명,3           # Move with 3s transit delay
 go from 커넥터명 to 블록명.커넥터명,3  # Move from specific connector (recommended)
 jump to 1                         # Jump to line 1
 // comment                        # Comment line
+create entity                     # Create new entity (force execution blocks)
+dispose entity                    # Remove entity from simulation
+force execution                   # Enable block to run without entities
 
 # Entity Attribute Commands (NEW)
 product type += flip(red)         # Add 'flip' attribute and set color to red
@@ -161,6 +206,16 @@ if product type = flip            # Check single attribute
 if product type = flip or 1c      # Check OR condition
 if product type = flip and 1c     # Check AND condition
 if product type = transit         # Check transit state
+if product type = normal          # Check normal state (NEW)
+if product type != transit        # Check NOT transit state (NEW)
+if product type != flip           # Check NOT having attribute (NEW)
+
+# Mixed Signal and Attribute Conditions (NEW)
+if A = true and product type = flip      # Signal AND attribute
+if A = true or product type = flip       # Signal OR attribute
+if A = true and product type != transit  # Signal AND NOT transit
+wait A = true and product type = normal  # Wait for signal AND normal state
+wait A = true or product type != transit # Wait for signal OR NOT transit
 
 wait product type = transit       # Wait for transit state
 wait product type = flip          # Wait for attribute
@@ -398,3 +453,18 @@ if 공정2 load enable = true
   - Temporary position mapping (`temporaryConnectorPositions`) for seamless UI updates
   - Constraint and snap algorithm for automatic edge alignment
   - Real-time connection line updates during drag operations
+
+### 2025-06-06: Advanced Conditional Logic Support ✅
+- **Mixed Conditions**: Full support for combining signals and entity attributes
+  - `if/wait A = true and product type = flip` - Signal AND attribute conditions
+  - `if/wait A = true or product type != transit` - Signal OR NOT conditions
+  - `if/wait signal = true and product type = normal` - Normal state checks
+- **NOT Operator**: Added != operator for negative conditions
+  - `if product type != transit` - Check entity is NOT in transit
+  - `if product type != flip` - Check entity does NOT have attribute
+  - Works in both if and wait commands
+- **Implementation Details**:
+  - Unified condition evaluation in `execute_if` method
+  - `execute_wait` delegates all condition checks to `execute_if`
+  - Recursive evaluation supports nested mixed conditions
+  - Maintains backward compatibility with existing scripts

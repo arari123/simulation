@@ -327,6 +327,18 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
     else if (line.includes('product type +=') || line.includes('product type -=')) {
       // product type 명령은 항상 유효함
     }
+    else if (lowerLine === 'create entity') {
+      // create entity 명령은 항상 유효함
+    }
+    else if (lowerLine === 'dispose entity') {
+      // dispose entity 명령은 항상 유효함
+    }
+    else if (lowerLine === 'force execution') {
+      // force execution 명령은 첫 번째 줄에만 유효함
+      if (lineNum !== 1) {
+        errors.push(`라인 ${lineNum}: "force execution"은 첫 번째 줄에만 사용할 수 있습니다`)
+      }
+    }
     else {
       errors.push(`라인 ${lineNum}: 인식되지 않는 명령어 "${line}"`)
     }
@@ -351,9 +363,12 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
   const hasIfStatement = lines.some(line => line.trim().toLowerCase().startsWith('if '))
   const hasProductType = lines.some(line => line.includes('product type +=') || line.includes('product type -='))
   const hasLog = lines.some(line => line.trim().toLowerCase().startsWith('log '))
+  const hasCreateEntity = lines.some(line => line.trim().toLowerCase() === 'create entity')
+  const hasDisposeEntity = lines.some(line => line.trim().toLowerCase() === 'dispose entity')
+  const hasForceExecution = lines.some(line => line.trim().toLowerCase() === 'force execution')
   
-  // If script contains complex wait, if statements, product type, or log commands, treat entire script as script type
-  if (hasComplexWait || hasIfStatement || hasProductType || hasLog) {
+  // If script contains complex wait, if statements, product type, log, create entity, dispose entity, or force execution commands, treat entire script as script type
+  if (hasComplexWait || hasIfStatement || hasProductType || hasLog || hasCreateEntity || hasDisposeEntity || hasForceExecution) {
     actions.push({
       id: `script-action-${actionCounter++}`,
       name: '스크립트 실행',

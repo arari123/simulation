@@ -163,6 +163,11 @@ def reset_simulation_endpoint():
     """시뮬레이션 리셋"""
     try:
         logger.info("🔄 새로운 단순 엔진 리셋")
+        
+        # 로그 파일 초기화
+        from ..logger_config import reset_log_file
+        reset_log_file()
+        
         engine_adapter.reset_simulation()
         
         logger.info("✅ 새로운 단순 엔진 리셋 완료")

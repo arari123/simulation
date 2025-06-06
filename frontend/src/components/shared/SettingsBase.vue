@@ -153,6 +153,13 @@
         >
           🗑️ 커넥터 삭제
         </button>
+        <button 
+          v-if="entityType === 'block'" 
+          @click="handleDeleteBlock" 
+          class="delete-block-btn"
+        >
+          🗑️ 블록 삭제
+        </button>
       </div>
       <div class="footer-right">
         <button @click="handleSave" class="save-btn">저장</button>
@@ -192,7 +199,7 @@ const props = defineProps({
 })
 
 // Emits 정의
-const emit = defineEmits(['close', 'save', 'nameChange', 'maxCapacityChange', 'connectorAdd', 'deleteConnector'])
+const emit = defineEmits(['close', 'save', 'nameChange', 'maxCapacityChange', 'connectorAdd', 'deleteConnector', 'deleteBlock'])
 
 // 상태 관리
 const localName = ref(props.initialName)
@@ -429,6 +436,14 @@ function handleDeleteConnector() {
   
   if (confirm(confirmMessage)) {
     emit('deleteConnector')
+  }
+}
+
+function handleDeleteBlock() {
+  const confirmMessage = `"${localName.value}" 블록을 정말 삭제하시겠습니까?\n\n삭제하면 다음 항목들이 함께 제거됩니다:\n- 이 블록의 모든 액션과 커넥터\n- 이 블록과 연결된 모든 연결선\n- 다른 블록에서 이 블록을 참조하는 스크립트에 오류가 발생할 수 있습니다\n\n이 작업은 되돌릴 수 없습니다.`
+  
+  if (confirm(confirmMessage)) {
+    emit('deleteBlock')
   }
 }
 
@@ -791,7 +806,7 @@ watch(() => props.initialMaxCapacity, (newCapacity) => {
   cursor: pointer;
 }
 
-.delete-connector-btn {
+.delete-connector-btn, .delete-block-btn {
   padding: 8px 16px;
   background: #dc3545;
   color: white;
@@ -802,7 +817,7 @@ watch(() => props.initialMaxCapacity, (newCapacity) => {
   transition: background-color 0.2s;
 }
 
-.delete-connector-btn:hover {
+.delete-connector-btn:hover, .delete-block-btn:hover {
   background: #c82333;
 }
 </style> 

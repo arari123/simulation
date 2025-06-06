@@ -126,14 +126,10 @@ class SimpleSimulationEngine:
             max_capacity=max_capacity
         )
         
-        # 블록 타입 설정
-        if block_config.get('type') == 'source' or block_name in ['투입', 'Source']:
-            block.set_as_source(block_config.get('generation_interval', 1.0))
-        elif block_config.get('type') == 'sink' or block_name in ['배출', 'Sink']:
-            block.set_as_sink()
+        # 블록 타입 설정 제거 - 모든 블록이 동일하게 동작
         
         self.blocks[block_id] = block
-        logger.info(f"Created block: {block_name}({block_id}) - Source: {block.is_source}, Sink: {block.is_sink}")
+        logger.info(f"Created block: {block_name}({block_id})")
     
     def _convert_actions_to_script(self, actions: List[Any]) -> List[str]:
         """기존 actions를 스크립트로 변환"""

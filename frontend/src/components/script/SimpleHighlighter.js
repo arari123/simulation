@@ -18,7 +18,7 @@ const tokenPatterns = [
   { regex: /\b\d+(\.\d+)?\b/g, class: 'cm-number' },
   
   // 키워드 (명령어)
-  { regex: /\b(delay|wait|if|go|jump|log|product|type)\b/g, class: 'cm-keyword' },
+  { regex: /\b(delay|wait|if|go|jump|log|create|dispose|force|execution|entity|product|type)\b/g, class: 'cm-keyword' },
   
   // 연산자와 논리 연산자
   { regex: /\b(and|or)\b/g, class: 'cm-operator' },

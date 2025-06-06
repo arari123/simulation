@@ -199,6 +199,10 @@ class SimpleEngineAdapter:
     
     def reset_simulation(self):
         """시뮬레이션 리셋"""
+        # 스크립트 상태 초기화
+        from .script_state_manager import script_state_manager
+        script_state_manager.reset_all()
+        
         self.engine.reset()
         self.step_counter = 0
     

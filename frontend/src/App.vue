@@ -457,6 +457,20 @@ function handleExportConfiguration() {
 
 function handleImportConfiguration(config) {
   try {
+    // 설정을 sessionStorage에 저장
+    sessionStorage.setItem('pendingImportConfig', JSON.stringify(config));
+    
+    // 페이지 새로고침
+    window.location.reload();
+  } catch (error) {
+    console.error('[App] 설정 저장 실패:', error);
+    alert('설정 저장 중 오류가 발생했습니다: ' + error.message);
+  }
+}
+
+// 실제 설정 적용 함수
+function applyImportedConfiguration(config) {
+  try {
     if (config.blocks) {
       // 블록 로드 시 script 필드가 있으면 script 타입 액션으로 변환
       blocks.value = config.blocks.map(block => {
@@ -524,6 +538,9 @@ function handleImportConfiguration(config) {
     if (config.settings) {
       currentSettings.value = { ...currentSettings.value, ...config.settings };
     }
+    
+    // 설정 적용 후 자동 연결 새로고침
+    refreshAllAutoConnections();
   } catch (error) {
     console.error('[App] 설정 가져오기 실패:', error);
     alert('설정 적용 중 오류가 발생했습니다: ' + error.message);
@@ -550,7 +567,25 @@ function toggleDebugInfo() {
 
 // 컴포넌트 마운트 시 초기화
 onMounted(() => {
-  setupInitialScenario()
+  // 대기 중인 import config가 있는지 확인
+  const pendingConfig = sessionStorage.getItem('pendingImportConfig')
+  if (pendingConfig) {
+    try {
+      const config = JSON.parse(pendingConfig)
+      // sessionStorage에서 삭제
+      sessionStorage.removeItem('pendingImportConfig')
+      // 설정 적용
+      applyImportedConfiguration(config)
+      console.log('[App] 저장된 설정을 적용했습니다.')
+    } catch (error) {
+      console.error('[App] 저장된 설정 적용 실패:', error)
+      // 실패 시에도 기본 시나리오 설정
+      setupInitialScenario()
+    }
+  } else {
+    // 대기 중인 설정이 없으면 기본 시나리오 설정
+    setupInitialScenario()
+  }
   
   // 창 크기 변경 감지
   const updateWindowSize = () => {

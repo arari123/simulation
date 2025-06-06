@@ -11,11 +11,11 @@
       "script": "wait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\tgo to 공정1.L,10\nif 공정2 load enable = true\n\t공정2 load enable = false\n\tgo to 공정2.L,10",
       "actions": [
         {
-          "id": "script-1749043694556",
+          "id": "script-1749192460568",
           "name": "스크립트",
           "type": "script",
           "parameters": {
-            "script": "wait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\tgo from R to 공정1.L,3\nif 공정2 load enable = true\n\t공정2 load enable = false\n\tgo from R to 공정2.L,3"
+            "script": "force execution\ncreate entity\nwait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\tgo from R to 공정1.L,3\nif 공정2 load enable = true\n\t공정2 load enable = false\n\tgo from R to 공정2.L,3"
           }
         }
       ],
@@ -76,17 +76,11 @@
       "script": "// 싱크 블록 - 엔티티 자동 처리",
       "actions": [
         {
-          "id": "b3-act1",
-          "name": "제품 배출 처리",
-          "type": "custom_sink",
-          "parameters": {}
-        },
-        {
-          "id": "script-action-1749043639076",
-          "name": "스크립트 실행",
+          "id": "script-1749183163154",
+          "name": "스크립트",
           "type": "script",
           "parameters": {
-            "script": "// 싱크 블록 - 엔티티 자동 처리"
+            "script": "dispose entity"
           }
         }
       ],

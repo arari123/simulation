@@ -16,6 +16,7 @@
     @name-change="handleNameChange"
     @max-capacity-change="handleMaxCapacityChange"
     @connector-add="handleConnectorAdd"
+    @delete-block="$emit('delete-block', blockData.id)"
   />
 </template>
 

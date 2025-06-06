@@ -480,7 +480,7 @@ export function useBlocks() {
       
       // 관련 연결선 제거
       connections.value = connections.value.filter(conn => 
-        String(conn.startBlockId) !== String(blockId) && String(conn.endBlockId) !== String(blockId)
+        String(conn.from_block_id) !== String(blockId) && String(conn.to_block_id) !== String(blockId)
       )
       
       // 설정창 닫기
@@ -489,6 +489,8 @@ export function useBlocks() {
         selectedBlockId.value = null
       }
       
+      // 자동 연결 새로고침
+      refreshAllAutoConnections()
     }
   }
 
