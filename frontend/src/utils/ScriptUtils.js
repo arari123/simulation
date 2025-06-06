@@ -7,6 +7,53 @@ function removeComment(line) {
   return line.trim()
 }
 
+// 단일 wait/if 조건 검증 헬퍼 함수
+function validateSingleWaitCondition(condition, lineNum, errors, allSignals) {
+  // 정수 비교 연산자 확인
+  const intOperators = ['>=', '<=', '!=', '>', '<', '=']
+  let hasOperator = false
+  let usedOperator = null
+  
+  for (const op of intOperators) {
+    if (condition.includes(` ${op} `)) {
+      hasOperator = true
+      usedOperator = op
+      break
+    }
+  }
+  
+  if (!hasOperator) {
+    errors.push(`라인 ${lineNum}: 잘못된 조건 형식 "${condition}" (예: 신호명 = true 또는 counter > 5)`)
+    return
+  }
+  
+  const parts = condition.split(` ${usedOperator} `)
+  if (parts.length === 2) {
+    const leftSide = parts[0].trim()
+    const rightSide = parts[1].trim()
+    
+    // 정수 비교인지 확인 (값이 숫자이거나 변수명인 경우)
+    if (/^-?\d+$/.test(rightSide) || /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(rightSide)) {
+      // 정수 비교 - 추가 검증 없음 (런타임에 확인)
+      return
+    }
+    
+    // 불린 비교
+    if (usedOperator === '=') {
+      const value = rightSide.toLowerCase()
+      
+      // 신호 이름 유효성 검사
+      if (allSignals && allSignals.length > 0 && !allSignals.includes(leftSide)) {
+        errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${leftSide}"`)
+      }
+      
+      if (value !== 'true' && value !== 'false') {
+        errors.push(`라인 ${lineNum}: 신호 값은 true 또는 false여야 합니다`)
+      }
+    }
+  }
+}
+
 // 스크립트 검증 함수
 export function validateScript(script, allSignals, allBlocks, currentBlock, entityType) {
   const errors = []
@@ -43,7 +90,35 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
         errors.push(`라인 ${lineNum}: jump to 대상이 지정되지 않았습니다`)
       }
     }
-    else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ')) {
+    else if (lowerLine.startsWith('int ')) {
+      // int 변수명 연산자 값 형식 검증
+      const intMatch = line.match(/^int\s+(\w+)\s*([\+\-\*\/]?=)\s*(.+)$/)
+      
+      if (!intMatch) {
+        errors.push(`라인 ${lineNum}: 잘못된 int 명령어 형식 (예: int counter += 5)`)
+      } else {
+        const varName = intMatch[1]
+        const operator = intMatch[2]
+        const value = intMatch[3].trim()
+        
+        // 연산자 유효성 검사
+        const validOperators = ['=', '+=', '-=', '*=', '/=']
+        if (!validOperators.includes(operator)) {
+          errors.push(`라인 ${lineNum}: 잘못된 연산자 "${operator}" (사용 가능: =, +=, -=, *=, /=)`)
+        }
+        
+        // 값 유효성 검사 - 숫자 또는 변수명
+        if (!/^-?\d+$/.test(value) && !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) {
+          errors.push(`라인 ${lineNum}: 잘못된 값 "${value}" (정수 또는 변수명이어야 합니다)`)
+        }
+        
+        // 0으로 나누기 검사
+        if (operator === '/=' && value === '0') {
+          errors.push(`라인 ${lineNum}: 0으로 나눌 수 없습니다`)
+        }
+      }
+    }
+    else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !lowerLine.startsWith('int ')) {
       const parts = line.split(' = ')
       if (parts.length !== 2) {
         errors.push(`라인 ${lineNum}: 잘못된 신호 설정 형식 (예: 신호명 = true)`)
@@ -72,69 +147,18 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
       else if (waitPart.toLowerCase().includes(' and ')) {
         const conditions = waitPart.split(/\s+and\s+/i)
         for (const condition of conditions) {
-          if (!condition.includes(' = ')) {
-            errors.push(`라인 ${lineNum}: 잘못된 대기 조건 형식 "${condition}" (예: 신호명 = true)`)
-          } else {
-            const parts = condition.trim().split(' = ')
-            if (parts.length === 2) {
-              const signalName = parts[0].trim()
-              const value = parts[1].trim().toLowerCase()
-              
-              // 신호 이름 유효성 검사
-              if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
-                errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
-              }
-              
-              if (value !== 'true' && value !== 'false') {
-                errors.push(`라인 ${lineNum}: 신호 값은 true 또는 false여야 합니다`)
-              }
-            }
-          }
+          validateSingleWaitCondition(condition.trim(), lineNum, errors, allSignals)
         }
       }
       // OR 조건 처리
       else if (waitPart.toLowerCase().includes(' or ')) {
         const conditions = waitPart.split(/\s+or\s+/i)
         for (const condition of conditions) {
-          if (!condition.includes(' = ')) {
-            errors.push(`라인 ${lineNum}: 잘못된 대기 조건 형식 "${condition}" (예: 신호명 = true)`)
-          } else {
-            const parts = condition.trim().split(' = ')
-            if (parts.length === 2) {
-              const signalName = parts[0].trim()
-              const value = parts[1].trim().toLowerCase()
-              
-              // 신호 이름 유효성 검사
-              if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
-                errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
-              }
-              
-              if (value !== 'true' && value !== 'false') {
-                errors.push(`라인 ${lineNum}: 신호 값은 true 또는 false여야 합니다`)
-              }
-            }
-          }
+          validateSingleWaitCondition(condition.trim(), lineNum, errors, allSignals)
         }
       } else {
         // Simple wait condition
-        if (!waitPart.includes(' = ')) {
-          errors.push(`라인 ${lineNum}: 잘못된 대기 형식 (예: wait 신호명 = true)`)
-        } else {
-          const parts = waitPart.split(' = ')
-          if (parts.length === 2) {
-            const signalName = parts[0].trim()
-            const value = parts[1].trim().toLowerCase()
-            
-            // 신호 이름 유효성 검사
-            if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
-              errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
-            }
-            
-            if (value !== 'true' && value !== 'false') {
-              errors.push(`라인 ${lineNum}: 신호 값은 true 또는 false여야 합니다`)
-            }
-          }
-        }
+        validateSingleWaitCondition(waitPart, lineNum, errors, allSignals)
       }
     }
     else if (lowerLine.startsWith('go from ')) {
@@ -281,40 +305,22 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
         // product type 조건은 항상 유효함
       }
       // AND 조건 처리
-      else if (condition.includes(' and ') && condition.includes(' = ')) {
-        const conditions = condition.split(' and ')
+      else if (condition.toLowerCase().includes(' and ')) {
+        const conditions = condition.split(/\s+and\s+/i)
         for (const cond of conditions) {
-          const condParts = cond.trim().split(' = ')
-          if (condParts.length === 2) {
-            const signalName = condParts[0].trim()
-            if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
-              errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
-            }
-          }
+          validateSingleWaitCondition(cond.trim(), lineNum, errors, allSignals)
         }
       }
       // OR 조건 처리
-      else if (condition.includes(' or ') && condition.includes(' = ')) {
-        const conditions = condition.split(' or ')
+      else if (condition.toLowerCase().includes(' or ')) {
+        const conditions = condition.split(/\s+or\s+/i)
         for (const cond of conditions) {
-          const condParts = cond.trim().split(' = ')
-          if (condParts.length === 2) {
-            const signalName = condParts[0].trim()
-            if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
-              errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
-            }
-          }
+          validateSingleWaitCondition(cond.trim(), lineNum, errors, allSignals)
         }
       }
       // 단일 조건
-      else if (condition.includes(' = ')) {
-        const parts = condition.split(' = ')
-        if (parts.length === 2) {
-          const signalName = parts[0].trim()
-          if (allSignals && allSignals.length > 0 && !allSignals.includes(signalName)) {
-            errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
-          }
-        }
+      else {
+        validateSingleWaitCondition(condition, lineNum, errors, allSignals)
       }
     }
     else if (lowerLine.startsWith('log ')) {
@@ -366,9 +372,10 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
   const hasCreateEntity = lines.some(line => line.trim().toLowerCase() === 'create entity')
   const hasDisposeEntity = lines.some(line => line.trim().toLowerCase() === 'dispose entity')
   const hasForceExecution = lines.some(line => line.trim().toLowerCase() === 'force execution')
+  const hasIntCommand = lines.some(line => line.trim().toLowerCase().startsWith('int '))
   
-  // If script contains complex wait, if statements, product type, log, create entity, dispose entity, or force execution commands, treat entire script as script type
-  if (hasComplexWait || hasIfStatement || hasProductType || hasLog || hasCreateEntity || hasDisposeEntity || hasForceExecution) {
+  // If script contains complex wait, if statements, product type, log, create entity, dispose entity, force execution, or int commands, treat entire script as script type
+  if (hasComplexWait || hasIfStatement || hasProductType || hasLog || hasCreateEntity || hasDisposeEntity || hasForceExecution || hasIntCommand) {
     actions.push({
       id: `script-action-${actionCounter++}`,
       name: '스크립트 실행',
@@ -408,7 +415,35 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
         parameters: { target: target }
       })
     }
-    else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ')) {
+    else if (lowerLine.startsWith('int ')) {
+      // int 연산 액션 파싱
+      const intMatch = line.match(/^int\s+(\w+)\s*([\+\-\*\/]?=)\s*(.+)$/)
+      
+      if (!intMatch) {
+        actions.push({
+          id: `script-action-${actionCounter++}`,
+          name: `❌ 오류: ${line}`,
+          type: 'script_error',
+          parameters: { 
+            originalLine: line,
+            lineNumber: lineNumber,
+            error: '잘못된 int 명령어 형식'
+          }
+        })
+      } else {
+        const varName = intMatch[1]
+        const operator = intMatch[2]
+        const value = intMatch[3].trim()
+        
+        actions.push({
+          id: `script-action-${actionCounter++}`,
+          name: `정수 변수: ${varName} ${operator} ${value}`,
+          type: 'script',
+          parameters: { script: line }
+        })
+      }
+    }
+    else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !lowerLine.startsWith('int ')) {
       const [signalName, value] = line.split(' = ').map(s => s.trim())
       actions.push({
         id: `script-action-${actionCounter++}`,

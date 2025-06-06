@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Any, Generator
 from .simple_block import IndependentBlock
 from .simple_entity import SimpleEntity
 from .simple_signal_manager import SimpleSignalManager
+from .core.integer_variable_manager import IntegerVariableManager
+from .core.unified_variable_accessor import UnifiedVariableAccessor
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -19,6 +21,8 @@ class SimpleSimulationEngine:
         self.env: Optional[simpy.Environment] = None
         self.blocks: Dict[str, IndependentBlock] = {}
         self.signal_manager = SimpleSignalManager()
+        self.integer_manager = IntegerVariableManager()
+        self.variable_accessor = UnifiedVariableAccessor(self.signal_manager, self.integer_manager)
         self.entity_queue: Optional[simpy.Store] = None
         
         # 시뮬레이션 상태
@@ -36,6 +40,7 @@ class SimpleSimulationEngine:
         self.env = None
         self.blocks.clear()
         self.signal_manager.reset()
+        self.integer_manager.reset()
         self.entity_queue = None
         self.step_count = 0
         self.total_entities_created = 0
@@ -50,6 +55,10 @@ class SimpleSimulationEngine:
         # 신호 초기화
         if 'initial_signals' in config:
             self.signal_manager.initialize_signals(config['initial_signals'])
+        
+        # 전역 신호/변수 초기화 (통합 형식)
+        if 'globalSignals' in config:
+            self.variable_accessor.initialize_from_config(config['globalSignals'])
         
         # 블록 생성
         for block_config in config.get('blocks', []):
@@ -123,7 +132,9 @@ class SimpleSimulationEngine:
             block_name=block_name,
             script_lines=script_lines,
             signal_manager=self.signal_manager,
-            max_capacity=max_capacity
+            max_capacity=max_capacity,
+            integer_manager=self.integer_manager,
+            variable_accessor=self.variable_accessor
         )
         
         # 블록 타입 설정 제거 - 모든 블록이 동일하게 동작
@@ -340,9 +351,13 @@ class SimpleSimulationEngine:
         # 신호 상태
         signal_states = self.signal_manager.get_all_signals()
         
+        # 전역 신호/변수 (통합 형식)
+        global_signals = self.variable_accessor.to_config_format()
+        
         return {
             'block_states': block_states,
             'current_signals': signal_states,
+            'globalSignals': global_signals,
             'total_entities_in_system': total_entities,
             'total_entities_processed': total_processed,
             'blocks_info': [block.get_status() for block in self.blocks.values()],
@@ -373,7 +388,10 @@ class SimpleSimulationEngine:
     def get_simulation_status(self) -> Dict[str, Any]:
         """현재 시뮬레이션 상태 반환"""
         if not self.env:
-            return {'status': 'not_initialized'}
+            return {
+                'status': 'not_initialized',
+                'globalSignals': self.variable_accessor.to_config_format()
+            }
         
         return {
             'status': 'running',
@@ -381,5 +399,6 @@ class SimpleSimulationEngine:
             'step_count': self.step_count,
             'blocks_count': len(self.blocks),
             'signals': self.signal_manager.get_all_signals(),
+            'globalSignals': self.variable_accessor.to_config_format(),
             'blocks': [block.get_status() for block in self.blocks.values()]
         }

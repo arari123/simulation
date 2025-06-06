@@ -15,7 +15,7 @@ class IndependentBlock:
     """완전 독립적인 블록 객체"""
     
     def __init__(self, block_id: str, block_name: str, script_lines: List[str], 
-                 signal_manager=None, max_capacity: int = 100):
+                 signal_manager=None, max_capacity: int = 100, integer_manager=None, variable_accessor=None):
         self.id = block_id
         self.name = block_name
         self.script_lines = script_lines
@@ -23,7 +23,7 @@ class IndependentBlock:
         self.max_capacity = max_capacity
         
         # 스크립트 실행기
-        self.script_executor = SimpleScriptExecutor(signal_manager)
+        self.script_executor = SimpleScriptExecutor(signal_manager, integer_manager, variable_accessor)
         
         # 블록 상태
         self.entities_in_block: List[SimpleEntity] = []
@@ -160,7 +160,7 @@ class IndependentBlock:
                     while current_line < len(self.script_lines):
                         line = self.script_lines[current_line]
                         # 들여쓰기가 없으면 if 블록 종료
-                        if not line.startswith('\t') and not line.startswith('    '):
+                        if not line.startswith('\t') and not line.startswith('    ') and not line.startswith('  '):
                             break
                         
                         stripped_line = line.strip()
@@ -259,7 +259,7 @@ class IndependentBlock:
                 continue
             
             # 들여쓰기가 있으면 스킵, 없으면 종료
-            if line.startswith('\t') or line.startswith('    '):
+            if line.startswith('\t') or line.startswith('    ') or line.startswith('  '):
                 current_line += 1
             else:
                 break

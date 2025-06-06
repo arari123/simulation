@@ -9,11 +9,11 @@ import { tags as t } from '@lezer/highlight'
 // 시뮬레이션 스크립트 키워드 정의
 const simulationKeywords = [
   'delay', 'wait', 'if', 'go', 'to', 'from', 'jump', 'log', 'product', 'type',
-  'and', 'or', 'true', 'false', 'create', 'entity', 'dispose', 'force', 'execution'
+  'and', 'or', 'true', 'false', 'create', 'entity', 'dispose', 'force', 'execution', 'int'
 ]
 
 // 연산자 정의
-const simulationOperators = ['=', '+=', '-=', ',']
+const simulationOperators = ['>=', '<=', '!=', '=', '+=', '-=', '*=', '/=', '>', '<', ',']
 
 /**
  * 시뮬레이션 스크립트 언어 파서 정의
@@ -56,7 +56,7 @@ const simulationScriptParser = {
       // 키워드 확인
       if (simulationKeywords.includes(wordStr)) {
         // 특별한 키워드들에 대한 추가 분류
-        if (['delay', 'wait', 'if', 'go', 'jump', 'log', 'create', 'dispose', 'force'].includes(wordStr)) {
+        if (['delay', 'wait', 'if', 'go', 'jump', 'log', 'create', 'dispose', 'force', 'int'].includes(wordStr)) {
           return 'keyword'
         }
         if (['and', 'or'].includes(wordStr)) {

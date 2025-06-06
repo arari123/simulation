@@ -56,7 +56,11 @@ function validateScriptLine(line, lowerLine, lineNum, props) {
       errors.push(`라인 ${lineNum}: jump to 대상이 지정되지 않았습니다`)
     }
   }
-  else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !line.trim().toLowerCase().startsWith('log ')) {
+  else if (lowerLine.startsWith('int ')) {
+    const intErrors = validateIntOperation(line, lineNum, props)
+    errors.push(...intErrors)
+  }
+  else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !line.trim().toLowerCase().startsWith('log ') && !lowerLine.startsWith('int ')) {
     const signalErrors = validateSignalAssignment(line, lineNum, props)
     errors.push(...signalErrors)
   }
@@ -81,6 +85,43 @@ function validateScriptLine(line, lowerLine, lineNum, props) {
   }
   else {
     errors.push(`라인 ${lineNum}: 인식되지 않는 명령어 "${line}"`)
+  }
+  
+  return errors
+}
+
+/**
+ * 정수 변수 연산 검증
+ */
+function validateIntOperation(line, lineNum, props) {
+  const errors = []
+  
+  // int 변수명 연산자 값 형식 파싱
+  const intMatch = line.match(/^int\s+(\w+)\s*([\+\-\*\/]?=)\s*(.+)$/)
+  
+  if (!intMatch) {
+    errors.push(`라인 ${lineNum}: 잘못된 int 명령어 형식 (예: int counter += 5)`)
+    return errors
+  }
+  
+  const varName = intMatch[1]
+  const operator = intMatch[2]
+  const value = intMatch[3].trim()
+  
+  // 연산자 유효성 검사
+  const validOperators = ['=', '+=', '-=', '*=', '/=']
+  if (!validOperators.includes(operator)) {
+    errors.push(`라인 ${lineNum}: 잘못된 연산자 "${operator}" (사용 가능: =, +=, -=, *=, /=)`)
+  }
+  
+  // 값 유효성 검사 - 숫자 또는 변수명
+  if (!/^-?\d+$/.test(value) && !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) {
+    errors.push(`라인 ${lineNum}: 잘못된 값 "${value}" (정수 또는 변수명이어야 합니다)`)
+  }
+  
+  // 0으로 나누기 검사
+  if (operator === '/=' && value === '0') {
+    errors.push(`라인 ${lineNum}: 0으로 나눌 수 없습니다`)
   }
   
   return errors
@@ -158,17 +199,42 @@ function validateWaitStatement(line, lineNum, props) {
 function validateSingleWaitCondition(condition, lineNum, props) {
   const errors = []
   
-  if (!condition.includes(' = ')) {
-    errors.push(`라인 ${lineNum}: 잘못된 대기 형식 (예: wait 신호명 = true)`)
-  } else {
-    const parts = condition.split(' = ')
-    if (parts.length === 2) {
-      const signalName = parts[0].trim()
-      const value = parts[1].trim().toLowerCase()
+  // 정수 비교 연산자 확인
+  const intOperators = ['>=', '<=', '!=', '>', '<', '=']
+  let hasIntOperator = false
+  let usedOperator = null
+  
+  for (const op of intOperators) {
+    if (condition.includes(` ${op} `)) {
+      hasIntOperator = true
+      usedOperator = op
+      break
+    }
+  }
+  
+  if (!hasIntOperator) {
+    errors.push(`라인 ${lineNum}: 잘못된 대기 형식 (예: wait 신호명 = true 또는 wait counter > 5)`)
+    return errors
+  }
+  
+  const parts = condition.split(` ${usedOperator} `)
+  if (parts.length === 2) {
+    const leftSide = parts[0].trim()
+    const rightSide = parts[1].trim()
+    
+    // 정수 비교인지 확인 (값이 숫자이거나 변수명인 경우)
+    if (/^-?\d+$/.test(rightSide) || /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(rightSide)) {
+      // 정수 비교 - 추가 검증 없음 (런타임에 확인)
+      return errors
+    }
+    
+    // 불린 비교
+    if (usedOperator === '=') {
+      const value = rightSide.toLowerCase()
       
       // 신호 이름 유효성 검사
-      if (props.allSignals && props.allSignals.length > 0 && !props.allSignals.includes(signalName)) {
-        errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
+      if (props.allSignals && props.allSignals.length > 0 && !props.allSignals.includes(leftSide)) {
+        errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${leftSide}"`)
       }
       
       if (value !== 'true' && value !== 'false') {
@@ -358,14 +424,41 @@ function validateIfStatement(line, lineNum, props) {
 function validateSingleIfCondition(condition, lineNum, props) {
   const errors = []
   
-  if (condition.includes(' = ')) {
-    const parts = condition.split(' = ')
-    if (parts.length === 2) {
-      const signalName = parts[0].trim()
-      const value = parts[1].trim().toLowerCase()
+  // 정수 비교 연산자 확인
+  const intOperators = ['>=', '<=', '!=', '>', '<', '=']
+  let hasOperator = false
+  let usedOperator = null
+  
+  for (const op of intOperators) {
+    if (condition.includes(` ${op} `)) {
+      hasOperator = true
+      usedOperator = op
+      break
+    }
+  }
+  
+  if (!hasOperator) {
+    errors.push(`라인 ${lineNum}: 조건문에 비교 연산자가 없습니다`)
+    return errors
+  }
+  
+  const parts = condition.split(` ${usedOperator} `)
+  if (parts.length === 2) {
+    const leftSide = parts[0].trim()
+    const rightSide = parts[1].trim()
+    
+    // 정수 비교인지 확인 (값이 숫자이거나 변수명인 경우)
+    if (/^-?\d+$/.test(rightSide) || /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(rightSide)) {
+      // 정수 비교 - 추가 검증 없음 (런타임에 확인)
+      return errors
+    }
+    
+    // 불린 비교
+    if (usedOperator === '=') {
+      const value = rightSide.toLowerCase()
       
-      if (props.allSignals && props.allSignals.length > 0 && !props.allSignals.includes(signalName)) {
-        errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${signalName}"`)
+      if (props.allSignals && props.allSignals.length > 0 && !props.allSignals.includes(leftSide)) {
+        errors.push(`라인 ${lineNum}: 존재하지 않는 신호 "${leftSide}"`)
       }
       
       if (value !== 'true' && value !== 'false') {
@@ -435,7 +528,10 @@ function parseScriptLineToAction(line, lowerLine, lineNumber, actionCounter, pro
   else if (lowerLine.startsWith('jump to ')) {
     return parseJumpAction(line, actionCounter)
   }
-  else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ')) {
+  else if (lowerLine.startsWith('int ')) {
+    return parseIntOperationAction(line, actionCounter)
+  }
+  else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !lowerLine.startsWith('int ')) {
     return parseSignalUpdateAction(line, actionCounter)
   }
   else if (lowerLine.startsWith('wait ')) {
@@ -746,6 +842,28 @@ function parseProductTypeAction(line, actionCounter) {
   return {
     id: `script-action-${actionCounter}`,
     name: `제품 타입 ${operation}: ${params}`,
+    type: 'script',
+    parameters: { script: line }
+  }
+}
+
+/**
+ * int 연산 액션 파싱
+ */
+function parseIntOperationAction(line, actionCounter) {
+  const intMatch = line.match(/^int\s+(\w+)\s*([\+\-\*\/]?=)\s*(.+)$/)
+  
+  if (!intMatch) {
+    return parseErrorAction(line, 0, actionCounter, '잘못된 int 명령어 형식')
+  }
+  
+  const varName = intMatch[1]
+  const operator = intMatch[2]
+  const value = intMatch[3].trim()
+  
+  return {
+    id: `script-action-${actionCounter}`,
+    name: `정수 변수: ${varName} ${operator} ${value}`,
     type: 'script',
     parameters: { script: line }
   }

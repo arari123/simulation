@@ -296,8 +296,8 @@ async function handleStepSimulation() {
     alert(`시뮬레이션 실행 실패: ${result.error}`)
   } else {
     // 신호 상태 업데이트
-    if (result.result && result.result.current_signals) {
-      updateSignalsFromSimulation(result.result.current_signals)
+    if (result.result) {
+      updateSignalsFromSimulation(result.result)
     }
   }
 }
@@ -325,9 +325,7 @@ async function handleStepBasedRun(options) {
   
   await startStepBasedExecution(setupData, (result) => {
     // 신호 상태 업데이트
-    if (result.current_signals) {
-      updateSignalsFromSimulation(result.current_signals)
-    }
+    updateSignalsFromSimulation(result)
   }, options, updateBlockWarnings)
 }
 
@@ -380,11 +378,19 @@ function getSimulationSetupData() {
     initial_signals[signal.name] = signal.value
   })
   
+  // globalSignals 배열 형식도 추가 (타입 정보 포함)
+  const globalSignalsArray = globalSignals.value.map(signal => ({
+    name: signal.name,
+    type: signal.type || (typeof signal.value === 'boolean' ? 'boolean' : 'integer'),
+    value: signal.value,
+    initialValue: signal.initialValue !== undefined ? signal.initialValue : signal.value
+  }))
   
   return {
     blocks: apiBlocks,
     connections: apiConnections,
-    initial_signals,  // globalSignals 대신 initial_signals 사용
+    initial_signals,  // backward compatibility
+    globalSignals: globalSignalsArray,  // 새로운 형식 추가
     initial_entities: 1
   }
 }
@@ -531,6 +537,8 @@ function applyImportedConfiguration(config) {
       // 신호를 로드할 때 value를 initialValue로 리셋
       globalSignals.value = config.globalSignals.map(signal => ({
         ...signal,
+        // type이 없으면 값에서 추론
+        type: signal.type || (typeof signal.value === 'boolean' ? 'boolean' : 'integer'),
         // initialValue가 정의되어 있으면 그것을 사용, 아니면 기존 value 사용
         value: signal.initialValue !== undefined ? signal.initialValue : signal.value
       }));

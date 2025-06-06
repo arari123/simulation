@@ -26,8 +26,10 @@ def parse_delay_value(duration_str: str) -> float:
 class SimpleScriptExecutor:
     """단순화된 스크립트 실행기"""
     
-    def __init__(self, signal_manager=None):
+    def __init__(self, signal_manager=None, integer_manager=None, variable_accessor=None):
         self.signal_manager = signal_manager
+        self.integer_manager = integer_manager
+        self.variable_accessor = variable_accessor
         self.simulation_logs = []  # 시뮬레이션 로그 저장
         self.command_functions = {
             'delay': self.execute_delay,
@@ -41,7 +43,8 @@ class SimpleScriptExecutor:
             'product_type_remove': self.execute_product_type_remove,
             'log': self.execute_log,
             'create': self.execute_create,
-            'dispose': self.execute_dispose
+            'dispose': self.execute_dispose,
+            'int_operation': self.execute_int_operation
         }
     
     def execute_delay(self, env: simpy.Environment, delay_str: str) -> Generator:
@@ -81,6 +84,50 @@ class SimpleScriptExecutor:
         if self.signal_manager:
             current_value = self.signal_manager.get_signal(signal_name, False)
             return current_value == expected_value
+        
+        return False
+    
+    def _evaluate_integer_comparison(self, condition: str) -> bool:
+        """정수 변수 비교 조건 평가"""
+        if not self.integer_manager:
+            return False
+        
+        # 지원하는 연산자들을 긴 것부터 확인 (>= 가 > 보다 먼저)
+        operators = ['>=', '<=', '!=', '=', '>', '<']
+        
+        for op in operators:
+            if f' {op} ' in condition:
+                parts = condition.split(f' {op} ', 1)
+                if len(parts) != 2:
+                    continue
+                
+                var_name = parts[0].strip()
+                right_side = parts[1].strip()
+                
+                # 왼쪽이 정수 변수인지 확인
+                if not self.integer_manager.has_variable(var_name):
+                    continue
+                
+                # 오른쪽 값 평가
+                try:
+                    # 숫자 리터럴인 경우
+                    if right_side.lstrip('-').isdigit():
+                        compare_value = int(right_side)
+                    # 다른 변수 참조인 경우
+                    elif self.variable_accessor and self.variable_accessor.has_variable(right_side):
+                        val = self.variable_accessor.get_value(right_side)
+                        if isinstance(val, int):
+                            compare_value = val
+                        else:
+                            continue
+                    else:
+                        continue
+                    
+                    # 비교 수행
+                    return self.integer_manager.compare(var_name, op, compare_value)
+                    
+                except (ValueError, TypeError):
+                    continue
         
         return False
     
@@ -204,7 +251,7 @@ class SimpleScriptExecutor:
             else:
                 return attr_condition in entity.custom_attributes
         
-        # 일반 AND 조건 체크 (신호와 product type 혼합 지원)
+        # 일반 AND 조건 체크 (신호, product type, 정수 비교 혼합 지원)
         elif ' and ' in condition:
             conditions = condition.split(' and ')
             for cond in conditions:
@@ -213,6 +260,10 @@ class SimpleScriptExecutor:
                 if 'product type' in cond:
                     # 재귀적으로 execute_if 호출하여 product type 조건 평가
                     if not self.execute_if(env, cond, entity):
+                        return False
+                # 정수 비교 조건 확인
+                elif any(op in cond for op in ['>=', '<=', '!=', '>', '<']) or (self.integer_manager and ' = ' in cond and self.integer_manager.has_variable(cond.split(' = ')[0].strip())):
+                    if not self._evaluate_integer_comparison(cond):
                         return False
                 # 일반 신호 조건
                 elif ' = ' in cond:
@@ -223,7 +274,7 @@ class SimpleScriptExecutor:
                     return False
             return True
         
-        # 일반 신호 OR 조건 체크 (product type 조건 포함)
+        # 일반 신호 OR 조건 체크 (product type, 정수 비교 조건 포함)
         elif ' or ' in condition:
             conditions = condition.split(' or ')
             for cond in conditions:
@@ -233,15 +284,29 @@ class SimpleScriptExecutor:
                     # 재귀적으로 execute_if 호출하여 product type 조건 평가
                     if self.execute_if(env, cond, entity):
                         return True
+                # 정수 비교 조건 확인
+                elif any(op in cond for op in ['>=', '<=', '!=', '>', '<']) or (self.integer_manager and ' = ' in cond and self.integer_manager.has_variable(cond.split(' = ')[0].strip())):
+                    if self._evaluate_integer_comparison(cond):
+                        return True
                 # 일반 신호 조건
                 elif ' = ' in cond:
                     if self._evaluate_single_signal_condition(cond):
                         return True
             return False
         
-        # 기존 신호 체크 로직 (단일 조건)
+        # 정수 비교 조건 (단일)
+        elif any(op in condition for op in ['>=', '<=', '!=', '>', '<']):
+            return self._evaluate_integer_comparison(condition)
+        
+        # 기존 신호 체크 로직 (단일 조건) - 정수 변수 = 체크도 포함
         elif ' = ' in condition:
-            return self._evaluate_single_signal_condition(condition)
+            # 정수 변수인 경우 먼저 확인
+            parts = condition.split(' = ', 1)
+            var_name = parts[0].strip()
+            if self.integer_manager and self.integer_manager.has_variable(var_name):
+                return self._evaluate_integer_comparison(condition)
+            else:
+                return self._evaluate_single_signal_condition(condition)
         
         return False
     
@@ -316,9 +381,36 @@ class SimpleScriptExecutor:
         yield env.timeout(0)
     
     def execute_log(self, env: simpy.Environment, message: str, block_name: str = None) -> Generator:
-        """log 명령어 실행"""
+        """log 명령어 실행 - 변수 치환 지원"""
+        # 메시지에서 변수 참조 찾아서 치환
+        interpolated_message = message
+        
+        # 간단한 변수 치환 - "text {variable}" 형식 지원
+        if self.variable_accessor:
+            # 모든 단어를 확인하여 변수인지 체크
+            words = message.split()
+            result_words = []
+            
+            for word in words:
+                # 중괄호로 둘러싸인 경우 변수로 간주
+                if word.startswith('{') and word.endswith('}'):
+                    var_name = word[1:-1]  # 중괄호 제거
+                    value = self.variable_accessor.get_value(var_name)
+                    if value is not None:
+                        result_words.append(str(value))
+                    else:
+                        result_words.append(word)  # 변수가 없으면 원본 유지
+                # 중괄호 없이 변수명만 있는 경우도 처리 (기존 테스트 케이스 호환)
+                elif self.variable_accessor.has_variable(word):
+                    value = self.variable_accessor.get_value(word)
+                    result_words.append(str(value))
+                else:
+                    result_words.append(word)
+            
+            interpolated_message = ' '.join(result_words)
+        
         timestamp = f"{env.now:.1f}"
-        log_entry = f"[{timestamp}s] {f'[{block_name}]' if block_name else ''} {message}"
+        log_entry = f"[{timestamp}s] {f'[{block_name}]' if block_name else ''} {interpolated_message}"
         
         # 백엔드 로그
         logger.info(f"시뮬레이션 로그: {log_entry}")
@@ -328,7 +420,7 @@ class SimpleScriptExecutor:
             self.simulation_logs.append({
                 'time': env.now,
                 'block': block_name,
-                'message': message
+                'message': interpolated_message
             })
         
         yield env.timeout(0)
@@ -353,6 +445,46 @@ class SimpleScriptExecutor:
             logger.info(f"[{env.now:.1f}s] Block {block.name} disposed entity {entity.id}")
         yield env.timeout(0)
     
+    def execute_int_operation(self, env: simpy.Environment, params: Dict[str, str]) -> Generator:
+        """int 변수 산술 연산 실행"""
+        if not self.integer_manager:
+            logger.warning("Integer manager not available")
+            yield env.timeout(0)
+            return
+        
+        var_name = params['var_name']
+        operator = params['operator']
+        value_expr = params['value']
+        
+        try:
+            # 값 파싱 - 다른 변수 참조 가능
+            if value_expr.isdigit() or (value_expr.startswith('-') and value_expr[1:].isdigit()):
+                operand = int(value_expr)
+            else:
+                # 다른 변수 참조
+                if self.variable_accessor:
+                    ref_value = self.variable_accessor.get_value(value_expr)
+                    if ref_value is not None and isinstance(ref_value, int):
+                        operand = ref_value
+                    else:
+                        logger.warning(f"Cannot resolve integer value for: {value_expr}")
+                        yield env.timeout(0)
+                        return
+                else:
+                    logger.warning(f"Variable accessor not available for: {value_expr}")
+                    yield env.timeout(0)
+                    return
+            
+            # 연산 수행
+            old_value = self.integer_manager.get_variable(var_name, 0)
+            new_value = self.integer_manager.perform_operation(var_name, operator, operand)
+            logger.info(f"Integer variable '{var_name}' changed: {old_value} -> {new_value} (operator: {operator}, operand: {operand})")
+            
+        except Exception as e:
+            logger.error(f"Error executing int operation: {e}")
+        
+        yield env.timeout(0)
+    
     def parse_script_line(self, line: str) -> tuple:
         """스크립트 라인을 파싱하여 명령어와 파라미터를 반환"""
         line = line.strip()
@@ -365,8 +497,22 @@ class SimpleScriptExecutor:
         if line.startswith('delay '):
             return 'delay', line[6:].strip()
         
+        # int 변수 산술 연산 (int 변수명 += 5)
+        if line.startswith('int '):
+            # int 변수명 연산자 값 형태 파싱
+            int_match = re.match(r'^int\s+(\w+)\s*([\+\-\*\/]?=)\s*(.+)$', line)
+            if int_match:
+                var_name = int_match.group(1)
+                operator = int_match.group(2)
+                value_expr = int_match.group(3).strip()
+                return 'int_operation', {
+                    'var_name': var_name,
+                    'operator': operator,
+                    'value': value_expr
+                }
+        
         # 신호 설정 (신호명 = 값)
-        if ' = ' in line and not line.startswith('if ') and not line.startswith('wait '):
+        if ' = ' in line and not line.startswith('if ') and not line.startswith('wait ') and not line.startswith('int '):
             parts = line.split(' = ', 1)
             signal_name = parts[0].strip()
             value = parts[1].strip()
@@ -381,7 +527,6 @@ class SimpleScriptExecutor:
         if line.startswith('go from '):
             # go from R to 공정1.L,3 형태 파싱
             go_from_pattern = r'^go\s+from\s+([^\s]+)\s+to\s+(.+)$'
-            import re
             match = re.match(go_from_pattern, line, re.IGNORECASE)
             if match:
                 from_connector = match.group(1).strip()
@@ -504,6 +649,9 @@ class SimpleScriptExecutor:
             # force execution은 아무것도 하지 않음
             yield env.timeout(0)
             return 'continue'
+        
+        elif command == 'int_operation':
+            yield from self.execute_int_operation(env, params)
         
         else:
             logger.warning(f"Unknown command: {command}")

@@ -45,6 +45,7 @@ class SimulationSetup(BaseModel):
     stop_entities_processed: Optional[int] = None # Or run until this many entities are processed by a designated "sink"
     initial_signals: Optional[Dict[str, bool]] = None # 전역 신호 초기값
     signals: Optional[Dict[str, bool]] = None # 호환성을 위한 signals 필드 추가
+    globalSignals: Optional[List[Dict[str, Any]]] = None # 타입 정보를 포함한 전역 변수/신호
     
     def __init__(self, **data):
         super().__init__(**data)
@@ -68,6 +69,7 @@ class SimulationStepResult(BaseModel):
     entities_processed_total: int
     active_entities: List[EntityState] = [] # 활성 엔티티 상태 추가
     current_signals: Optional[Dict[str, bool]] = None # 현재 신호값들 추가
+    globalSignals: Optional[List[Dict[str, Any]]] = None # 타입 정보를 포함한 전역 변수/신호
 
 class SimulationRunResult(BaseModel): # 전체 실행 결과 모델
     message: str

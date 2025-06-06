@@ -1,0 +1,136 @@
+{
+  "globalSignals": [
+    {
+      "name": "start",
+      "type": "boolean",
+      "value": true
+    },
+    {
+      "name": "counter",
+      "type": "integer",
+      "value": 0
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "value": 10
+    },
+    {
+      "name": "done",
+      "type": "boolean",
+      "value": false
+    }
+  ],
+  "blocks": [
+    {
+      "id": "source",
+      "name": "Source",
+      "x": 100,
+      "y": 100,
+      "type": "source",
+      "capacity": 1,
+      "connectionPoints": [
+        {
+          "id": "R",
+          "name": "R",
+          "x": 50,
+          "y": 0
+        }
+      ],
+      "script": "create entity\ngo to processor.L,1"
+    },
+    {
+      "id": "processor",
+      "name": "Processor",
+      "x": 300,
+      "y": 100,
+      "type": "process",
+      "capacity": 5,
+      "connectionPoints": [
+        {
+          "id": "L",
+          "name": "L",
+          "x": -50,
+          "y": 0
+        },
+        {
+          "id": "R",
+          "name": "R",
+          "x": 50,
+          "y": 0
+        }
+      ],
+      "script": "int counter += 1\nlog \"Processing entity, counter:\" counter\nif counter >= limit\n    done = true\n    log \"Limit reached!\"\ndelay 2\nif counter > 5\n    go to sink.L,1\nif counter <= 5\n    go to processor2.L,1"
+    },
+    {
+      "id": "processor2",
+      "name": "Processor2",
+      "x": 300,
+      "y": 250,
+      "type": "process",
+      "capacity": 3,
+      "connectionPoints": [
+        {
+          "id": "L",
+          "name": "L",
+          "x": -50,
+          "y": 0
+        },
+        {
+          "id": "R",
+          "name": "R",
+          "x": 50,
+          "y": 0
+        }
+      ],
+      "script": "int counter *= 2\nlog \"Doubled counter:\" counter\ndelay 1\ngo to sink.L,1"
+    },
+    {
+      "id": "sink",
+      "name": "Sink",
+      "x": 500,
+      "y": 100,
+      "type": "sink",
+      "capacity": 100,
+      "connectionPoints": [
+        {
+          "id": "L",
+          "name": "L",
+          "x": -50,
+          "y": 0
+        }
+      ],
+      "script": "dispose entity"
+    }
+  ],
+  "connections": [
+    {
+      "id": "c1",
+      "fromBlockId": "source",
+      "fromConnectorId": "R",
+      "toBlockId": "processor",
+      "toConnectorId": "L"
+    },
+    {
+      "id": "c2",
+      "fromBlockId": "processor",
+      "fromConnectorId": "R",
+      "toBlockId": "processor2",
+      "toConnectorId": "L"
+    },
+    {
+      "id": "c3",
+      "fromBlockId": "processor",
+      "fromConnectorId": "R",
+      "toBlockId": "sink",
+      "toConnectorId": "L"
+    },
+    {
+      "id": "c4",
+      "fromBlockId": "processor2",
+      "fromConnectorId": "R",
+      "toBlockId": "sink",
+      "toConnectorId": "L"
+    }
+  ]
+}

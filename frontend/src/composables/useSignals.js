@@ -4,6 +4,7 @@
  */
 
 import { ref, computed } from 'vue'
+import { SignalType, getDefaultValue, inferType } from '../constants/signalTypes.js'
 
 export function useSignals() {
   // 신호 상태
@@ -29,6 +30,8 @@ export function useSignals() {
     if (baseConfig.globalSignals) {
       globalSignals.value = baseConfig.globalSignals.map(signal => ({
         ...signal,
+        // 타입 정보 추가 (없으면 값에서 추론)
+        type: signal.type || inferType(signal.value),
         // 초기값이 정의되어 있다면 value에 반영
         value: signal.initialValue !== undefined ? signal.initialValue : signal.value
       }))
@@ -54,11 +57,15 @@ export function useSignals() {
    */
   function handleAddGlobalSignal(signal) {
     if (!globalSignals.value.find(s => s.name === signal.name)) {
+      const signalType = signal.type || inferType(signal.value)
+      const defaultVal = getDefaultValue(signalType)
+      
       globalSignals.value.push({
         id: signal.id || `signal-${Date.now()}`,
         name: signal.name,
-        value: signal.value !== undefined ? signal.value : false,
-        initialValue: signal.initialValue !== undefined ? signal.initialValue : false
+        type: signalType,
+        value: signal.value !== undefined ? signal.value : defaultVal,
+        initialValue: signal.initialValue !== undefined ? signal.initialValue : defaultVal
       })
     } else {
       console.warn(`[useSignals] 이미 존재하는 신호: ${signal.name}`)
@@ -81,19 +88,46 @@ export function useSignals() {
   function handleUpdateGlobalSignalValue(data) {
     const signal = globalSignals.value.find(s => s.name === data.name)
     if (signal) {
-      signal.value = data.value
+      // 타입에 맞게 값 변환
+      if (signal.type === SignalType.INTEGER && typeof data.value === 'string') {
+        signal.value = parseInt(data.value, 10)
+      } else {
+        signal.value = data.value
+      }
     }
   }
 
   /**
    * 시뮬레이션 결과에서 신호 상태 업데이트
    */
-  function updateSignalsFromSimulation(currentSignals) {
+  function updateSignalsFromSimulation(data) {
+    // 새로운 globalSignals 형식 우선
+    if (data.globalSignals && Array.isArray(data.globalSignals)) {
+      data.globalSignals.forEach(simSignal => {
+        const signal = globalSignals.value.find(s => s.name === simSignal.name)
+        if (signal) {
+          signal.value = simSignal.value
+          signal.type = simSignal.type || signal.type
+        } else {
+          // 새로운 신호가 시뮬레이션에서 생성된 경우 자동 추가
+          globalSignals.value.push({
+            id: simSignal.id || `signal-${Date.now()}-${simSignal.name}`,
+            name: simSignal.name,
+            type: simSignal.type || inferType(simSignal.value),
+            value: simSignal.value,
+            initialValue: simSignal.initialValue || simSignal.value
+          })
+        }
+      })
+      return
+    }
+    
+    // 기존 currentSignals 형식 (backward compatibility)
+    const currentSignals = data.current_signals || data.currentSignals
     if (!currentSignals || typeof currentSignals !== 'object') {
       return
     }
 
-    // 시뮬레이션 결과의 신호 상태로 전역 신호 업데이트
     Object.entries(currentSignals).forEach(([signalName, signalValue]) => {
       const signal = globalSignals.value.find(s => s.name === signalName)
       if (signal) {
@@ -103,6 +137,7 @@ export function useSignals() {
         globalSignals.value.push({
           id: `signal-${Date.now()}-${signalName}`,
           name: signalName,
+          type: inferType(signalValue),
           value: signalValue,
           initialValue: signalValue
         })
@@ -116,11 +151,13 @@ export function useSignals() {
   function handleEditGlobalSignal(data) {
     const signalIndex = globalSignals.value.findIndex(s => s.name === data.originalName)
     if (signalIndex !== -1) {
+      const existingSignal = globalSignals.value[signalIndex]
       globalSignals.value[signalIndex] = {
-        ...globalSignals.value[signalIndex],
+        ...existingSignal,
         name: data.newName,
-        value: data.value !== undefined ? data.value : globalSignals.value[signalIndex].value,
-        initialValue: data.initialValue !== undefined ? data.initialValue : globalSignals.value[signalIndex].initialValue
+        type: data.type !== undefined ? data.type : existingSignal.type,
+        value: data.value !== undefined ? data.value : existingSignal.value,
+        initialValue: data.initialValue !== undefined ? data.initialValue : existingSignal.initialValue
       }
     }
   }

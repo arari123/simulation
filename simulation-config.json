@@ -11,11 +11,11 @@
       "script": "wait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\tgo to 공정1.L,10\nif 공정2 load enable = true\n\t공정2 load enable = false\n\tgo to 공정2.L,10",
       "actions": [
         {
-          "id": "script-1749192460568",
+          "id": "script-1749218341615",
           "name": "스크립트",
           "type": "script",
           "parameters": {
-            "script": "force execution\ncreate entity\nwait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\tgo from R to 공정1.L,3\nif 공정2 load enable = true\n\t공정2 load enable = false\n\tgo from R to 공정2.L,3"
+            "script": "force execution\ncreate entity\nint count += 1\nif count >= 5\n  delay 20\n  int count = 0\nwait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\tgo from R to 공정1.L,3\nif 공정2 load enable = true and product type != transit\n\t공정2 load enable = false\n\tgo from R to 공정2.L,3"
           }
         }
       ],
@@ -105,7 +105,7 @@
       "script": "delay 10\n공정2 unload enable = true\nwait 배출 load enable = true\n배출 load enable = false\n공정2 unload enable = false\ngo to 배출.L,10\n공정2 load enable = true\n배출 load enable = true",
       "actions": [
         {
-          "id": "script-1749043727628",
+          "id": "script-1749218169150",
           "name": "스크립트",
           "type": "script",
           "parameters": {
@@ -170,31 +170,43 @@
       "id": "signal-1",
       "name": "공정1 load enable",
       "value": true,
-      "initialValue": true
+      "initialValue": true,
+      "type": "boolean"
     },
     {
       "id": "signal-2",
       "name": "공정1 unload enable",
       "value": false,
-      "initialValue": false
+      "initialValue": false,
+      "type": "boolean"
     },
     {
       "id": "signal-3",
       "name": "공정2 load enable",
       "value": true,
-      "initialValue": true
+      "initialValue": true,
+      "type": "boolean"
     },
     {
       "id": "signal-4",
       "name": "공정2 unload enable",
       "value": false,
-      "initialValue": false
+      "initialValue": false,
+      "type": "boolean"
     },
     {
       "id": "signal-5",
       "name": "배출 load enable",
       "value": true,
-      "initialValue": true
+      "initialValue": true,
+      "type": "boolean"
+    },
+    {
+      "id": "signal-1749218205195",
+      "name": "count",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
     }
   ],
   "settings": {

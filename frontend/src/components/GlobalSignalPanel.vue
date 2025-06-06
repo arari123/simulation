@@ -28,10 +28,13 @@
             <tr v-for="signal in filteredSignals" :key="signal.name">
               <td>{{ signal.name }}</td>
               <td>
-                <span :class="['signal-value', signal.value ? 'is-true' : 'is-false', 'current-value']">
+                <span v-if="signal.type === 'boolean'" :class="['signal-value', signal.value ? 'is-true' : 'is-false']">
                   {{ signal.value ? 'TRUE' : 'FALSE' }}
                 </span>
-                <small class="value-indicator">(실시간)</small>
+                <span v-else class="signal-value is-integer current-value">
+                  {{ signal.value }}
+                </span>
+                <small class="value-indicator">({{ signal.type === 'integer' ? '정수' : '논리' }})</small>
               </td>
               <td>
                 <button @click="editSignal(signal)" class="action-btn edit-btn" title="수정">✏️</button>
@@ -47,11 +50,20 @@
         <h5>새 전역 신호 추가</h5>
         <label for="gsp-newSignalName">신호 이름:</label>
         <input type="text" id="gsp-newSignalName" v-model="newSignal.name" @keyup.enter="addSignal">
+        
+        <label for="gsp-newSignalType">타입:</label>
+        <select id="gsp-newSignalType" v-model="newSignal.type">
+          <option value="boolean">논리형 (True/False)</option>
+          <option value="integer">정수형 (숫자)</option>
+        </select>
+        
         <label for="gsp-newSignalValue">초기 값:</label>
-        <select id="gsp-newSignalValue" v-model="newSignal.value">
+        <select v-if="newSignal.type === 'boolean'" id="gsp-newSignalValue" v-model="newSignal.value">
           <option :value="true">True</option>
           <option :value="false">False</option>
         </select>
+        <input v-else type="number" id="gsp-newSignalValue" v-model.number="newSignal.value" placeholder="정수 입력">
+        
         <button @click="addSignal" :disabled="!newSignal.name.trim()">신호 추가</button>
         <small v-if="signalError" class="error-message">{{ signalError }}</small>
       </div>
@@ -68,11 +80,18 @@
           <label for="edit-signal-name">신호 이름:</label>
           <input type="text" id="edit-signal-name" v-model="editingSignal.name">
           
+          <label for="edit-signal-type">타입:</label>
+          <select id="edit-signal-type" v-model="editingSignal.type">
+            <option value="boolean">논리형 (True/False)</option>
+            <option value="integer">정수형 (숫자)</option>
+          </select>
+          
           <label for="edit-signal-value">초기 값:</label>
-          <select id="edit-signal-value" v-model="editingSignal.value">
+          <select v-if="editingSignal.type === 'boolean'" id="edit-signal-value" v-model="editingSignal.value">
             <option :value="true">True</option>
             <option :value="false">False</option>
           </select>
+          <input v-else type="number" id="edit-signal-value" v-model.number="editingSignal.value" placeholder="정수 입력">
           
           <div class="edit-popup-actions">
             <button @click="confirmEditSignal" :disabled="!editingSignal.name.trim()">확인</button>
@@ -87,7 +106,8 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { getDefaultValue } from '../constants/signalTypes.js';
 
 const props = defineProps({
   signals: {
@@ -102,14 +122,23 @@ const props = defineProps({
 
 const emit = defineEmits(['close-panel', 'add-signal', 'remove-signal', 'update-signal-value', 'edit-signal']);
 
-const newSignal = ref({ name: '', value: true });
+const newSignal = ref({ name: '', type: 'boolean', value: false });
 const signalError = ref('');
 const filterText = ref('');
 
 // 수정 관련 변수들
 const showEditPopup = ref(false);
-const editingSignal = ref({ name: '', value: true, originalName: '' });
+const editingSignal = ref({ name: '', type: 'boolean', value: false, originalName: '' });
 const editError = ref('');
+
+// 타입 변경시 값 초기화
+watch(() => newSignal.value.type, (newType) => {
+  newSignal.value.value = getDefaultValue(newType);
+});
+
+watch(() => editingSignal.value.type, (newType) => {
+  editingSignal.value.value = getDefaultValue(newType);
+});
 
 const filteredSignals = computed(() => {
   if (!filterText.value.trim()) {
@@ -135,8 +164,14 @@ function addSignal() {
     signalError.value = "이미 사용중인 신호 이름입니다.";
     return;
   }
+  
+  // 타입에 따른 기본값 설정
+  if (newSignal.value.type === 'integer' && (newSignal.value.value === '' || newSignal.value.value === null)) {
+    newSignal.value.value = 0;
+  }
+  
   emit('add-signal', { ...newSignal.value });
-  newSignal.value = { name: '', value: true }; // 폼 초기화
+  newSignal.value = { name: '', type: 'boolean', value: false }; // 폼 초기화
   signalError.value = '';
   filterText.value = ''; // 추가 후 필터 초기화
 }
@@ -150,13 +185,19 @@ function removeSignal(signalName) {
 function toggleSignalValue(signalName) {
     const signal = props.signals.find(s => s.name === signalName);
     if (signal) {
-        emit('update-signal-value', { name: signalName, value: !signal.value });
+        if (signal.type === 'boolean') {
+            emit('update-signal-value', { name: signalName, value: !signal.value });
+        } else if (signal.type === 'integer') {
+            // 정수형은 +1 증가
+            emit('update-signal-value', { name: signalName, value: signal.value + 1 });
+        }
     }
 }
 
 function editSignal(signal) {
   editingSignal.value = {
     name: signal.name,
+    type: signal.type || 'boolean',
     value: signal.value,
     originalName: signal.name
   };
@@ -166,7 +207,7 @@ function editSignal(signal) {
 
 function closeEditPopup() {
   showEditPopup.value = false;
-  editingSignal.value = { name: '', value: true, originalName: '' };
+  editingSignal.value = { name: '', type: 'boolean', value: false, originalName: '' };
   editError.value = '';
 }
 
@@ -187,7 +228,9 @@ function confirmEditSignal() {
   emit('edit-signal', {
     originalName: editingSignal.value.originalName,
     newName: editingSignal.value.name.trim(),
-    newValue: editingSignal.value.value
+    type: editingSignal.value.type,
+    value: editingSignal.value.value,
+    initialValue: editingSignal.value.value
   });
   
   closeEditPopup();
@@ -295,21 +338,27 @@ function confirmEditSignal() {
   font-size: 0.9em;
 }
 
-.signal-value.current-value {
-  border: 2px solid #007bff;
-  box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
-}
-
+/* Boolean 타입 스타일 */
 .signal-value.is-true {
-  background-color: #d4edda;
-  color: #155724;
-  border-color: #c3e6cb;
+  background-color: #d4edda !important;
+  color: #155724 !important;
 }
 
 .signal-value.is-false {
-  background-color: #f8d7da;
-  color: #721c24;
-  border-color: #f5c6cb;
+  background-color: #f8d7da !important;
+  color: #721c24 !important;
+}
+
+/* Integer 타입 스타일 */
+.signal-value.is-integer {
+  background-color: #d1ecf1;
+  color: #0c5460;
+  font-family: monospace;
+}
+
+.signal-value.is-integer.current-value {
+  border: 2px solid #007bff;
+  box-shadow: 0 0 5px rgba(0, 123, 255, 0.3);
 }
 
 .value-indicator {
@@ -380,6 +429,7 @@ function confirmEditSignal() {
 }
 
 .add-global-signal input[type="text"],
+.add-global-signal input[type="number"],
 .add-global-signal select {
   width: calc(100% - 12px); /* padding 고려 */
   padding: 6px;
@@ -470,6 +520,10 @@ function confirmEditSignal() {
   border-radius: 4px;
   margin-bottom: 15px;
   box-sizing: border-box;
+}
+
+.edit-popup-content input[type="number"] {
+  font-family: monospace;
 }
 
 .edit-popup-actions {

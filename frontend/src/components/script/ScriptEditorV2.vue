@@ -118,6 +118,8 @@ function createEditor() {
     createHighlightPlugin(signalNames, blockNames), // 구문 하이라이팅 추가
     lintGutter(), // 오류 표시 거터 추가
     createSimpleLinter(props.allSignals, props.allBlocks, props.currentBlock, props.entityType), // 실시간 검증 추가
+    // ifBlockHighlighter, // if 블록 하이라이팅 추가 - 임시 비활성화
+    // indentGuides, // 들여쓰기 가이드 추가 - 임시 비활성화
     keymap.of([
       ...defaultKeymap,
       ...historyKeymap, // 히스토리 키맵 추가 (Ctrl+Z, Ctrl+Y)
@@ -134,7 +136,7 @@ function createEditor() {
     doc: props.scriptContent,
     extensions: [
       ...basicExtensions,
-      highlightTheme, // 하이라이팅 테마 추가
+      highlightTheme, // 하이라이팅 테마 추가 (if 블록 스타일 포함)
       // javascript(), // 임시로 JavaScript 언어 모드 사용 - 주석 처리
       EditorView.theme({
         // Lint 관련 스타일
@@ -146,6 +148,23 @@ function createEditor() {
         '.cm-diagnostic-error': {
           borderColor: '#d73a49',
           backgroundColor: 'rgba(215, 58, 73, 0.1)'
+        },
+        // 들여쓰기 가이드라인
+        '.cm-indent-guide': {
+          borderLeft: '1px solid #e0e0e0',
+          marginLeft: '0.5ch',
+          position: 'relative'
+        },
+        // if 블록 하이라이팅
+        '.cm-line-if-block': {
+          backgroundColor: 'rgba(0, 123, 255, 0.05)',
+          borderLeft: '3px solid #007bff',
+          paddingLeft: '5px'
+        },
+        // 중첩된 if 블록
+        '.cm-line-if-block-nested': {
+          backgroundColor: 'rgba(0, 123, 255, 0.1)',
+          borderLeft: '3px solid #0056b3'
         },
         '.cm-diagnostic-warning': {
           borderColor: '#e36209',

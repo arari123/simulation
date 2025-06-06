@@ -1,0 +1,54 @@
+{
+  "blocks": [
+    {
+      "id": "test_block_1",
+      "name": "테스트 블록",
+      "x": 200,
+      "y": 200,
+      "width": 150,
+      "height": 80,
+      "type": "process",
+      "capacity": 5,
+      "actions": [
+        {
+          "type": "script",
+          "parameters": {
+            "script": "// if 블록 시각화 테스트\nint counter = 0\ncounter += 1\n\nif counter > 0\n  log \"카운터가 0보다 큽니다: {counter}\"\n  delay 5\n  signal_a = true\n  \n  if signal_a = true\n    log \"중첩된 if 블록\"\n    delay 2\n\nwait signal_b = true\n\nif signal_b = true and counter < 10\n  log \"복합 조건\"\n  counter += 5\n  go to 다음블록.L,3\n\nlog \"스크립트 종료\""
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "L",
+          "x": 0,
+          "y": 40,
+          "isInput": true
+        },
+        {
+          "id": "R",
+          "x": 150,
+          "y": 40,
+          "isInput": false
+        }
+      ]
+    }
+  ],
+  "connections": [],
+  "globalSignals": [
+    {
+      "name": "signal_a",
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "signal_b",
+      "value": false,
+      "type": "boolean"
+    },
+    {
+      "name": "counter",
+      "value": 0,
+      "type": "integer"
+    }
+  ]
+}

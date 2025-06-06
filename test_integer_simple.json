@@ -1,0 +1,93 @@
+{
+  "globalSignals": [
+    {
+      "name": "counter",
+      "type": "integer",
+      "value": 0
+    },
+    {
+      "name": "limit",
+      "type": "integer",
+      "value": 5
+    }
+  ],
+  "blocks": [
+    {
+      "id": "source",
+      "name": "Source",
+      "x": 100,
+      "y": 200,
+      "capacity": 1,
+      "connectionPoints": [
+        {
+          "id": "R",
+          "name": "R",
+          "x": 50,
+          "y": 0
+        }
+      ],
+      "script": "create entity\ngo to process.L,1"
+    },
+    {
+      "id": "process",
+      "name": "Process",
+      "x": 300,
+      "y": 200,
+      "capacity": 10,
+      "connectionPoints": [
+        {
+          "id": "L",
+          "name": "L",
+          "x": -50,
+          "y": 0
+        },
+        {
+          "id": "R",
+          "name": "R",
+          "x": 50,
+          "y": 0
+        }
+      ],
+      "script": "int counter += 1\nlog \"Count:\"\nlog counter\ndelay 2\nif counter >= limit\n    log \"Done!\"\n    go to sink.L,1\nif counter < limit\n    go to process.L,3"
+    },
+    {
+      "id": "sink",
+      "name": "Sink",
+      "x": 500,
+      "y": 200,
+      "capacity": 100,
+      "connectionPoints": [
+        {
+          "id": "L",
+          "name": "L",
+          "x": -50,
+          "y": 0
+        }
+      ],
+      "script": "dispose entity"
+    }
+  ],
+  "connections": [
+    {
+      "id": "c1",
+      "fromBlockId": "source",
+      "fromConnectorId": "R",
+      "toBlockId": "process",
+      "toConnectorId": "L"
+    },
+    {
+      "id": "c2",
+      "fromBlockId": "process",
+      "fromConnectorId": "R",
+      "toBlockId": "sink",
+      "toConnectorId": "L"
+    },
+    {
+      "id": "c3",
+      "fromBlockId": "process",
+      "fromConnectorId": "R",
+      "toBlockId": "process",
+      "toConnectorId": "L"
+    }
+  ]
+}

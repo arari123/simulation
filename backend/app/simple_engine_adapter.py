@@ -24,6 +24,10 @@ class SimpleEngineAdapter:
             'connections': []
         }
         
+        # globalSignals가 있으면 추가 (타입 정보 포함)
+        if hasattr(setup, 'globalSignals'):
+            simple_config['globalSignals'] = setup.globalSignals
+        
         # 블록 변환
         for block in setup.blocks:
             simple_block = {
@@ -89,6 +93,7 @@ class SimpleEngineAdapter:
             'entities_processed_total': result.get('total_entities_processed', 0),
             'active_entities': active_entities,
             'current_signals': result.get('current_signals', {}),
+            'globalSignals': result.get('globalSignals', []),  # 통합된 신호/변수 정보
             'log': [{
                 'time': simulation_time,
                 'event': f"Step {result.get('step_count', 0)}: {result.get('total_entities_in_system', 0)} entities in system"
