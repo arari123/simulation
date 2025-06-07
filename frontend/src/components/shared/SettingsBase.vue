@@ -53,6 +53,59 @@
           class="capacity-input"
         />
       </div>
+
+      <!-- 블록 색상 설정 -->
+      <div v-if="entityType === 'block'" class="form-group">
+        <label>배경 색상:</label>
+        <div class="color-input-group">
+          <input
+            type="color"
+            v-model="localBackgroundColor"
+            @change="handleBackgroundColorChange"
+            class="color-picker"
+          />
+          <input
+            type="text"
+            v-model="localBackgroundColor"
+            @change="handleBackgroundColorChange"
+            placeholder="#FFFFFF"
+            class="color-code-input"
+          />
+          <button 
+            @click="resetBackgroundColor" 
+            class="reset-color-btn"
+            title="기본 색상으로 초기화"
+          >
+            ↺
+          </button>
+        </div>
+      </div>
+
+      <div v-if="entityType === 'block'" class="form-group">
+        <label>텍스트 색상:</label>
+        <div class="color-input-group">
+          <input
+            type="color"
+            v-model="localTextColor"
+            @change="handleTextColorChange"
+            class="color-picker"
+          />
+          <input
+            type="text"
+            v-model="localTextColor"
+            @change="handleTextColorChange"
+            placeholder="#000000"
+            class="color-code-input"
+          />
+          <button 
+            @click="resetTextColor" 
+            class="reset-color-btn"
+            title="기본 색상으로 초기화"
+          >
+            ↺
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- 액션 섹션 -->
@@ -190,6 +243,8 @@ const props = defineProps({
   initialActions: { type: Array, default: () => [] },
   initialMaxCapacity: { type: Number, default: 1 },
   initialConnectors: { type: Array, default: () => [] }, // 커넥터 목록
+  initialBackgroundColor: { type: String, default: '#cfdff7' },
+  initialTextColor: { type: String, default: '#000000' },
   allSignals: { type: Array, default: () => [] },
   allBlocks: { type: Array, default: () => [] },
   currentBlock: { type: Object, default: null },
@@ -199,11 +254,13 @@ const props = defineProps({
 })
 
 // Emits 정의
-const emit = defineEmits(['close', 'save', 'nameChange', 'maxCapacityChange', 'connectorAdd', 'deleteConnector', 'deleteBlock'])
+const emit = defineEmits(['close', 'save', 'nameChange', 'maxCapacityChange', 'backgroundColorChange', 'textColorChange', 'connectorAdd', 'deleteConnector', 'deleteBlock'])
 
 // 상태 관리
 const localName = ref(props.initialName)
 const localMaxCapacity = ref(props.initialMaxCapacity)
+const localBackgroundColor = ref(props.initialBackgroundColor)
+const localTextColor = ref(props.initialTextColor)
 const editableActions = ref([])
 const showActionEditor = ref(false)
 const showScriptEditor = ref(false)
@@ -260,6 +317,24 @@ function handleMaxCapacityChange() {
     props.onMaxCapacityChange(localMaxCapacity.value)
   }
   emit('maxCapacityChange', localMaxCapacity.value)
+}
+
+function handleBackgroundColorChange() {
+  emit('backgroundColorChange', localBackgroundColor.value)
+}
+
+function handleTextColorChange() {
+  emit('textColorChange', localTextColor.value)
+}
+
+function resetBackgroundColor() {
+  localBackgroundColor.value = '#cfdff7'
+  handleBackgroundColorChange()
+}
+
+function resetTextColor() {
+  localTextColor.value = '#000000'
+  handleTextColorChange()
 }
 
 function openActionEditor() {
@@ -355,11 +430,19 @@ function formatActionDetails(action) {
 }
 
 function handleSave() {
-  emit('save', {
+  const saveData = {
     name: localName.value,
     actions: editableActions.value,
     maxCapacity: localMaxCapacity.value
-  })
+  }
+  
+  // 블록인 경우 색상 정보도 추가
+  if (props.entityType === 'block') {
+    saveData.backgroundColor = localBackgroundColor.value
+    saveData.textColor = localTextColor.value
+  }
+  
+  emit('save', saveData)
 }
 
 function openScriptEditor() {
@@ -819,5 +902,45 @@ watch(() => props.initialMaxCapacity, (newCapacity) => {
 
 .delete-connector-btn:hover, .delete-block-btn:hover {
   background: #c82333;
+}
+
+/* 색상 설정 스타일 */
+.color-input-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.color-picker {
+  width: 50px;
+  height: 35px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.color-code-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 14px;
+}
+
+.reset-color-btn {
+  padding: 6px 12px;
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background-color 0.2s;
+}
+
+.reset-color-btn:hover {
+  background: #5a6268;
 }
 </style> 

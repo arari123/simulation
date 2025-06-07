@@ -283,7 +283,7 @@ function createBlockGroup(blockData) {
   const rect = new Konva.Rect({
     width: blockData.width || props.currentSettings.boxSize,
     height: blockData.height || props.currentSettings.boxSize,
-    fill: 'lightblue',
+    fill: blockData.backgroundColor || '#cfdff7',
     stroke: 'black',
     strokeWidth: 2,
   });
@@ -331,13 +331,13 @@ function addBlockContent(blockGroup, blockData) {
   // 블록 선택 상태 확인
   const isBlockSelected = props.selectedBlockId && String(props.selectedBlockId) === String(blockData.id);
   
-  // 블록 사각형 - 선택 상태에 따라 스타일 변경
+  // 블록 사각형 - 색상은 선택 상태와 무관하게 유지
   const rect = new Konva.Rect({
     width: blockData.width || props.currentSettings.boxSize,
     height: blockData.height || props.currentSettings.boxSize,
-    fill: isBlockSelected ? '#E3F2FD' : 'lightblue', // 선택된 경우 더 밝은 색
+    fill: blockData.backgroundColor || '#cfdff7',
     stroke: isBlockSelected ? '#2196F3' : 'black', // 선택된 경우 파란색 테두리
-    strokeWidth: isBlockSelected ? 3 : 2, // 선택된 경우 더 두꺿게
+    strokeWidth: isBlockSelected ? 3 : 2, // 선택된 경우 더 두껍게
   });
   blockGroup.add(rect);
 
@@ -383,7 +383,7 @@ function addBlockContent(blockGroup, blockData) {
   const blockTitle = new Konva.Text({
     text: blockData.name,
     fontSize: props.currentSettings.fontSize,
-    fill: 'black',
+    fill: blockData.textColor || '#000000',
     align: 'center',
     width: blockData.width || props.currentSettings.boxSize,
     x: 0,

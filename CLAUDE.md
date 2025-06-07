@@ -211,10 +211,17 @@ The simulation supports two types of global variables:
 - **Korean Variable Names**: Integer variables now support Korean names
   - Example: `int 공정1처리수 += 1`
   - Works with all integer operations
+- **Block Color Customization**: Blocks can have custom colors
+  - Background color and text color separately configurable
+  - Color picker UI with HEX input support
+  - Default colors: background #cfdff7 (light blue), text #000000 (black)
+  - Block selection shows only border highlight (no fill color change)
 - **Implementation Details**:
   - Backend: Added status field to IndependentBlock class
   - Script executor: Added parsing for `.status =` commands
   - Frontend: Status display above block box, cleared on reset
+  - CanvasArea.vue: Added backgroundColor and textColor support
+  - SettingsBase.vue: Added color picker UI components
   - Important: Block status commands use dot notation (`.status =`) to distinguish from signal assignments
 
 ### 2025-06-06: Integer Variable System Implementation ✅

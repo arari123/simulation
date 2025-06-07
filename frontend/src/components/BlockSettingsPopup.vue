@@ -7,6 +7,8 @@
     :initial-actions="blockData.actions || []"
     :initial-max-capacity="blockData.maxCapacity || 1"
     :initial-connectors="blockData.connectionPoints || []"
+    :initial-background-color="blockData.backgroundColor || '#cfdff7'"
+    :initial-text-color="blockData.textColor || '#000000'"
     :all-signals="allSignals"
     :all-blocks="allBlocks"
     :current-block="blockData"
@@ -15,6 +17,8 @@
     @save="handleSave"
     @name-change="handleNameChange"
     @max-capacity-change="handleMaxCapacityChange"
+    @background-color-change="handleBackgroundColorChange"
+    @text-color-change="handleTextColorChange"
     @connector-add="handleConnectorAdd"
     @delete-block="$emit('delete-block', blockData.id)"
   />
@@ -50,7 +54,7 @@ const validateBlockName = (name) => {
 
 // 이벤트 핸들러
 function handleSave(data) {
-  emit('save-block-settings', props.blockData.id, data.actions, data.maxCapacity, data.name)
+  emit('save-block-settings', props.blockData.id, data.actions, data.maxCapacity, data.name, data.backgroundColor, data.textColor)
 }
 
 function handleNameChange(newName) {
@@ -59,6 +63,15 @@ function handleNameChange(newName) {
 
 function handleMaxCapacityChange(newCapacity) {
   emit('save-block-settings', props.blockData.id, props.blockData.actions || [], newCapacity, props.blockData.name)
+}
+
+// 색상 관련 이벤트 핸들러
+function handleBackgroundColorChange(newColor) {
+  emit('save-block-settings', props.blockData.id, props.blockData.actions || [], props.blockData.maxCapacity, props.blockData.name, newColor, props.blockData.textColor)
+}
+
+function handleTextColorChange(newColor) {
+  emit('save-block-settings', props.blockData.id, props.blockData.actions || [], props.blockData.maxCapacity, props.blockData.name, props.blockData.backgroundColor, newColor)
 }
 
 // 커넥터 관련 이벤트 핸들러

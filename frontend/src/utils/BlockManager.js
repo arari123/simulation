@@ -102,6 +102,8 @@ export function createNewBlock(name, existingBlocks = [], settings = { boxSize: 
     height: settings.boxSize,
     maxCapacity: 1,
     actions: [],
+    backgroundColor: '#cfdff7', // 기본 배경색
+    textColor: '#000000', // 기본 텍스트 색상
     connectionPoints: [
       createStandardConnector(id, 'left'),
       createStandardConnector(id, 'right')

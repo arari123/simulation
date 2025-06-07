@@ -322,7 +322,7 @@ export function useBlocks() {
   /**
    * 블록 설정 저장
    */
-  function saveBlockSettings(blockId, newActions, maxCapacity, blockName) {
+  function saveBlockSettings(blockId, newActions, maxCapacity, blockName, backgroundColor, textColor) {
     const block = blocks.value.find(b => String(b.id) === String(blockId))
     if (block) {
       block.actions = newActions
@@ -334,6 +334,14 @@ export function useBlocks() {
         block.name = blockName
         // 다른 블록에서 이 블록을 참조하는 부분 업데이트
         updateBlockReferences(blocks.value, oldName, blockName)
+      }
+      
+      // 색상 정보 저장
+      if (backgroundColor !== undefined) {
+        block.backgroundColor = backgroundColor
+      }
+      if (textColor !== undefined) {
+        block.textColor = textColor
       }
       
       // 스크립트 타입 액션이 있으면 전체 연결 새로고침
@@ -672,6 +680,9 @@ export function useBlocks() {
           // base.json에 width/height가 있으면 그대로 사용, 없으면 현재 설정 사용
           width: block.width || currentSettings.boxSize,
           height: block.height || currentSettings.boxSize,
+          // 색상 정보가 없으면 기본값 사용
+          backgroundColor: block.backgroundColor || '#cfdff7',
+          textColor: block.textColor || '#000000',
           // connectionPoints는 base.json의 원본 위치 정보를 그대로 사용
           connectionPoints: (block.connectionPoints || []).map(cp => ({
             ...cp,
