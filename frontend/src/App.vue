@@ -1,6 +1,7 @@
 <template>
   <div id="layout">
     <ControlPanel 
+      ref="controlPanelRef"
       :currentDispatchedProducts="dispatchedProductsFromSim"
       :currentProcessTime="processTimeFromSim" 
       :currentStepCount="currentStepCount"
@@ -9,6 +10,7 @@
       :isSimulationEnded="isSimulationEnded"
       :isFullExecutionRunning="isFullExecutionRunning"
       :isGlobalSignalPanelVisible="showGlobalSignalPanel"
+      :blocks="blocks"
       @step-simulation="handleStepSimulation"
       @step-based-run="handleStepBasedRun"
       @stop-full-execution="stopFullExecution"
@@ -21,6 +23,7 @@
       @toggle-global-signal-panel="toggleGlobalSignalPanelVisibility"
       @panel-width-changed="handlePanelWidthChanged"
       @refresh-auto-connections="refreshAllAutoConnections"
+      @clear-all-breakpoints="handleClearAllBreakpoints"
     />
     
     <div class="main-content">
@@ -77,17 +80,19 @@
         <!-- 블록 설정 팝업 -->
         <template v-if="showBlockSettingsPopup && selectedBlockData">
           <BlockSettingsPopup 
-            :key="`block-${selectedBlockData.id}`"
+            :key="`block-${selectedBlockData.id}-${blockBreakpointsForSelectedBlock.length}`"
             :block-data="selectedBlockData" 
             :all-signals="getAllSignalNamesFromBlocks(blocks)"
             :all-blocks="blocks"
             :is-sidebar="true"
+            :block-breakpoints="blockBreakpointsForSelectedBlock"
             @close-popup="closeBlockSettingsPopup" 
             @save-block-settings="saveBlockSettings"
             @copy-block="handleCopyBlock"
             @delete-block="handleDeleteBlock"
             @add-connector="handleAddConnector"
             @change-block-name="handleChangeBlockName"
+            @breakpoint-change="handleBreakpointChange"
           />
         </template>
         
@@ -130,7 +135,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
+import { ref, computed, onMounted, watch, onUnmounted, nextTick } from 'vue'
 import ControlPanel from './components/ControlPanel.vue'
 import CanvasArea from './components/CanvasArea.vue'
 import BlockSettingsPopup from './components/BlockSettingsPopup.vue'
@@ -158,9 +163,25 @@ const currentSettings = ref({
 // 제어판 너비 관리
 const controlPanelWidth = ref(300)
 
+function handlePanelWidthChanged(newWidth) {
+  controlPanelWidth.value = newWidth
+}
+
+// 선택된 블록의 브레이크포인트를 반응형으로 추적
+const blockBreakpointsForSelectedBlock = computed(() => {
+  if (!selectedBlockData.value) return []
+  // blockBreakpoints 자체를 참조하여 반응성 보장
+  const blockId = selectedBlockData.value.id
+  const breakpointSet = blockBreakpoints.value.get(blockId)
+  const breakpoints = breakpointSet ? Array.from(breakpointSet) : []
+  // 새로운 배열 인스턴스를 반환하여 Vue가 변경을 감지하도록 함
+  return [...breakpoints]
+})
+
 // 디버그 정보
 const showDebugInfo = ref(false)
 const canvasAreaRef = ref(null)
+const controlPanelRef = ref(null) // ControlPanel 컴포넌트 참조
 
 // 정보 텍스트
 const infoText = ref({
@@ -213,6 +234,7 @@ const {
   selectedConnectorInfo,
   showBlockSettingsPopup,
   showConnectorSettingsPopup,
+  blockBreakpoints,
   
   // 계산된 속성
   allProcessBlocks,
@@ -238,7 +260,12 @@ const {
   handleDeleteConnector,
   setupInitialBlocks,
   updateBlocksForSettings,
-  refreshAllAutoConnections
+  refreshAllAutoConnections,
+  
+  // 브레이크포인트 메서드
+  setBreakpoint,
+  getBreakpoints,
+  clearAllBreakpoints
 } = useBlocks()
 
 const {
@@ -293,9 +320,61 @@ async function setupInitialScenario() {
     setTimeout(() => {
       refreshAllAutoConnections()
     }, 100)
+    
+    // 백엔드의 브레이크포인트 상태를 가져와 동기화
+    try {
+      const debugStatus = await SimulationApi.getDebugStatus()
+      if (debugStatus.breakpoints && Object.keys(debugStatus.breakpoints).length > 0) {
+        // 브레이크포인트가 있으면 프론트엔드와 동기화
+        syncBreakpointsFromBackend(debugStatus.breakpoints)
+        
+        // 사용자에게 브레이크포인트가 있음을 알림
+        const breakpointInfo = []
+        for (const [blockId, lines] of Object.entries(debugStatus.breakpoints)) {
+          const block = blocks.value.find(b => String(b.id) === String(blockId))
+          const blockName = block ? block.name : `블록 ${blockId}`
+          breakpointInfo.push(`${blockName}: 라인 ${lines.join(', ')}`)
+        }
+      }
+    } catch (error) {
+      // 브레이크포인트 동기화 실패는 치명적이지 않으므로 경고만 표시
+    }
   } catch (error) {
     console.error("[App] Failed to setup initial scenario:", error)
     alert(`초기 설정 로드 실패: ${error.message}`)
+  }
+}
+
+// 백엔드 브레이크포인트를 프론트엔드와 동기화
+function syncBreakpointsFromBackend(backendBreakpoints) {
+  // blockBreakpoints를 초기화
+  blockBreakpoints.value.clear()
+  
+  // 백엔드 브레이크포인트를 프론트엔드에 설정
+  for (const [blockId, lineNumbers] of Object.entries(backendBreakpoints)) {
+    if (lineNumbers && lineNumbers.length > 0) {
+      blockBreakpoints.value.set(blockId, new Set(lineNumbers))
+    }
+  }
+  
+  // ControlPanel의 브레이크포인트 목록 업데이트
+  if (controlPanelRef.value) {
+    controlPanelRef.value.updateBreakpoints(backendBreakpoints)
+  }
+}
+
+// 브레이크포인트 변경 핸들러 (setBreakpoint에 controlPanelRef 전달)
+async function handleBreakpointChange(blockId, lineNumber, isOn) {
+  await setBreakpoint(blockId, lineNumber, isOn, controlPanelRef)
+}
+
+// 모든 브레이크포인트 제거 (ControlPanel에서 호출)
+async function handleClearAllBreakpoints() {
+  await clearAllBreakpoints()  // useBlocks에서 제공하는 함수 호출
+  
+  // ControlPanel도 업데이트
+  if (controlPanelRef.value) {
+    controlPanelRef.value.updateBreakpoints({})
   }
 }
 
@@ -344,6 +423,15 @@ async function handleStepSimulation() {
     // 신호 상태 업데이트
     if (result.result) {
       updateSignalsFromSimulation(result.result)
+      
+      // 디버그 상태 업데이트
+      if (result.result.debug_info && controlPanelRef.value) {
+        controlPanelRef.value.updateDebugStatus(result.result.debug_info)
+        // 브레이크포인트 목록도 업데이트
+        if (result.result.debug_info.breakpoints) {
+          controlPanelRef.value.updateBreakpoints(result.result.debug_info.breakpoints)
+        }
+      }
     }
   }
 }
@@ -383,6 +471,18 @@ async function handleStepBasedRun(options) {
   await startStepBasedExecution(setupData, (result) => {
     // 신호 상태 업데이트
     updateSignalsFromSimulation(result)
+    
+    // 디버그 상태 업데이트
+    if (result.debug_info) {
+      if (controlPanelRef.value) {
+        controlPanelRef.value.updateDebugStatus(result.debug_info)
+        // 브레이크포인트 목록도 업데이트
+        if (result.debug_info.breakpoints) {
+          controlPanelRef.value.updateBreakpoints(result.debug_info.breakpoints)
+        }
+      } else {
+      }
+    }
   }, options, updateBlockWarnings, addSimulationLogs)
 }
 
@@ -635,11 +735,6 @@ function handleEditGlobalSignalWithReferences(data) {
   if (data.originalName !== data.newName) {
     updateSignalReferences(data.originalName, data.newName, blocks.value)
   }
-}
-
-// 제어판 너비 변경 처리
-function handlePanelWidthChanged(newWidth) {
-  controlPanelWidth.value = newWidth
 }
 
 // 디버그 토글

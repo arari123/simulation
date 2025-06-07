@@ -48,6 +48,134 @@ export class SimulationApi {
   }
 
   /**
+   * 브레이크포인트 설정/해제
+   */
+  static async setBreakpoint(blockId, lineNumber, enabled) {
+    try {
+      const response = await fetch(`${API_BASE}/simulation/debug/breakpoints`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          block_id: blockId,
+          line_number: lineNumber,
+          enabled: enabled
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`브레이크포인트 설정 실패: ${response.status} - ${errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('[SimulationApi] 브레이크포인트 설정 실패:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 디버그 상태 조회
+   */
+  static async getDebugStatus() {
+    try {
+      const response = await fetch(`${API_BASE}/simulation/debug/status`)
+      
+      if (!response.ok) {
+        throw new Error(`디버그 상태 조회 실패: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('[SimulationApi] 디버그 상태 조회 실패:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 디버그 실행 계속 (Continue)
+   */
+  static async debugContinue() {
+    try {
+      const response = await fetch(`${API_BASE}/simulation/debug/control`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'continue'
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`디버그 계속 실행 실패: ${response.status} - ${errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('[SimulationApi] 디버그 계속 실행 실패:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 디버그 한 스텝 실행 (Step)
+   */
+  static async debugStep() {
+    try {
+      const response = await fetch(`${API_BASE}/simulation/debug/control`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'step'
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`디버그 스텝 실행 실패: ${response.status} - ${errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('[SimulationApi] 디버그 스텝 실행 실패:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 모든 브레이크포인트 제거
+   */
+  static async clearAllBreakpoints() {
+    try {
+      const response = await fetch(`${API_BASE}/simulation/debug/breakpoints/manage`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'clear_all'
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`브레이크포인트 모두 제거 실패: ${response.status} - ${errorText}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('[SimulationApi] 브레이크포인트 모두 제거 실패:', error)
+      throw error
+    }
+  }
+
+  /**
    * 시뮬레이션 배치 스텝 실행
    */
   static async batchStepSimulation(setupData, stepCount = 10) {

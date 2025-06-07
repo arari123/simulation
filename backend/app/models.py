@@ -73,6 +73,7 @@ class SimulationStepResult(BaseModel):
     globalSignals: Optional[List[Dict[str, Any]]] = None # 타입 정보를 포함한 전역 변수/신호
     block_states: Optional[Dict[str, Any]] = None # 블록 상태 정보 (경고, 처리량 등)
     script_logs: Optional[List[Dict[str, Any]]] = None # 스크립트 로그 추가
+    debug_info: Optional[Dict[str, Any]] = None # 디버그 정보 추가
 
 class SimulationRunResult(BaseModel): # 전체 실행 결과 모델
     message: str

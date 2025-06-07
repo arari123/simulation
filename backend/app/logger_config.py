@@ -92,7 +92,7 @@ def setup_logging():
         backupCount=0  # No backup files
     )
     file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logging.INFO)  # DEBUG -> INFO로 변경
     
     # Create console handler
     console_handler = logging.StreamHandler()
@@ -101,7 +101,7 @@ def setup_logging():
     
     # Configure root logger
     root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
+    root_logger.setLevel(logging.INFO)  # DEBUG -> INFO로 변경하여 불필요한 로그 제거
     
     # Remove existing handlers
     for handler in root_logger.handlers[:]:
@@ -137,7 +137,7 @@ def setup_logging():
     
     for logger_name in app_loggers:
         logger = logging.getLogger(logger_name)
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)  # DEBUG -> INFO로 변경
         logger.handlers = []
         logger.addHandler(file_handler)
         logger.addHandler(console_handler)

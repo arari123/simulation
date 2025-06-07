@@ -8,6 +8,10 @@ from .models import (
 )
 from .simple_simulation_engine import SimpleSimulationEngine
 from .simple_entity import SimpleEntity
+from .core.debug_manager import DebugManager
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SimpleEngineAdapter:
     """새로운 단순 엔진을 기존 API와 호환되게 만드는 어댑터"""
@@ -15,6 +19,12 @@ class SimpleEngineAdapter:
     def __init__(self):
         self.engine = SimpleSimulationEngine()
         self.step_counter = 0
+        # 글로벌 디버그 매니저 생성
+        self.global_debug_manager = DebugManager()
+    
+    def has_engine(self) -> bool:
+        """엔진이 초기화되었는지 확인"""
+        return self.engine is not None and self.engine.env is not None
         
     def convert_setup_to_simple_format(self, setup: SimulationSetup) -> Dict[str, Any]:
         """기존 SimulationSetup을 새 엔진 형식으로 변환"""
@@ -97,6 +107,7 @@ class SimpleEngineAdapter:
             'globalSignals': result.get('globalSignals', []),  # 통합된 신호/변수 정보
             'block_states': result.get('block_states', {}),  # 블록 상태 정보 추가
             'script_logs': result.get('script_logs', []),  # 스크립트 로그 추가
+            'debug_info': result.get('debug_info', {}),  # 디버그 정보 추가
             'log': [{
                 'time': simulation_time,
                 'event': f"Step {result.get('step_count', 0)}: {result.get('total_entities_in_system', 0)} entities in system"
@@ -107,6 +118,12 @@ class SimpleEngineAdapter:
         """시뮬레이션 설정"""
         simple_config = self.convert_setup_to_simple_format(setup)
         self.engine.setup_simulation(simple_config)
+        
+        # 디버그 매니저를 엔진에 연결
+        self.engine.set_debug_manager(self.global_debug_manager)
+        logger.info("[BREAKPOINT] Debug manager connected to engine during setup")
+        logger.info(f"[BREAKPOINT] Current breakpoints: {self.global_debug_manager.get_breakpoints()}")
+        
         self.step_counter = 0
     
     def step_simulation(self) -> SimulationStepResult:
@@ -210,6 +227,9 @@ class SimpleEngineAdapter:
         # 스크립트 상태 초기화
         from .script_state_manager import script_state_manager
         script_state_manager.reset_all()
+        
+        # 디버그 매니저 초기화 (브레이크포인트는 유지)
+        self.global_debug_manager.reset()
         
         self.engine.reset()
         self.step_counter = 0

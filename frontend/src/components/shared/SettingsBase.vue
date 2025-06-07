@@ -169,6 +169,7 @@
 
     <!-- 스크립트 편집기 (분리된 컴포넌트) -->
     <ScriptEditor
+      ref="scriptEditorRef"
       :show="showScriptEditor"
       :script-content="scriptContent"
       :action-count="editableActions.length"
@@ -176,8 +177,10 @@
       :all-blocks="allBlocks"
       :current-block="currentBlock"
       :entity-type="entityType"
+      :breakpoints="currentBreakpoints"
       @close="closeScriptEditor"
       @apply="handleScriptApply"
+      @breakpointChange="handleBreakpointChange"
     />
 
     <!-- 액션 편집기 (모달) -->
@@ -250,11 +253,12 @@ const props = defineProps({
   currentBlock: { type: Object, default: null },
   validateName: { type: Function, required: true },
   onNameChange: { type: Function, default: null },
-  onMaxCapacityChange: { type: Function, default: null }
+  onMaxCapacityChange: { type: Function, default: null },
+  breakpoints: { type: Array, default: () => [] }
 })
 
 // Emits 정의
-const emit = defineEmits(['close', 'save', 'nameChange', 'maxCapacityChange', 'backgroundColorChange', 'textColorChange', 'connectorAdd', 'deleteConnector', 'deleteBlock'])
+const emit = defineEmits(['close', 'save', 'nameChange', 'maxCapacityChange', 'backgroundColorChange', 'textColorChange', 'connectorAdd', 'deleteConnector', 'deleteBlock', 'breakpointChange'])
 
 // 상태 관리
 const localName = ref(props.initialName)
@@ -268,6 +272,8 @@ const scriptContent = ref('')
 const editingActionIndex = ref(-1)
 const currentEditAction = ref(null)
 const nameValidationError = ref('')
+const currentBreakpoints = ref([])
+const scriptEditorRef = ref(null)
 
 // 계산된 속성
 const hasNameChanged = computed(() => {
@@ -449,13 +455,16 @@ function openScriptEditor() {
   // 강제로 상태 업데이트
   showActionEditor.value = false  // 다른 편집기 닫기
   
-  // script 타입 액션이 있으면 그 스크립트를 우선 표시
+  // script 타입 액션이 있으면 그 스크립트와 브레이크포인트를 우선 표시
   const scriptAction = editableActions.value.find(action => action.type === 'script')
   if (scriptAction && scriptAction.parameters?.script) {
     scriptContent.value = scriptAction.parameters.script
+    // 브레이크포인트 정보도 복원
+    currentBreakpoints.value = scriptAction.parameters?.breakpoints || []
   } else {
     // 현재 액션들을 스크립트로 변환하여 편집기에 표시
     scriptContent.value = generatedScript.value
+    currentBreakpoints.value = []
   }
   
   // DOM 업데이트 후 스크립트 편집기 열기
@@ -469,14 +478,15 @@ function closeScriptEditor() {
   scriptContent.value = ''
 }
 
-function handleScriptApply(parsedActions, scriptText) {
+function handleScriptApply(parsedActions, scriptText, breakpoints) {
   // 스크립트 편집기에서 가져온 스크립트 내용을 사용하여 script 타입 액션 생성
   const scriptAction = {
     id: `script-${Date.now()}`,
     name: '스크립트',
     type: 'script',
     parameters: {
-      script: scriptText
+      script: scriptText,
+      breakpoints: breakpoints || [] // 브레이크포인트 정보 저장
     }
   }
   
@@ -487,6 +497,11 @@ function handleScriptApply(parsedActions, scriptText) {
   handleSave()
   
   closeScriptEditor()
+}
+
+// 브레이크포인트 변경 핸들러
+function handleBreakpointChange(blockId, lineNumber, isOn) {
+  emit('breakpointChange', blockId, lineNumber, isOn)
 }
 
 // 커넥터 관리 함수들
@@ -548,6 +563,18 @@ watch(() => props.initialName, (newName) => {
 watch(() => props.initialMaxCapacity, (newCapacity) => {
   localMaxCapacity.value = newCapacity
 })
+
+// 브레이크포인트 prop 변경 감지
+watch(() => props.breakpoints, (newBreakpoints) => {
+  currentBreakpoints.value = [...newBreakpoints]
+  
+  // 브레이크포인트가 모두 제거된 경우 스크립트 편집기에서도 강제로 클리어
+  if ((!newBreakpoints || newBreakpoints.length === 0) && scriptEditorRef.value && showScriptEditor.value) {
+    nextTick(() => {
+      scriptEditorRef.value.forceClearBreakpoints?.()
+    })
+  }
+}, { deep: true, immediate: true })
 </script>
 
 <style scoped>

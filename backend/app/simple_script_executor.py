@@ -26,10 +26,11 @@ def parse_delay_value(duration_str: str) -> float:
 class SimpleScriptExecutor:
     """단순화된 스크립트 실행기"""
     
-    def __init__(self, signal_manager=None, integer_manager=None, variable_accessor=None):
+    def __init__(self, signal_manager=None, integer_manager=None, variable_accessor=None, debug_manager=None):
         self.signal_manager = signal_manager
         self.integer_manager = integer_manager
         self.variable_accessor = variable_accessor
+        self.debug_manager = debug_manager
         self.simulation_logs = []  # 시뮬레이션 로그 저장
         self.command_functions = {
             'delay': self.execute_delay,
@@ -84,6 +85,7 @@ class SimpleScriptExecutor:
         
         if self.signal_manager:
             current_value = self.signal_manager.get_signal(signal_name, False)
+            # logger.debug(f"Signal '{signal_name}' current value: {current_value}, expected: {expected_value}")
             return current_value == expected_value
         
         return False
@@ -135,14 +137,14 @@ class SimpleScriptExecutor:
     def execute_wait(self, env: simpy.Environment, condition: str, entity: Any = None) -> Generator:
         """wait 명령 실행 (신호 및 엔티티 속성 대기 지원, OR/AND 조건 지원)"""
         # wait 조건이 이미 만족되는지 먼저 확인
-        if self.execute_if(env, condition, entity):
+        if self._evaluate_if_condition(condition, entity):
             yield env.timeout(0)
             return
         
         # 조건이 만족될 때까지 대기
         while True:
             yield env.timeout(0.01)
-            if self.execute_if(env, condition, entity):
+            if self._evaluate_if_condition(condition, entity):
                 return
     
     def execute_go_to(self, env: simpy.Environment, target: str, entity: Any) -> Generator:
@@ -154,7 +156,7 @@ class SimpleScriptExecutor:
         
         # 이미 transit 상태인 엔티티는 이동 명령 무시
         if hasattr(entity, 'state') and entity.state == 'transit':
-            logger.debug(f"Entity {entity.id} is already in transit, ignoring go to {target}")
+            # logger.debug(f"Entity {entity.id} is already in transit, ignoring go to {target}")
             yield env.timeout(0)
             return
             
@@ -189,6 +191,16 @@ class SimpleScriptExecutor:
     
     def execute_if(self, env: simpy.Environment, condition: str, entity: Any = None) -> bool:
         """if 조건문 평가 (엔티티 속성 체크 지원)"""
+        # 디버그 매니저가 있으면 조건 평가 결과를 컨텍스트에 추가
+        result = self._evaluate_if_condition(condition, entity)
+        # logger.debug(f"IF condition '{condition}' evaluated to: {result}")
+        if self.debug_manager and hasattr(self, '_current_if_depth'):
+            # if 문 진입 시 컨텍스트 추가 (execute_script에서 관리)
+            pass
+        return result
+        
+    def _evaluate_if_condition(self, condition: str, entity: Any = None) -> bool:
+        """실제 if 조건 평가 로직"""
         # product type != 조건 체크 (not equal)
         if 'product type !=' in condition and entity:
             if not hasattr(entity, 'custom_attributes') or not hasattr(entity, 'state'):
@@ -259,8 +271,8 @@ class SimpleScriptExecutor:
                 cond = cond.strip()
                 # product type 조건 확인
                 if 'product type' in cond:
-                    # 재귀적으로 execute_if 호출하여 product type 조건 평가
-                    if not self.execute_if(env, cond, entity):
+                    # 재귀적으로 _evaluate_if_condition 호출하여 product type 조건 평가
+                    if not self._evaluate_if_condition(cond, entity):
                         return False
                 # 정수 비교 조건 확인
                 elif any(op in cond for op in ['>=', '<=', '!=', '>', '<']) or (self.integer_manager and ' = ' in cond and self.integer_manager.has_variable(cond.split(' = ')[0].strip())):
@@ -282,8 +294,8 @@ class SimpleScriptExecutor:
                 cond = cond.strip()
                 # product type 조건 확인
                 if 'product type' in cond:
-                    # 재귀적으로 execute_if 호출하여 product type 조건 평가
-                    if self.execute_if(env, cond, entity):
+                    # 재귀적으로 _evaluate_if_condition 호출하여 product type 조건 평가
+                    if self._evaluate_if_condition(cond, entity):
                         return True
                 # 정수 비교 조건 확인
                 elif any(op in cond for op in ['>=', '<=', '!=', '>', '<']) or (self.integer_manager and ' = ' in cond and self.integer_manager.has_variable(cond.split(' = ')[0].strip())):
@@ -327,7 +339,7 @@ class SimpleScriptExecutor:
         
         # transit 상태의 엔티티는 속성 변경 무시
         if hasattr(entity, 'state') and entity.state == 'transit':
-            logger.debug(f"Entity {entity.id} is in transit, ignoring product type change")
+            # logger.debug(f"Entity {entity.id} is in transit, ignoring product type change")
             yield env.timeout(0)
             return
         
@@ -361,7 +373,7 @@ class SimpleScriptExecutor:
         
         # transit 상태의 엔티티는 속성 변경 무시
         if hasattr(entity, 'state') and entity.state == 'transit':
-            logger.debug(f"Entity {entity.id} is in transit, ignoring product type change")
+            # logger.debug(f"Entity {entity.id} is in transit, ignoring product type change")
             yield env.timeout(0)
             return
         
@@ -645,7 +657,7 @@ class SimpleScriptExecutor:
     def execute_script_line(self, env: simpy.Environment, line: str, entity: Any, block_name: str = None, block: Any = None) -> Generator:
         """단일 스크립트 라인 실행"""
         command, params = self.parse_script_line(line)
-        logger.debug(f"Parsed command: {command}, params: {params}")
+        # logger.debug(f"Parsed command: {command}, params: {params}")
         
         if command == 'delay':
             yield from self.execute_delay(env, params)
@@ -681,18 +693,18 @@ class SimpleScriptExecutor:
             yield from self.execute_log(env, params, block_name)
         
         elif command == 'create':
-            logger.debug(f"Executing create command, block: {block}")
+            # logger.debug(f"Executing create command, block: {block}")
             if block:
                 result = yield from self.execute_create(env, params, block)
-                logger.debug(f"Create command result: {result}")
+                # logger.debug(f"Create command result: {result}")
                 if result and isinstance(result, tuple) and result[0] == 'created_entity':
                     logger.info(f"Returning created entity result: {result}")
                     return result  # 생성된 엔티티 정보 반환
                 else:
-                    logger.debug(f"Create command returned None or invalid result")
+                    # logger.debug(f"Create command returned None or invalid result")
                     return None
             else:
-                logger.debug(f"No block provided for create command")
+                # logger.debug(f"No block provided for create command")
                 yield env.timeout(0)
                 return None
         
@@ -720,3 +732,116 @@ class SimpleScriptExecutor:
         else:
             logger.warning(f"Unknown command: {command}")
             return 'continue'
+    
+    def execute_script(self, script: str, entity: Any, env: simpy.Environment, block: Any = None) -> Generator:
+        """스크립트 실행 (디버그 지원 포함)"""
+        lines = script.strip().split('\n')
+        line_index = 0
+        if_depth = 0
+        if_stack = []  # 조건부 실행 스택
+        
+        while line_index < len(lines):
+            line = lines[line_index].strip()
+            
+            # 빈 줄이나 주석은 건너뛰기
+            if not line or line.startswith('//'):
+                line_index += 1
+                continue
+            
+            # 디버그 브레이크포인트 체크
+            if self.debug_manager and block:
+                logger.debug(f"[SCRIPT DEBUG] Checking breakpoint for block {block.id}, line {line_index + 1}")
+                yield from self.debug_manager.check_breakpoint(
+                    block.id, 
+                    line_index + 1,  # 1-based line number
+                    env
+                )
+            else:
+                if not self.debug_manager:
+                    logger.debug(f"[SCRIPT DEBUG] No debug manager available")
+                if not block:
+                    logger.debug(f"[SCRIPT DEBUG] No block provided")
+            
+            # 들여쓰기 확인으로 if 블록 탈출 감지
+            current_indent = len(line) - len(line.lstrip())
+            
+            # if 블록 탈출 처리
+            while if_stack and current_indent <= if_stack[-1][1]:
+                if_stack.pop()
+                if self.debug_manager:
+                    self.debug_manager.pop_execution_context()
+            
+            # 현재 false 조건 내부인지 확인
+            skip_line = False
+            for _, _, condition_met in if_stack:
+                if not condition_met:
+                    skip_line = True
+                    break
+            
+            if skip_line:
+                line_index += 1
+                continue
+            
+            # 실제 명령 실행
+            result = yield from self.execute_script_line(env, line, entity, getattr(block, 'name', None), block)
+            
+            # if 조건 처리
+            if isinstance(result, tuple) and result[0] == 'if':
+                condition_met = result[1]
+                if_stack.append((line_index, current_indent, condition_met))
+                if self.debug_manager:
+                    self.debug_manager.push_execution_context('if', condition_met)
+                
+                # 조건이 false면 if 블록 스킵
+                if not condition_met:
+                    # 다음 라인부터 들여쓰기가 끝날 때까지 스킵
+                    line_index += 1
+                    while line_index < len(lines):
+                        next_line = lines[line_index]
+                        next_indent = len(next_line) - len(next_line.lstrip())
+                        
+                        # 빈 줄은 계속 진행
+                        if not next_line.strip():
+                            line_index += 1
+                            continue
+                        
+                        # 들여쓰기가 현재 if보다 크면 스킵
+                        if next_indent > current_indent:
+                            line_index += 1
+                        else:
+                            # 들여쓰기가 같거나 작으면 if 블록 종료
+                            break
+                else:
+                    line_index += 1
+            
+            # jump 처리
+            elif isinstance(result, tuple) and result[0] == 'jump':
+                target_line = result[1]
+                if 0 <= target_line < len(lines):
+                    line_index = target_line
+                else:
+                    line_index += 1
+            
+            # 이동 명령 처리
+            elif result == 'movement':
+                # 이동 요청 후 스크립트 계속 실행
+                line_index += 1
+            
+            # 엔티티 생성 처리
+            elif isinstance(result, tuple) and result[0] == 'created_entity':
+                # force execution에서 엔티티가 생성된 경우, 엔티티를 업데이트하고 계속 진행
+                if entity is None:  # force execution인 경우
+                    entity = result[1]  # 생성된 엔티티로 업데이트
+                    line_index += 1
+                else:
+                    # 일반 실행에서는 결과 반환
+                    return result
+            
+            else:
+                line_index += 1
+        
+        # 스크립트 종료 시 남은 컨텍스트 정리
+        if self.debug_manager:
+            while if_stack:
+                if_stack.pop()
+                self.debug_manager.pop_execution_context()

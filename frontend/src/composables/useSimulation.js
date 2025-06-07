@@ -169,8 +169,10 @@ export function useSimulation() {
       processTimeFromSim.value = result.time
     }
     
-    // step 응답에는 step_count가 없으므로 직접 증가
-    currentStepCount.value++
+    // 브레이크포인트에서 멈춘 경우가 아닐 때만 스텝 수 증가
+    if (!result.debug_info || !result.debug_info.is_paused) {
+      currentStepCount.value++
+    }
     
     if (result.entities_processed_total !== undefined) {
       dispatchedProductsFromSim.value = result.entities_processed_total
@@ -232,6 +234,21 @@ export function useSimulation() {
         
         // 첫 번째 스텝 이후에는 null 사용
         currentSetupData = null
+        
+        // 브레이크포인트에서 멈췄는지 확인
+        if (result.result && result.result.debug_info && result.result.debug_info.is_paused) {
+          console.log('[useSimulation] 브레이크포인트에서 멈춤 감지, 전체 실행 일시정지')
+          shouldStopFullExecution.value = true
+          // 일시정지 상태를 유지하되 전체 실행 상태는 true로 유지
+          isFullExecutionRunning.value = false
+          
+          // 브레이크포인트에서 멈춘 경우에도 콜백 호출하여 디버그 상태 업데이트
+          if (onStepComplete) {
+            onStepComplete(result.result)
+          }
+          
+          break
+        }
         
         // 스텝 완료 콜백 호출
         if (onStepComplete) {

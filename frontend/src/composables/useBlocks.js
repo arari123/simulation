@@ -32,6 +32,9 @@ export function useBlocks() {
   // 팝업 표시 상태
   const showBlockSettingsPopup = ref(false)
   const showConnectorSettingsPopup = ref(false)
+  
+  // 브레이크포인트 상태 (blockId -> Set<lineNumber>)
+  const blockBreakpoints = ref(new Map())
 
   // 계산된 속성
   const allProcessBlocks = computed(() => blocks.value)
@@ -347,7 +350,6 @@ export function useBlocks() {
       // 스크립트 타입 액션이 있으면 전체 연결 새로고침
       const hasScriptAction = newActions.some(action => action.type === 'script')
       if (hasScriptAction) {
-        console.log('[saveBlockSettings] 스크립트 액션 감지 - 전체 연결 새로고침')
         refreshAllAutoConnections()
       } else {
         // 일반 액션은 기존처럼 처리
@@ -506,7 +508,6 @@ export function useBlocks() {
    * 커넥터 추가
    */
   function handleAddConnector(blockId, connectorData) {
-    console.log('[handleAddConnector] 호출됨:', { blockId, connectorData })
     const block = blocks.value.find(b => String(b.id) === String(blockId))
     if (!block) return
 
@@ -517,7 +518,6 @@ export function useBlocks() {
     }
 
     const newConnector = addCustomConnectorToBlock(block, connectorData)
-    console.log('[handleAddConnector] 커넥터 추가 완료:', newConnector)
     
     // 새 커넥터 추가 시 연결선 새로고침하지 않음
     // (커넥터를 추가했다고 해서 자동으로 연결이 생성되지는 않음)
@@ -579,7 +579,6 @@ export function useBlocks() {
 
     const connector = block.connectionPoints[connectorIndex]
     
-    console.log(`[handleDeleteConnector] 커넥터 삭제: ${block.name}.${connector.name}`)
     
     // 1. 이 커넥터와 관련된 모든 연결선 제거
     const removedConnections = connections.value.filter(conn => 
@@ -592,7 +591,6 @@ export function useBlocks() {
       !(String(conn.to_block_id) === String(blockId) && String(conn.to_connector_id) === String(connectorId))
     )
     
-    console.log(`[handleDeleteConnector] ${removedConnections.length}개 연결선 제거`)
     
     // 2. 커넥터를 블록에서 제거
     block.connectionPoints.splice(connectorIndex, 1)
@@ -608,7 +606,6 @@ export function useBlocks() {
     // 4. 자동 연결 새로고침 (스크립트에서 참조하는 커넥터가 삭제된 경우 대응)
     refreshAllAutoConnections()
     
-    console.log(`[handleDeleteConnector] 커넥터 삭제 완료`)
   }
 
   /**
@@ -817,6 +814,57 @@ export function useBlocks() {
     return errorMap
   })
 
+  /**
+   * 브레이크포인트 관리 함수들
+   */
+  async function setBreakpoint(blockId, lineNumber, isOn, controlPanelRef) {
+    if (!blockBreakpoints.value.has(blockId)) {
+      blockBreakpoints.value.set(blockId, new Set())
+    }
+    
+    const breakpoints = blockBreakpoints.value.get(blockId)
+    if (isOn) {
+      breakpoints.add(lineNumber)
+    } else {
+      breakpoints.delete(lineNumber)
+    }
+    
+    // 백엔드와 동기화
+    try {
+      const SimulationApi = (await import('../services/SimulationApi.js')).default
+      await SimulationApi.setBreakpoint(blockId, lineNumber, isOn)
+      
+      // 백엔드에서 최신 디버그 상태를 가져와서 ControlPanel 업데이트
+      const debugStatus = await SimulationApi.getDebugStatus()
+      
+      if (controlPanelRef && controlPanelRef.value) {
+        controlPanelRef.value.updateDebugStatus(debugStatus)
+        if (debugStatus.breakpoints) {
+          controlPanelRef.value.updateBreakpoints(debugStatus.breakpoints)
+        }
+      } else {
+      }
+    } catch (error) {
+      console.error('Failed to sync breakpoint with backend:', error)
+    }
+  }
+  
+  function getBreakpoints(blockId) {
+    return Array.from(blockBreakpoints.value.get(blockId) || [])
+  }
+  
+  async function clearAllBreakpoints() {
+    blockBreakpoints.value.clear()
+    
+    // 백엔드와 동기화
+    try {
+      const SimulationApi = (await import('../services/SimulationApi.js')).default
+      await SimulationApi.clearAllBreakpoints()
+    } catch (error) {
+      console.error('Failed to clear all breakpoints on backend:', error)
+    }
+  }
+
   return {
     // 상태
     blocks,
@@ -825,6 +873,7 @@ export function useBlocks() {
     selectedConnectorInfo,
     showBlockSettingsPopup,
     showConnectorSettingsPopup,
+    blockBreakpoints,
     
     // 계산된 속성
     allProcessBlocks,
@@ -851,6 +900,11 @@ export function useBlocks() {
     refreshAllAutoConnections,
     setupInitialBlocks,
     updateBlocksForSettings,
-    getBlockScriptErrors
+    getBlockScriptErrors,
+    
+    // 브레이크포인트 메서드
+    setBreakpoint,
+    getBreakpoints,
+    clearAllBreakpoints
   }
 } 

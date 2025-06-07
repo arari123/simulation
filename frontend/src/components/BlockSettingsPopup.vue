@@ -13,6 +13,7 @@
     :all-blocks="allBlocks"
     :current-block="blockData"
     :validate-name="validateBlockName"
+    :breakpoints="blockBreakpoints"
     @close="$emit('close-popup')"
     @save="handleSave"
     @name-change="handleNameChange"
@@ -21,6 +22,7 @@
     @text-color-change="handleTextColorChange"
     @connector-add="handleConnectorAdd"
     @delete-block="$emit('delete-block', blockData.id)"
+    @breakpoint-change="handleBreakpointChange"
   />
 </template>
 
@@ -34,7 +36,8 @@ const props = defineProps({
   blockData: { type: Object, required: true },
   allSignals: { type: Array, default: () => [] },
   allBlocks: { type: Array, default: () => [] },
-  isSidebar: { type: Boolean, default: false }
+  isSidebar: { type: Boolean, default: false },
+  blockBreakpoints: { type: Array, default: () => [] }
 })
 
 // Emits 정의
@@ -44,7 +47,8 @@ const emit = defineEmits([
   'copy-block',
   'delete-block',
   'add-connector',
-  'change-block-name'
+  'change-block-name',
+  'breakpoint-change'
 ])
 
 // 유효성 검사 함수
@@ -77,5 +81,10 @@ function handleTextColorChange(newColor) {
 // 커넥터 관련 이벤트 핸들러
 function handleConnectorAdd(newConnector) {
   emit('add-connector', props.blockData.id, newConnector)
+}
+
+// 브레이크포인트 변경 핸들러
+function handleBreakpointChange(blockId, lineNumber, isOn) {
+  emit('breakpoint-change', blockId, lineNumber, isOn)
 }
 </script>

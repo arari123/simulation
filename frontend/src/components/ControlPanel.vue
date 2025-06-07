@@ -9,12 +9,37 @@
       <div>진행 시간: {{ currentProcessTime.toFixed(1) }} 초</div>
       <div>실행된 스텝 수: {{ currentStepCount }} 회</div>
       
-      <button @click="stepExecution">스텝 실행</button>
+      <button @click="stepExecution" :disabled="isPaused" :title="isPaused ? '브레이크포인트에서 멈춤. 계속 실행을 눌러주세요.' : ''">스텝 실행</button>
       <button @click="handleFullExecutionToggle">
         {{ isFullExecutionRunning ? '일시 정지' : '전체 실행 시작' }}
       </button>
       <button @click="previousExecution" disabled style="opacity: 0.5; cursor: not-allowed;" title="이전 단계로 되돌아가는 기능은 아직 구현되지 않았습니다.">이전 실행</button>
       <button @click="resetSimulationDisplayInternal" class="reset-button">시뮬레이션 초기화</button>
+
+      <!-- 디버그 제어 섹션 -->
+      <div class="debug-section" v-if="showDebugControls">
+        <h4>디버그 제어</h4>
+        <div class="debug-status">{{ debugStatus }}</div>
+        
+        <!-- 브레이크포인트 목록 -->
+        <div class="breakpoint-list" v-if="hasBreakpoints">
+          <h5>활성 브레이크포인트:</h5>
+          <ul>
+            <li v-for="(lines, blockId) in currentBreakpoints" :key="blockId">
+              {{ getBlockName(blockId) }}: 라인 {{ lines.join(', ') }}
+            </li>
+          </ul>
+        </div>
+        
+        <div class="debug-controls">
+          <button @click="continueExecution" :disabled="!isPaused" class="continue-btn">
+            계속 실행
+          </button>
+          <button @click="clearAllBreakpoints" class="clear-btn">
+            모든 브레이크포인트 제거
+          </button>
+        </div>
+      </div>
 
       <div>
         <h4>전체 실행 옵션</h4>
@@ -114,7 +139,8 @@ const props = defineProps({
   },
   globalSignals: { type: Array, default: () => [] },
   isSimulationEnded: { type: Boolean, default: false },
-  isFullExecutionRunning: { type: Boolean, default: false }
+  isFullExecutionRunning: { type: Boolean, default: false },
+  blocks: { type: Array, default: () => [] }
 })
 
 const emit = defineEmits([
@@ -130,7 +156,8 @@ const emit = defineEmits([
     'import-configuration',
     'previous-step',
     'panel-width-changed', // 패널 너비 변경 이벤트 추가
-    'refresh-auto-connections'
+    'refresh-auto-connections',
+    'clear-all-breakpoints' // 브레이크포인트 제거 이벤트 추가
 ])
 
 const inputQuantity = ref(10) // 투입 수량은 로컬에서 관리
@@ -139,6 +166,19 @@ const executionMode = ref("quantity") // 실행 모드 선택 (quantity 또는 t
 
 const isMinimized = ref(false)
 const panelWidth = computed(() => (isMinimized.value ? '50px' : '300px'))
+
+// 브레이크포인트가 있는지 확인하는 computed
+const hasBreakpoints = computed(() => {
+  const keys = Object.keys(currentBreakpoints.value)
+  return keys.length > 0
+})
+
+// 디버그 상태
+const showDebugControls = ref(true) // 디버그 컨트롤 표시 여부
+const isDebugging = ref(false)
+const isPaused = ref(false)
+const debugStatus = ref('')
+const currentBreakpoints = ref({}) // blockId -> array of line numbers
 
 const showSettingsPopup = ref(false)
 // editableSettings는 팝업 내에서 임시로 수정되는 값들을 다룹니다.
@@ -214,6 +254,65 @@ function previousExecution() {
   alert("이전 단계로 되돌아가는 기능은 아직 구현되지 않았습니다.");
 }
 
+// 디버그 관련 함수들
+async function continueExecution() {
+  try {
+    const SimulationApi = (await import('../services/SimulationApi.js')).default
+    const result = await SimulationApi.debugContinue()
+    
+    if (result && result.success) {
+      isPaused.value = false
+      debugStatus.value = '실행 재개됨'
+      // 계속 실행 후 스텝 실행
+      emit('step-simulation')
+    }
+  } catch (error) {
+    console.error('Failed to continue execution:', error)
+    alert(`디버그 계속 실행 실패: ${error.message}`)
+  }
+}
+
+async function clearAllBreakpoints() {
+  if (confirm('모든 브레이크포인트를 제거하시겠습니까?')) {
+    emit('clear-all-breakpoints')
+    currentBreakpoints.value = {}
+    debugStatus.value = '모든 브레이크포인트 제거됨'
+  }
+}
+
+function getBlockName(blockId) {
+  // props.blocks에서 블록 이름 찾기
+  if (props.blocks && Array.isArray(props.blocks)) {
+    const block = props.blocks.find(b => String(b.id) === String(blockId))
+    if (block) {
+      return block.name
+    }
+  }
+  return `블록 ${blockId}`
+}
+
+// 디버그 상태 업데이트 (시뮬레이션 결과에서 호출)
+function updateDebugStatus(debugInfo) {
+  if (debugInfo) {
+    isDebugging.value = debugInfo.is_debugging
+    isPaused.value = debugInfo.is_paused
+    
+    if (debugInfo.is_paused && debugInfo.current_break) {
+      const blockName = getBlockName(debugInfo.current_break.block_id)
+      debugStatus.value = `브레이크포인트: ${blockName} 라인 ${debugInfo.current_break.line}`
+    } else if (debugInfo.is_debugging) {
+      debugStatus.value = '디버그 모드 실행 중'
+    } else {
+      debugStatus.value = '디버그 모드 비활성'
+    }
+    
+    // 브레이크포인트 목록 업데이트
+    if (debugInfo.breakpoints) {
+      currentBreakpoints.value = debugInfo.breakpoints
+    }
+  }
+}
+
 function parseTimeToSeconds(timeStr) {
   const match = timeStr.match(/^(\d+)([smh])$/);
   if (!match) return null;
@@ -223,6 +322,17 @@ function parseTimeToSeconds(timeStr) {
   if (unit === 'm') return value * 60;
   if (unit === 'h') return value * 60 * 60;
   return null;
+}
+
+// 외부에서 디버그 상태 업데이트를 위해 노출
+defineExpose({
+  updateDebugStatus,
+  updateBreakpoints
+})
+
+// 브레이크포인트 목록 업데이트
+function updateBreakpoints(breakpoints) {
+  currentBreakpoints.value = breakpoints
 }
 
 function openSettingsPopup() {
@@ -249,7 +359,6 @@ function triggerAddProcessBlock() {
 
 function refreshAutoConnections() {
   emit('refresh-auto-connections');
-  console.log("자동 연결 새로고침 실행");
 }
 
 function saveConfiguration() {
@@ -373,6 +482,96 @@ function toggleGlobalSignalPanel() {
 }
 .refresh-connections-btn:hover {
     background-color: #138496;
+}
+
+/* 디버그 섹션 스타일 */
+.debug-section {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+.debug-section h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #495057;
+}
+
+.debug-status {
+  padding: 8px;
+  background-color: #e9ecef;
+  border-radius: 3px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  min-height: 20px;
+  color: #495057;
+}
+
+.debug-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.debug-controls button {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.debug-controls button.active {
+  background-color: #dc3545;
+  color: white;
+}
+
+.debug-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.breakpoint-list {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #fff;
+  border-radius: 3px;
+  border: 1px solid #dee2e6;
+}
+
+.breakpoint-list h5 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #495057;
+}
+
+.breakpoint-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.breakpoint-list li {
+  padding: 4px 0;
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.continue-btn:enabled {
+  background-color: #28a745;
+  color: white;
+}
+
+.continue-btn:enabled:hover {
+  background-color: #218838;
+}
+
+.clear-btn {
+  background-color: #dc3545;
+  color: white;
+}
+
+.clear-btn:hover {
+  background-color: #c82333;
 }
 
 .execution-options {

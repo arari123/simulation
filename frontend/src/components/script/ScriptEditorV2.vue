@@ -41,6 +41,7 @@ import { defaultKeymap, historyKeymap, indentWithTab, history, undo, redo } from
 import { createHighlightPlugin, highlightTheme } from './SimpleHighlighter.js'
 import { createSimpleLinter } from './ScriptLinter.js'
 import { lintGutter } from '@codemirror/lint'
+import { createBreakpointExtension, getBreakpoints, clearAllBreakpoints as clearAllBreakpointsInEditor, initializeBreakpoints } from './BreakpointExtension.js'
 import ScriptHelp from '../shared/ScriptHelp.vue'
 import { validateScript, parseScriptToActions } from '../../utils/ScriptUtils.js'
 
@@ -52,11 +53,12 @@ const props = defineProps({
   allSignals: { type: Array, default: () => [] },
   allBlocks: { type: Array, default: () => [] },
   currentBlock: { type: Object, default: null },
-  entityType: { type: String, required: true }
+  entityType: { type: String, required: true },
+  breakpoints: { type: Array, default: () => [] } // 브레이크포인트 배열
 })
 
 // Emits 정의 (기존과 동일)
-const emit = defineEmits(['close', 'apply'])
+const emit = defineEmits(['close', 'apply', 'breakpointChange'])
 
 // 상태 관리
 const editorWrapper = ref(null)
@@ -95,12 +97,25 @@ function applyScript() {
       props.entityType
     )
     
+    // 브레이크포인트 정보 가져오기
+    const breakpoints = editorView.value ? getBreakpoints(editorView.value) : []
     
-    // 파싱된 액션과 함께 스크립트 내용도 전달
-    emit('apply', parsedActions, scriptContent)
+    // 파싱된 액션과 함께 스크립트 내용, 브레이크포인트도 전달
+    emit('apply', parsedActions, scriptContent, breakpoints)
   } catch (error) {
     alert('스크립트 파싱 오류: ' + error.message)
   }
+}
+
+// 브레이크포인트 변경 핸들러
+function handleBreakpointChange(lineNumber, isOn) {
+  
+  if (!props.currentBlock?.id) {
+    console.error('No block ID available for breakpoint!')
+    return
+  }
+  
+  emit('breakpointChange', props.currentBlock.id, lineNumber, isOn)
 }
 
 function createEditor() {
@@ -111,13 +126,14 @@ function createEditor() {
   const blockNames = (props.allBlocks || []).map(block => block.name).filter(name => name)
   
 
-  // 기본 확장 기능들을 수동으로 구성 (history + 하이라이팅 + linting 포함)
+  // 기본 확장 기능들을 수동으로 구성 (history + 하이라이팅 + linting + 브레이크포인트 포함)
   const basicExtensions = [
     lineNumbers(),
     history(), // 히스토리 기능 추가
     createHighlightPlugin(signalNames, blockNames), // 구문 하이라이팅 추가
     lintGutter(), // 오류 표시 거터 추가
     createSimpleLinter(props.allSignals, props.allBlocks, props.currentBlock, props.entityType), // 실시간 검증 추가
+    createBreakpointExtension(handleBreakpointChange), // 브레이크포인트 기능 추가
     // ifBlockHighlighter, // if 블록 하이라이팅 추가 - 임시 비활성화
     // indentGuides, // 들여쓰기 가이드 추가 - 임시 비활성화
     keymap.of([
@@ -232,6 +248,13 @@ function createEditor() {
     state: startState,
     parent: editorWrapper.value
   })
+  
+  // 기존 브레이크포인트 복원
+  if (props.breakpoints && props.breakpoints.length > 0) {
+    nextTick(() => {
+      initializeBreakpoints(editorView.value, props.breakpoints)
+    })
+  }
 }
 
 function destroyEditor() {
@@ -279,6 +302,29 @@ watch(() => props.show, (newShow) => {
 
 watch(() => props.scriptContent, () => {
   updateEditorContent()
+})
+
+// 브레이크포인트를 강제로 클리어하는 메서드
+function forceClearBreakpoints() {
+  if (editorView.value) {
+    clearAllBreakpointsInEditor(editorView.value)
+  }
+}
+
+// 브레이크포인트 변경 감지
+watch(() => props.breakpoints, (newBreakpoints, oldBreakpoints) => {
+  if (editorView.value) {
+    // 기존 브레이크포인트를 모두 제거하고 새로 설정
+    clearAllBreakpointsInEditor(editorView.value)
+    if (newBreakpoints && newBreakpoints.length > 0) {
+      initializeBreakpoints(editorView.value, newBreakpoints)
+    }
+  }
+}, { deep: true, immediate: true })
+
+// 메서드를 외부에서 호출할 수 있도록 노출
+defineExpose({
+  forceClearBreakpoints
 })
 </script>
 

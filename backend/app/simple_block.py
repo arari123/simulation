@@ -15,15 +15,16 @@ class IndependentBlock:
     """완전 독립적인 블록 객체"""
     
     def __init__(self, block_id: str, block_name: str, script_lines: List[str], 
-                 signal_manager=None, max_capacity: int = 100, integer_manager=None, variable_accessor=None):
+                 signal_manager=None, max_capacity: int = 100, integer_manager=None, variable_accessor=None, debug_manager=None):
         self.id = block_id
         self.name = block_name
         self.script_lines = script_lines
         self.signal_manager = signal_manager
         self.max_capacity = max_capacity
+        self.debug_manager = debug_manager
         
         # 스크립트 실행기
-        self.script_executor = SimpleScriptExecutor(signal_manager, integer_manager, variable_accessor)
+        self.script_executor = SimpleScriptExecutor(signal_manager, integer_manager, variable_accessor, debug_manager)
         
         # 블록 상태
         self.entities_in_block: List[SimpleEntity] = []
@@ -110,7 +111,7 @@ class IndependentBlock:
             entity = SimpleEntity()
             entity.created_at = round(env.now, 1)
             if self.add_entity(entity):
-                logger.info(f"[{env.now:.1f}s] Block {self.name} created entity {entity.id}")
+                # logger.info(f"[{env.now:.1f}s] Block {self.name} created entity {entity.id}")
                 yield env.timeout(0)
                 return entity
         yield env.timeout(0)
@@ -125,81 +126,18 @@ class IndependentBlock:
         yield env.timeout(0)
     
     def process_entity(self, env: simpy.Environment, entity: SimpleEntity) -> Generator:
-        """엔티티 도착 시 스크립트를 순차 실행 (Batch 방식)"""
-        current_line = 0
-        max_iterations = 1000  # 무한 루프 방지
-        iteration_count = 0
+        """엔티티 도착 시 스크립트를 실행 (디버그 지원 포함)"""
+        # 전체 스크립트를 문자열로 변환
+        script_text = '\n'.join(self.script_lines)
         
-        while current_line < len(self.script_lines) and iteration_count < max_iterations:
-            iteration_count += 1
-            line = self.script_lines[current_line].strip()
-            
-            # 빈 줄이나 주석은 건너뛰기
-            if not line or line.startswith('//'):
-                current_line += 1
-                continue
-            
-            # 스크립트 라인 실행
-            logger.debug(f"[{self.name}] Executing line {current_line}: {line}, entity: {entity}")
-            result = yield from self.script_executor.execute_script_line(env, line, entity, self.name, self)
-            logger.debug(f"[{self.name}] Result: {result}")
-            
-            # 결과 처리
-            if isinstance(result, tuple) and result[0] == 'created_entity':
-                # create entity 명령으로 엔티티가 생성된 경우
-                entity = result[1]  # 생성된 엔티티로 교체
-                logger.info(f"[{self.name}] Entity created and updated: {entity.id}")
-                logger.info(f"[{self.name}] Continuing with new entity, next line: {current_line + 1}")
-                current_line += 1
-            elif result == 'movement':
-                # 이동 요청이 있어도 스크립트는 계속 실행
-                current_line += 1
-            elif result == 'continue':
-                # force execution 등의 명령은 그냥 다음 줄로
-                current_line += 1
-            elif isinstance(result, tuple) and result[0] == 'jump':
-                # jump 명령 처리
-                target_line = result[1]
-                if 0 <= target_line < len(self.script_lines):
-                    current_line = target_line
-                    continue
-                else:
-                    current_line += 1
-            elif isinstance(result, tuple) and result[0] == 'if':
-                # if 조건문 처리
-                condition_result = result[1]
-                if condition_result:
-                    # 조건이 참이면 들여쓰기된 블록 실행
-                    current_line += 1
-                    # if 블록 내부의 명령들을 실행하고 movement 발생 시 즉시 리턴
-                    while current_line < len(self.script_lines):
-                        line = self.script_lines[current_line]
-                        # 들여쓰기가 없으면 if 블록 종료
-                        if not line.startswith('\t') and not line.startswith('    ') and not line.startswith('  '):
-                            break
-                        
-                        stripped_line = line.strip()
-                        if not stripped_line or stripped_line.startswith('//'):
-                            current_line += 1
-                            continue
-                        
-                        sub_result = yield from self.script_executor.execute_script_line(env, stripped_line, entity, self.name, self)
-                        
-                        if sub_result == 'movement':
-                            # if 블록 내에서 이동이 발생해도 계속 실행
-                            pass
-                        elif isinstance(sub_result, tuple) and sub_result[0] == 'created_entity':
-                            # if 블록 내에서 엔티티가 생성된 경우
-                            entity = sub_result[1]  # 생성된 엔티티로 교체
-                            logger.info(f"[{self.name}] Entity created in if block: {entity.id}")
-                        
-                        current_line += 1
-                    # if 블록 실행 완료 후 current_line은 이미 if 블록 밖을 가리킴
-                else:
-                    # 조건이 거짓이면 들여쓰기된 블록 스킵
-                    current_line = self._skip_indented_block(current_line)
-            else:
-                current_line += 1
+        # 스크립트 실행 (디버그 매니저가 브레이크포인트 처리)
+        result = yield from self.script_executor.execute_script(script_text, entity, env, self)
+        
+        # 결과 처리
+        if isinstance(result, tuple) and result[0] == 'created_entity':
+            # create entity 명령으로 엔티티가 생성된 경우
+            entity = result[1]  # 생성된 엔티티로 교체
+            logger.info(f"[{self.name}] Entity created and updated: {entity.id}")
         
         # 스크립트 실행 완료
         return None
@@ -302,7 +240,7 @@ class IndependentBlock:
                 # 이미 실행 중인 경우 (force execution으로 생성된 엔티티 처리)
                 if state.is_executing and state.entity_ref and state.entity_ref in self.entities_in_block:
                     entity = state.entity_ref
-                    logger.debug(f"Block {self.name} continuing with entity {entity.id} from state")
+                    # logger.debug(f"Block {self.name} continuing with entity {entity.id} from state")
                     
                     # 이동 요청 처리
                     if entity.movement_requested and entity.target_block:
@@ -323,7 +261,7 @@ class IndependentBlock:
                             else:
                                 # 용량 초과로 이동 실패, 경고 추가
                                 self.add_capacity_warning(env, target_block.name, entity.id)
-                                logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
+                                # logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
                         else:
                             # 이동할 수 없으면 엔티티 제거
                             self.remove_entity(entity)
@@ -359,7 +297,7 @@ class IndependentBlock:
                             else:
                                 # 용량 초과로 이동 실패, 경고 추가
                                 self.add_capacity_warning(env, target_block.name, entity.id)
-                                logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
+                                # logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
                         else:
                             # 이동할 수 없으면 엔티티 제거
                             self.remove_entity(entity)
@@ -368,11 +306,12 @@ class IndependentBlock:
                     # force execution 블록 처리
                     if not self.entities_in_block:
                         # 블록이 비어있을 때만 스크립트 실행
+                        logger.info(f"Block {self.name} starting force execution (no entities in block)")
                         logger.debug(f"Block {self.name} executing script without entity (force execution)")
                         yield from self.process_entity(env, None)
                         logger.debug(f"Block {self.name} finished force execution, entities in block: {len(self.entities_in_block)}")
                     else:
-                        # 엔티티가 있으면 이동 처리
+                        # 엔티티가 있으면 이동 처리만
                         entity = self.entities_in_block[0]
                         if entity.movement_requested and entity.target_block:
                             target_block_id = self.output_connections.get(entity.target_connector, entity.target_block)
@@ -392,7 +331,7 @@ class IndependentBlock:
                                 else:
                                     # 용량 초과로 이동 실패, 경고 추가
                                     self.add_capacity_warning(env, target_block.name, entity.id)
-                                    logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
+                                    # logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
                             else:
                                 # 이동할 수 없으면 엔티티 제거
                                 self.remove_entity(entity)
@@ -452,7 +391,7 @@ class IndependentBlock:
             
             # 소스 블록 자체가 가득 찼으면 엔티티 생성하지 않음
             if not self.can_accept_entity():
-                logger.debug(f"Source block {self.name} is full, skipping entity generation")
+                # logger.debug(f"Source block {self.name} is full, skipping entity generation")
                 yield env.timeout(1.0)  # 1초 대기로 변경하여 로그 빈도 줄임
                 continue
             
@@ -462,7 +401,7 @@ class IndependentBlock:
                 entity.created_at = round(env.now, 1)
                 
                 if self.add_entity(entity):
-                    logger.debug(f"Source block {self.name} created entity {entity.id}")
+                    # logger.debug(f"Source block {self.name} created entity {entity.id}")
                     
                     # 다음 생성 시간 설정 (현재 시간 + 생성 주기)
                     self.next_generation_time = round(env.now + generation_cycle, 1)
@@ -498,10 +437,11 @@ class IndependentBlock:
                                 logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in source block {self.name}")
                         else:
                             # 대상 블록을 찾을 수 없으면 엔티티 제거
-                            logger.warning(f"Target block not found, removing entity {entity.id}")
+                            # logger.warning(f"Target block not found, removing entity {entity.id}")
                             self.remove_entity(entity)
                 else:
-                    logger.warning(f"Failed to add entity to source block {self.name}")
+                    # logger.warning(f"Failed to add entity to source block {self.name}")
+                    pass
             
             # 다음 생성까지 대기
             yield env.timeout(0.01)  # 매우 짧은 간격으로 확인

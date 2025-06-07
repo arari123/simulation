@@ -202,6 +202,29 @@ The simulation supports two types of global variables:
 
 ## Recent Major Updates
 
+### 2025-06-08: Breakpoint Debugging System Implementation ✅
+- **Complete Breakpoint System**: Full debugging capability with breakpoints
+  - Click line numbers in script editor to set/unset breakpoints
+  - Visual indicators (red dots) for active breakpoints
+  - Execution pauses when hitting breakpoints
+  - Continue execution button to resume from breakpoints
+- **Backend Architecture**:
+  - Added `DebugManager` class for breakpoint management
+  - Global and engine-specific debug state management
+  - Debug API endpoints: `/debug/breakpoints`, `/debug/control`, `/debug/status`
+  - Breakpoint hit detection during script execution
+- **Frontend Features**:
+  - Debug control panel with active breakpoint list
+  - Real-time breakpoint status updates
+  - Continue execution and clear all breakpoints buttons
+  - Breakpoints persist across script editor open/close
+  - Immediate display of breakpoints in debug panel when set
+- **User Experience**:
+  - Breakpoint locations show with block names (e.g., "투입 라인 7")
+  - Step execution disabled while paused at breakpoint
+  - Clear visual feedback for debug state
+  - All breakpoints properly cleared from UI when using "Clear All"
+
 ### 2025-06-07: Block Status Attributes & Korean Variable Support ✅
 - **Block Status Attributes**: New block status system
   - New syntax: `블록이름.status = "값"` (e.g., `공정1.status = "처리중"`)

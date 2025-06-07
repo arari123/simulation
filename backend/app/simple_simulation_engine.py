@@ -10,6 +10,7 @@ from .simple_entity import SimpleEntity
 from .simple_signal_manager import SimpleSignalManager
 from .core.integer_variable_manager import IntegerVariableManager
 from .core.unified_variable_accessor import UnifiedVariableAccessor
+from .core.debug_manager import DebugManager
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -17,12 +18,25 @@ logger.setLevel(logging.DEBUG)
 class SimpleSimulationEngine:
     """단순화된 시뮬레이션 엔진"""
     
+    def set_debug_manager(self, debug_manager):
+        """디버그 매니저 설정"""
+        self.debug_manager = debug_manager
+        logger.info(f"[BREAKPOINT] Debug manager set on engine: {debug_manager}")
+        
+        # 이미 설정된 블록들의 스크립트 실행기에도 디버그 매니저 설정
+        if hasattr(self, 'blocks'):
+            for block in self.blocks.values():
+                if hasattr(block, 'script_executor') and block.script_executor:
+                    block.script_executor.debug_manager = debug_manager
+                    logger.info(f"[BREAKPOINT] Debug manager set for block: {block.name}")
+    
     def __init__(self):
         self.env: Optional[simpy.Environment] = None
         self.blocks: Dict[str, IndependentBlock] = {}
         self.signal_manager = SimpleSignalManager()
         self.integer_manager = IntegerVariableManager()
         self.variable_accessor = UnifiedVariableAccessor(self.signal_manager, self.integer_manager)
+        self.debug_manager = None  # 외부에서 설정
         self.entity_queue: Optional[simpy.Store] = None
         
         # 시뮬레이션 상태
@@ -41,6 +55,8 @@ class SimpleSimulationEngine:
         self.blocks.clear()
         self.signal_manager.reset()
         self.integer_manager.reset()
+        if self.debug_manager:
+            self.debug_manager.reset()
         self.entity_queue = None
         self.step_count = 0
         self.total_entities_created = 0
@@ -69,11 +85,13 @@ class SimpleSimulationEngine:
             self._setup_connection(connection)
         
         # 블록 프로세스 시작
-        for block in self.blocks.values():
+        for block_id, block in self.blocks.items():
+            # logger.info(f"Starting process for block '{block.name}' (ID: {block_id}), has_force_execution: {block.has_force_execution()}")
             process = block.create_block_process(self.env, self.entity_queue, self)
             self.env.process(process)
         
         logger.info(f"Simulation setup completed with {len(self.blocks)} blocks")
+        logger.info(f"[BREAKPOINT] Debug manager status after setup: {self.debug_manager}")
     
     def _create_block(self, block_config: Dict[str, Any]):
         """블록 생성"""
@@ -97,21 +115,21 @@ class SimpleSimulationEngine:
                 if isinstance(action_dict, dict) and action_dict.get('type') == 'script':
                     script = action_dict.get('parameters', {}).get('script', '')
                     if script:
-                        logger.info(f"Block {block_name} using script from actions: {script[:50]}...")
+                        # logger.info(f"Block {block_name} using script from actions: {script[:50]}...")
                         script_lines = script.split('\n')
-                        logger.info(f"Block {block_name} parsed {len(script_lines)} script lines from actions")
+                        # logger.info(f"Block {block_name} parsed {len(script_lines)} script lines from actions")
                         break
         
         # 2. script 타입 액션이 없으면 다른 actions 변환
         if not script_lines and 'actions' in block_config:
-            logger.info(f"Block {block_name} converting non-script actions to script")
+            # logger.info(f"Block {block_name} converting non-script actions to script")
             script_lines = self._convert_actions_to_script(block_config['actions'])
         
         # 3. actions가 없거나 비어있으면 script 필드 사용 (하위 호환성)
         if not script_lines and 'script' in block_config:
-            logger.info(f"Block {block_name} using legacy script field: {block_config['script'][:50]}...")
+            # logger.info(f"Block {block_name} using legacy script field: {block_config['script'][:50]}...")
             script_lines = block_config['script'].split('\n')
-            logger.info(f"Block {block_name} parsed {len(script_lines)} script lines from legacy field")
+            # logger.info(f"Block {block_name} parsed {len(script_lines)} script lines from legacy field")
         
         # 커넥터에서 스크립트 추출 (ex4.json 형식 지원)
         if not script_lines and 'connectionPoints' in block_config:
@@ -134,7 +152,8 @@ class SimpleSimulationEngine:
             signal_manager=self.signal_manager,
             max_capacity=max_capacity,
             integer_manager=self.integer_manager,
-            variable_accessor=self.variable_accessor
+            variable_accessor=self.variable_accessor,
+            debug_manager=self.debug_manager
         )
         
         # 블록 상태 초기화 - 시뮬레이션 초기화 시 상태를 명시적으로 None으로 설정
@@ -143,7 +162,7 @@ class SimpleSimulationEngine:
         # 블록 타입 설정 제거 - 모든 블록이 동일하게 동작
         
         self.blocks[block_id] = block
-        logger.info(f"Created block: {block_name}({block_id})")
+        logger.info(f"[BREAKPOINT] Created block: {block_name}({block_id}) with debug_manager: {self.debug_manager}")
     
     def _convert_actions_to_script(self, actions: List[Any]) -> List[str]:
         """기존 actions를 스크립트로 변환"""
@@ -244,6 +263,11 @@ class SimpleSimulationEngine:
         if not self.env:
             return {'error': 'Simulation not initialized'}
         
+        # 블록이 없으면 초기화되지 않은 것으로 간주
+        if not self.blocks:
+            logger.warning("No blocks found - simulation not properly initialized")
+            return {'error': 'Simulation not initialized - no blocks found'}
+        
         # 초기 상태 저장
         initial_time = self.env.now
         initial_block_states = self._capture_block_states()
@@ -254,8 +278,19 @@ class SimpleSimulationEngine:
             max_iterations = 10000  # 무한 루프 방지
             iteration_count = 0
             
+            # 디버그 매니저가 방금 재개되었는지 확인
+            if self.debug_manager and getattr(self.debug_manager, 'just_resumed', False):
+                logger.info("[ENGINE] Detected just_resumed flag, continuing from breakpoint")
+                self.debug_manager.just_resumed = False  # 플래그 리셋
+                # 브레이크포인트에서 재개된 경우 바로 실행 계속
+            
             while iteration_count < max_iterations:
                 iteration_count += 1
+                
+                # 디버그 매니저가 일시정지 상태인지 확인
+                if self.debug_manager and self.debug_manager.debug_state.is_paused:
+                    # 브레이크포인트에서 멈춘 상태이므로 더 이상 진행하지 않음
+                    break
                 
                 # 이벤트가 없으면 종료
                 if self.env.peek() >= float('inf'):
@@ -271,10 +306,12 @@ class SimpleSimulationEngine:
                     break
             
             # 이동이 없었다면 최소한 시간은 진행되었음을 보장
+            # 단, 디버그 모드에서 일시정지 상태가 아닐 때만
             if not movement_detected and self.env.now == initial_time:
-                # 다음 이벤트까지 실행
-                if self.env.peek() < float('inf'):
-                    self.env.run(until=self.env.peek())
+                if not (self.debug_manager and self.debug_manager.debug_state.is_paused):
+                    # 다음 이벤트까지 실행
+                    if self.env.peek() < float('inf'):
+                        self.env.run(until=self.env.peek())
             
             self.step_count += 1
             
@@ -380,7 +417,8 @@ class SimpleSimulationEngine:
             'total_entities_processed': total_processed,
             'blocks_info': [block.get_status() for block in self.blocks.values()],
             'event_queue_size': len(self.env._queue) if hasattr(self.env, '_queue') else 0,
-            'script_logs': script_logs
+            'script_logs': script_logs,
+            'debug_info': self.debug_manager.get_debug_info() if self.debug_manager else {}
         }
     
     def run_simulation(self, max_steps: int = 100) -> Dict[str, Any]:

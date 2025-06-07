@@ -5,6 +5,7 @@ import logging
 from .routes.simulation import router as simulation_router
 from .routes.basic import router as basic_router
 from .routes.testing import router as testing_router
+from .routes.debug import router as debug_router
 from .logger_config import setup_logging
 
 app = FastAPI(
@@ -26,6 +27,7 @@ app.add_middleware(
 app.include_router(simulation_router)
 app.include_router(basic_router)
 app.include_router(testing_router)
+app.include_router(debug_router)
 
 # 애플리케이션 시작 시 초기화
 @app.on_event("startup")
