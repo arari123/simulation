@@ -13,7 +13,7 @@
       <button @click="handleFullExecutionToggle">
         {{ isFullExecutionRunning ? '일시 정지' : '전체 실행 시작' }}
       </button>
-      <button @click="previousExecution" title="참고: 실제 이전 단계 기능은 복잡하며 완전히 구현되지 않을 수 있습니다.">이전 실행</button>
+      <button @click="previousExecution" disabled style="opacity: 0.5; cursor: not-allowed;" title="이전 단계로 되돌아가는 기능은 아직 구현되지 않았습니다.">이전 실행</button>
       <button @click="resetSimulationDisplayInternal" class="reset-button">시뮬레이션 초기화</button>
 
       <div>
@@ -198,13 +198,20 @@ function handleFullExecutionToggle() {
 
 
 function resetSimulationDisplayInternal() {
+  // 전체 실행이 진행 중이면 먼저 정지
+  if (props.isFullExecutionRunning) {
+    emit('stop-full-execution');
+  }
+  
+  // 확인 창 표시
   if (confirm("시뮬레이션 진행 상태를 초기화하시겠습니까? (캔버스 배치는 유지됩니다)")) {
     emit('reset-simulation-display'); // App.vue로 이벤트 전달
   }
 }
 
 function previousExecution() {
-  emit('previous-step');
+  // 이전 실행 기능은 아직 구현되지 않음
+  alert("이전 단계로 되돌아가는 기능은 아직 구현되지 않았습니다.");
 }
 
 function parseTimeToSeconds(timeStr) {

@@ -44,7 +44,8 @@ class SimpleScriptExecutor:
             'log': self.execute_log,
             'create': self.execute_create,
             'dispose': self.execute_dispose,
-            'int_operation': self.execute_int_operation
+            'int_operation': self.execute_int_operation,
+            'block_status': self.execute_block_status
         }
     
     def execute_delay(self, env: simpy.Environment, delay_str: str) -> Generator:
@@ -494,6 +495,42 @@ class SimpleScriptExecutor:
         
         yield env.timeout(0)
     
+    def execute_block_status(self, env: simpy.Environment, params: Dict[str, str], current_block: Any, engine_ref: Any = None) -> Generator:
+        """블록 상태 설정 명령 실행"""
+        if not params:
+            yield env.timeout(0)
+            return
+            
+        block_name = params.get('block_name', '')
+        status_value = params.get('status', '')
+        
+        if not block_name or not status_value:
+            logger.warning("Invalid block status command: missing block name or status value")
+            yield env.timeout(0)
+            return
+        
+        # 현재 블록을 찾거나 엔진에서 블록 찾기
+        target_block = None
+        
+        # 현재 블록이 대상인 경우
+        if current_block and hasattr(current_block, 'name') and current_block.name == block_name:
+            target_block = current_block
+        # 엔진에서 블록 찾기
+        elif engine_ref and hasattr(engine_ref, 'blocks'):
+            # 이름으로 블록 찾기
+            for block_id, block in engine_ref.blocks.items():
+                if block.name == block_name:
+                    target_block = block
+                    break
+        
+        if target_block and hasattr(target_block, 'set_status'):
+            target_block.set_status(status_value)
+            logger.info(f"[{env.now:.1f}s] Block '{block_name}' status set to: {status_value}")
+        else:
+            logger.warning(f"Block '{block_name}' not found or does not support status")
+        
+        yield env.timeout(0)
+    
     def parse_script_line(self, line: str) -> tuple:
         """스크립트 라인을 파싱하여 명령어와 파라미터를 반환"""
         line = line.strip()
@@ -506,10 +543,10 @@ class SimpleScriptExecutor:
         if line.startswith('delay '):
             return 'delay', line[6:].strip()
         
-        # int 변수 산술 연산 (int 변수명 += 5)
+        # int 변수 산술 연산 (int 변수명 += 5) - 한글 변수명 지원
         if line.startswith('int '):
             # int 변수명 연산자 값 형태 파싱
-            int_match = re.match(r'^int\s+(\w+)\s*([\+\-\*\/]?=)\s*(.+)$', line)
+            int_match = re.match(r'^int\s+([\w가-힣]+)\s*([\+\-\*\/]?=)\s*(.+)$', line)
             if int_match:
                 var_name = int_match.group(1)
                 operator = int_match.group(2)
@@ -519,6 +556,17 @@ class SimpleScriptExecutor:
                     'operator': operator,
                     'value': value_expr
                 }
+        
+        # 블록 상태 설정 (블록이름.status = "값")
+        if '.status = ' in line:
+            parts = line.split('.status = ', 1)
+            block_name = parts[0].strip()
+            status_value = parts[1].strip()
+            # 따옴표 제거
+            if (status_value.startswith('"') and status_value.endswith('"')) or \
+               (status_value.startswith("'") and status_value.endswith("'")):
+                status_value = status_value[1:-1]
+            return 'block_status', {'block_name': block_name, 'status': status_value}
         
         # 신호 설정 (신호명 = 값)
         if ' = ' in line and not line.startswith('if ') and not line.startswith('wait ') and not line.startswith('int '):
@@ -661,6 +709,13 @@ class SimpleScriptExecutor:
         
         elif command == 'int_operation':
             yield from self.execute_int_operation(env, params)
+        
+        elif command == 'block_status':
+            # 블록 상태 설정 명령
+            engine_ref = None
+            if block and hasattr(block, 'engine_ref'):
+                engine_ref = block.engine_ref
+            yield from self.execute_block_status(env, params, block, engine_ref)
         
         else:
             logger.warning(f"Unknown command: {command}")

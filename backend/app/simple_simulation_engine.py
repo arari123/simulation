@@ -137,6 +137,9 @@ class SimpleSimulationEngine:
             variable_accessor=self.variable_accessor
         )
         
+        # 블록 상태 초기화 - 시뮬레이션 초기화 시 상태를 명시적으로 None으로 설정
+        block.status = None
+        
         # 블록 타입 설정 제거 - 모든 블록이 동일하게 동작
         
         self.blocks[block_id] = block
@@ -354,7 +357,8 @@ class SimpleSimulationEngine:
                 } for e in block.entities_in_block],
                 'entities_count': status['entities_count'],
                 'total_processed': status['total_processed'],
-                'warnings': status.get('warnings', [])  # 경고 메시지 포함
+                'warnings': status.get('warnings', []),  # 경고 메시지 포함
+                'status': status.get('status')  # 블록 상태 속성 추가
             }
             total_entities += status['entities_count']
             total_processed += status['total_processed']

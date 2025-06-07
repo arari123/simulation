@@ -34,6 +34,12 @@ class IndependentBlock:
         
         # 경고 시스템
         self.warnings: List[Dict[str, Any]] = []  # 용량 관련 경고 메시지
+        
+        # 블록 상태 속성
+        self.status: Optional[str] = None
+        
+        # 엔진 참조 (블록 상태 명령어 처리용)
+        self.engine_ref = None
     
     def add_output_connection(self, connector_name: str, target_block_id: str):
         """출력 연결 추가"""
@@ -67,6 +73,15 @@ class IndependentBlock:
         """오래된 경고 메시지 제거 (5초 후)"""
         current_time = env.now
         self.warnings = [w for w in self.warnings if current_time - w['timestamp'] <= max_age]
+    
+    def set_status(self, status: str):
+        """블록 상태 설정"""
+        self.status = status
+        logger.info(f"Block {self.name} status changed to: {status}")
+    
+    def get_status(self) -> Optional[str]:
+        """현재 블록 상태 반환"""
+        return self.status
     
     def can_accept_entity(self) -> bool:
         """엔티티를 받을 수 있는지 확인"""
@@ -269,6 +284,9 @@ class IndependentBlock:
     def create_block_process(self, env: simpy.Environment, entity_queue: simpy.Store, 
                            engine_ref) -> Generator:
         """통합 블록 프로세스 - 모든 블록이 동일하게 동작"""
+        # 엔진 참조 저장
+        self.engine_ref = engine_ref
+        
         # force execution 여부 확인
         is_force_execution = self.has_force_execution()
         
@@ -540,7 +558,8 @@ class IndependentBlock:
             'entities_count': len(self.entities_in_block),
             'total_processed': self.total_processed,
             'capacity': f"{len(self.entities_in_block)}/{self.max_capacity}",
-            'warnings': self.warnings  # 경고 메시지 포함
+            'warnings': self.warnings,  # 경고 메시지 포함
+            'status': self.status  # 블록 상태 속성 추가
         }
     
     def get_script_logs(self) -> List[Dict[str, Any]]:

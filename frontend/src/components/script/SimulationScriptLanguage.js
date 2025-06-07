@@ -9,7 +9,7 @@ import { tags as t } from '@lezer/highlight'
 // 시뮬레이션 스크립트 키워드 정의
 const simulationKeywords = [
   'delay', 'wait', 'if', 'go', 'to', 'from', 'jump', 'log', 'product', 'type',
-  'and', 'or', 'true', 'false', 'create', 'entity', 'dispose', 'force', 'execution', 'int'
+  'and', 'or', 'true', 'false', 'create', 'entity', 'dispose', 'force', 'execution', 'int', 'status'
 ]
 
 // 연산자 정의
@@ -65,7 +65,7 @@ const simulationScriptParser = {
         if (['true', 'false'].includes(wordStr)) {
           return 'atom'
         }
-        if (['product', 'type', 'entity', 'execution'].includes(wordStr)) {
+        if (['product', 'type', 'entity', 'execution', 'status'].includes(wordStr)) {
           return 'property'
         }
         return 'keyword'

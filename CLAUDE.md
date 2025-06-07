@@ -108,13 +108,21 @@ product type -= flip              # Remove 'flip' attribute
 product type -= flip,1c           # Remove multiple attributes
 product type -= (default)         # Reset color to default
 
-# Integer Variable Commands (NEW)
+# Block Status Commands (NEW)
+블록이름.status = "running"        # Set block status to "running"
+공정1.status = "idle"              # Set 공정1 block status to "idle"  
+투입.status = "준비중"              # Korean status values supported
+시스템모니터.status = "점검중"      # Spaces in block names require no spaces
+
+# Integer Variable Commands (Enhanced with Korean support)
 int counter = 10                  # Set integer variable to value
 int counter += 5                  # Add to integer variable
 int counter -= 3                  # Subtract from integer variable
 int counter *= 2                  # Multiply integer variable
 int counter /= 4                  # Divide integer variable (integer division)
 int result = var1                 # Copy value from another variable
+int 공정1처리수 += 1               # Korean variable names supported
+int 대기시간 = 30                  # Initialize Korean named variable
 
 # Integer Comparisons (NEW)
 if count > 5                      # Greater than
@@ -193,6 +201,21 @@ The simulation supports two types of global variables:
 - Variables persist across simulation steps until reset
 
 ## Recent Major Updates
+
+### 2025-06-07: Block Status Attributes & Korean Variable Support ✅
+- **Block Status Attributes**: New block status system
+  - New syntax: `블록이름.status = "값"` (e.g., `공정1.status = "처리중"`)
+  - Status displayed at the top of blocks in UI (italic style)
+  - Status automatically cleared on simulation reset
+  - Full script editor support with validation
+- **Korean Variable Names**: Integer variables now support Korean names
+  - Example: `int 공정1처리수 += 1`
+  - Works with all integer operations
+- **Implementation Details**:
+  - Backend: Added status field to IndependentBlock class
+  - Script executor: Added parsing for `.status =` commands
+  - Frontend: Status display above block box, cleared on reset
+  - Important: Block status commands use dot notation (`.status =`) to distinguish from signal assignments
 
 ### 2025-06-06: Integer Variable System Implementation ✅
 - **Integer Variable Support**: Complete implementation of integer type variables

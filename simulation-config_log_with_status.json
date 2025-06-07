@@ -1,0 +1,280 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "name": "투입",
+      "x": 135,
+      "y": 440,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "script": "wait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\tgo to 공정1.L,10\nif 공정2 load enable = true\n\t공정2 load enable = false\n\tgo to 공정2.L,10",
+      "actions": [
+        {
+          "id": "script-1749218341615",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "force execution\n투입.status = \"대기중\"\nlog \"=== 생산 시작 ===\"\ncreate entity\n투입.status = \"생성중\"\nint count += 1\nlog \"새 제품 생성 완료 (누적: {count}개)\"\nif count >= 5\n  투입.status = \"재정비중\"\n  log \"[INFO] 5개 생산 완료, 20초 대기\"\n  delay 20\n  int count = 0\n  투입.status = \"준비완료\"\nlog \"가용한 공정 확인 중...\"\n투입.status = \"공정대기\"\nwait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\tlog \"공정1이 준비됨, 제품 이송\"\n\t공정1 load enable = false\n\t투입.status = \"이송중-공정1\"\n\tgo from R to 공정1.L,3\nif 공정2 load enable = true and product type != transit\n\tlog \"공정2가 준비됨, 제품 이송\"\n\t공정2 load enable = false\n\t투입.status = \"이송중-공정2\"\n\tgo from R to 공정2.L,3"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "1-conn-right",
+          "name": "R",
+          "x": 100,
+          "y": 50,
+          "actions": []
+        }
+      ],
+      "warnings": [],
+      "totalProcessed": 0
+    },
+    {
+      "id": "2",
+      "name": "공정1",
+      "x": 443,
+      "y": 193,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "script": "delay 10\n공정1 unload enable = true\nwait 배출 load enable = true\n배출 load enable = false\n공정1 unload enable = false\ngo to 배출.L,10\n공정1 load enable = true\n배출 load enable = true",
+      "actions": [
+        {
+          "id": "script-1749043721479",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "공정1.status = \"처리중\"\nlog \"공정1: 제품 도착, 처리 시작\"\nint 공정1처리수 += 1\nif 공정1처리수 > 10\n    공정1.status = \"점검필요\"\n    log \"[WARNING] 공정1 10개 이상 처리, 점검 필요\"\ndelay 10\nlog \"공정1: 처리 완료\"\n공정1.status = \"품질검사\"\ndelay 2\n공정1 unload enable = true\nlog \"배출 대기 중...\"\n공정1.status = \"배출대기\"\nwait 배출 load enable = true\nlog \"배출 가능, 제품 이송\"\n배출 load enable = false\n공정1 unload enable = false\n공정1.status = \"이송중\"\ngo from R to 배출.L,3\n공정1 load enable = true\n배출 load enable = true\n공정1.status = \"준비완료\"\nlog \"공정1: 다음 제품 준비 완료\""
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "2-conn-left",
+          "name": "L",
+          "x": 0,
+          "y": 50,
+          "actions": []
+        },
+        {
+          "id": "2-conn-right",
+          "name": "R",
+          "x": 100,
+          "y": 50,
+          "actions": []
+        }
+      ],
+      "warnings": [],
+      "totalProcessed": 0
+    },
+    {
+      "id": "3",
+      "name": "배출",
+      "x": 786,
+      "y": 454,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "script": "// 싱크 블록 - 엔티티 자동 처리",
+      "actions": [
+        {
+          "id": "script-1749183163154",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "배출.status = \"수령중\"\nlog \"배출: 제품 도착\"\nint total_disposed += 1\nlog \"총 처리된 제품: {total_disposed}개\"\nif total_disposed > 10\n    배출.status = \"경고-과부하\"\n    log \"[WARNING] 처리량이 10개를 초과했습니다\"\nif total_disposed > 20\n    배출.status = \"위험-과부하\"\n    log \"[CRITICAL] 처리량이 20개를 초과했습니다!\"\nif total_disposed <= 10\n    배출.status = \"정상처리\"\n배출.status = \"처리중\"\ndelay 1\ndispose entity\n배출.status = \"완료\"\nlog \"배출: 처리 완료\"\ndelay 0.5\n배출.status = \"대기중\""
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "3-conn-left",
+          "name": "L",
+          "x": 0,
+          "y": 50,
+          "actions": []
+        }
+      ],
+      "warnings": [],
+      "totalProcessed": 3
+    },
+    {
+      "id": "4",
+      "name": "공정2",
+      "x": 483,
+      "y": 628,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "script": "delay 10\n공정2 unload enable = true\nwait 배출 load enable = true\n배출 load enable = false\n공정2 unload enable = false\ngo to 배출.L,10\n공정2 load enable = true\n배출 load enable = true",
+      "actions": [
+        {
+          "id": "script-1749218169150",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "공정2.status = \"처리중\"\nlog \"공정2: 제품 도착, 처리 시작\"\nint 공정2처리수 += 1\nif 공정2처리수 > 5\n    공정2.status = \"유지보수필요\"\n    log \"[INFO] 공정2 5개 이상 처리, 유지보수 권장\"\ndelay 10\nlog \"공정2: 처리 완료\"\n공정2.status = \"품질확인\"\ndelay 1\n공정2 unload enable = true\nlog \"배출 대기 중...\"\n공정2.status = \"배출대기\"\nwait 배출 load enable = true\nlog \"배출 가능, 제품 이송\"\n배출 load enable = false\n공정2 unload enable = false\n공정2.status = \"이송중\"\ngo from R to 배출.L,3\n공정2 load enable = true\n배출 load enable = true\n공정2.status = \"가동대기\"\nlog \"공정2: 다음 제품 준비 완료\""
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "4-conn-left",
+          "name": "L",
+          "x": 0,
+          "y": 50,
+          "actions": []
+        },
+        {
+          "id": "4-conn-right",
+          "name": "R",
+          "x": 100,
+          "y": 50,
+          "actions": []
+        }
+      ],
+      "warnings": [],
+      "totalProcessed": 0
+    },
+    {
+      "id": "5",
+      "name": "시스템모니터",
+      "x": 500,
+      "y": 50,
+      "width": 150,
+      "height": 60,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-1749274993007",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "force execution\n시스템모니터.status = \"점검중\"\nlog \"===== 시스템 상태 보고 =====\"\nlog \"총 생산: {count}개\"\nlog \"총 처리: {total_disposed}개\"\nlog \"공정1 준비 상태: {공정1 load enable}\"\nlog \"공정2 준비 상태: {공정2 load enable}\"\nlog \"배출 준비 상태: {배출 load enable}\"\nlog \"--- 블록 상태 ---\"\nlog \"투입: {투입.status}\"\nlog \"공정1: {공정1.status} (처리: {공정1처리수}개)\"\nlog \"공정2: {공정2.status} (처리: {공정2처리수}개)\"\nlog \"배출: {배출.status}\"\nlog \"==========================\"\nif total_disposed > 15\n    시스템모니터.status = \"경고\"\nif total_disposed > 25\n    시스템모니터.status = \"위험\"\nif total_disposed <= 15\n    시스템모니터.status = \"정상\"\ndelay 20"
+          }
+        }
+      ],
+      "connectionPoints": [],
+      "warnings": [],
+      "totalProcessed": 0
+    }
+  ],
+  "connections": [
+    {
+      "from_block_id": "1",
+      "from_connector_id": "1-conn-right",
+      "to_block_id": "2",
+      "to_connector_id": "2-conn-left",
+      "from_conditional_script": true,
+      "auto_generated": true
+    },
+    {
+      "from_block_id": "1",
+      "from_connector_id": "1-conn-right",
+      "to_block_id": "4",
+      "to_connector_id": "4-conn-left",
+      "from_conditional_script": true,
+      "auto_generated": true
+    },
+    {
+      "from_block_id": "2",
+      "from_connector_id": "2-conn-right",
+      "to_block_id": "3",
+      "to_connector_id": "3-conn-left",
+      "from_conditional_script": true,
+      "auto_generated": true
+    },
+    {
+      "from_block_id": "4",
+      "from_connector_id": "4-conn-right",
+      "to_block_id": "3",
+      "to_connector_id": "3-conn-left",
+      "from_conditional_script": true,
+      "auto_generated": true
+    }
+  ],
+  "globalSignals": [
+    {
+      "id": "signal-1",
+      "name": "공정1 load enable",
+      "value": true,
+      "initialValue": true,
+      "type": "boolean"
+    },
+    {
+      "id": "signal-2",
+      "name": "공정1 unload enable",
+      "value": false,
+      "initialValue": false,
+      "type": "boolean"
+    },
+    {
+      "id": "signal-3",
+      "name": "공정2 load enable",
+      "value": false,
+      "initialValue": true,
+      "type": "boolean"
+    },
+    {
+      "id": "signal-4",
+      "name": "공정2 unload enable",
+      "value": false,
+      "initialValue": false,
+      "type": "boolean"
+    },
+    {
+      "id": "signal-5",
+      "name": "배출 load enable",
+      "value": true,
+      "initialValue": true,
+      "type": "boolean"
+    },
+    {
+      "id": "signal-1749218205195",
+      "name": "count",
+      "type": "integer",
+      "value": 5,
+      "initialValue": 0
+    },
+    {
+      "id": "signal-total-disposed",
+      "name": "total_disposed",
+      "type": "integer",
+      "value": 3,
+      "initialValue": 0
+    },
+    {
+      "id": "signal-공정1처리수",
+      "name": "공정1처리수",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    },
+    {
+      "id": "signal-공정2처리수",
+      "name": "공정2처리수",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    }
+  ],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 14,
+    "deadlockTimeout": 20,
+    "showEntityNames": true,
+    "showSignalNames": true,
+    "showSignalValues": true
+  },
+  "infoText": {
+    "content": "<h2>블록 상태 속성 테스트 (로그 뷰어 버전)</h2><p>simulation-config_log.json에 블록 상태 속성 기능을 추가한 버전입니다.</p><h3>각 블록의 상태 변화:</h3><ul><li><b>투입</b>: 대기중 → 생성중 → 공정대기 → 이송중 → 재정비중(5개마다)</li><li><b>공정1</b>: 준비완료 → 처리중 → 품질검사 → 배출대기 → 이송중 → 점검필요(10개 초과시)</li><li><b>공정2</b>: 가동대기 → 처리중 → 품질확인 → 배출대기 → 이송중 → 유지보수필요(5개 초과시)</li><li><b>배출</b>: 대기중 → 수령중 → 처리중 → 완료 → 경고/위험(처리량에 따라)</li><li><b>시스템모니터</b>: 정상 → 경고(15개) → 위험(25개)</li></ul><p>블록 이름 아래에 현재 상태가 [상태] 형식으로 표시됩니다.</p>",
+    "style": {
+      "fontSize": 16,
+      "color": "#000000",
+      "fontWeight": "normal"
+    },
+    "isExpanded": true
+  }
+}

@@ -200,7 +200,28 @@ function drawCanvasContent() {
     return;
   }
   
+  // 레이어 순서 재정렬: 연결선 -> 블록 -> 엔티티
+  ensureLayerOrder();
+  
   layer.draw();
+}
+
+// 레이어 순서를 보장하는 함수
+function ensureLayerOrder() {
+  // 1. 모든 블록을 맨 아래로
+  blockNodes.value.forEach(blockGroup => {
+    blockGroup.moveToBottom();
+  });
+  
+  // 2. 엔티티 그룹을 블록 위로
+  if (entityTextGroup.value) {
+    entityTextGroup.value.moveToTop();
+  }
+  
+  // 3. 모든 연결선을 최상단으로
+  connectionNodes.value.forEach(arrow => {
+    arrow.moveToTop();
+  });
 }
 
 function updateBlocks() {
@@ -388,6 +409,21 @@ function addBlockContent(blockGroup, blockData) {
     y: (props.currentSettings.fontSize + 5),
   });
   blockGroup.add(capacityText);
+  
+  // 블록 상태 표시 (status) - 블록 상단에 표시
+  if (blockData.status) {
+    const statusText = new Konva.Text({
+      text: `[${blockData.status}]`,
+      fontSize: props.currentSettings.fontSize * 0.7,
+      fill: '#666',
+      align: 'center',
+      width: blockData.width || props.currentSettings.boxSize,
+      x: 0,
+      y: -20,  // 블록 상단 위에 표시
+      fontStyle: 'italic'
+    });
+    blockGroup.add(statusText);
+  }
   
   // 처리된 엔티티 수 표시 (disposed 포함) - 블록 밖 하단에 표시
   if (blockData.totalProcessed !== undefined && blockData.totalProcessed > 0) {
@@ -1138,7 +1174,41 @@ function updateConnectionsForBlock(blockId) {
           const toAbsX = toBlock.x + toPointData.x;
           const toAbsY = toBlock.y + toPointData.y;
           
-          existingArrow.points([fromAbsX, fromAbsY, toAbsX, toAbsY]);
+          // 연결선의 방향 벡터 계산
+          const dx = toAbsX - fromAbsX;
+          const dy = toAbsY - fromAbsY;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          // 연결선이 너무 짧은 경우 처리하지 않음
+          if (distance < 20) {
+            existingArrow.points([fromAbsX, fromAbsY, toAbsX, toAbsY]);
+            return;
+          }
+          
+          // 정규화된 방향 벡터
+          const unitX = dx / distance;
+          const unitY = dy / distance;
+          
+          // 커넥터 반지름 (8픽셀)
+          const connectorRadius = 8;
+          
+          // 시작점과 끝점을 커넥터 외곽으로 조정
+          let adjustedFromX = fromAbsX;
+          let adjustedFromY = fromAbsY;
+          let adjustedToX = toAbsX;
+          let adjustedToY = toAbsY;
+          
+          // from_connector_id가 'block-action'이 아닌 경우에만 시작점 조정
+          if (fromConnectorId !== 'block-action') {
+            adjustedFromX = fromAbsX + unitX * connectorRadius;
+            adjustedFromY = fromAbsY + unitY * connectorRadius;
+          }
+          
+          // 끝점은 항상 커넥터 외곽으로 조정
+          adjustedToX = toAbsX - unitX * connectorRadius;
+          adjustedToY = toAbsY - unitY * connectorRadius;
+          
+          existingArrow.points([adjustedFromX, adjustedFromY, adjustedToX, adjustedToY]);
         }
       }
     }
@@ -1192,9 +1262,40 @@ function updateConnections() {
       const toAbsX = toBlock.x + toPointData.x;
       const toAbsY = toBlock.y + toPointData.y;
       
+      // 연결선의 방향 벡터 계산
+      const dx = toAbsX - fromAbsX;
+      const dy = toAbsY - fromAbsY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // 연결선이 너무 짧은 경우 그리지 않음
+      if (distance < 20) return;
+      
+      // 정규화된 방향 벡터
+      const unitX = dx / distance;
+      const unitY = dy / distance;
+      
+      // 커넥터 반지름 (8픽셀)
+      const connectorRadius = 8;
+      
+      // 시작점과 끝점을 커넥터 외곽으로 조정
+      let adjustedFromX = fromAbsX;
+      let adjustedFromY = fromAbsY;
+      let adjustedToX = toAbsX;
+      let adjustedToY = toAbsY;
+      
+      // from_connector_id가 'block-action'이 아닌 경우에만 시작점 조정
+      if (fromConnectorId !== 'block-action') {
+        adjustedFromX = fromAbsX + unitX * connectorRadius;
+        adjustedFromY = fromAbsY + unitY * connectorRadius;
+      }
+      
+      // 끝점은 항상 커넥터 외곽으로 조정
+      adjustedToX = toAbsX - unitX * connectorRadius;
+      adjustedToY = toAbsY - unitY * connectorRadius;
+      
       // 모든 연결선을 동일한 색상으로 표시 (조건부/일반 구분 없이)
       const arrow = new Konva.Arrow({
-        points: [fromAbsX, fromAbsY, toAbsX, toAbsY],
+        points: [adjustedFromX, adjustedFromY, adjustedToX, adjustedToY],
         pointerLength: 10,
         pointerWidth: 10,
         fill: 'black',

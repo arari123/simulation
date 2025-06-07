@@ -367,6 +367,11 @@ function updateBlockWarnings(blockStates) {
       if (blockState.total_processed !== undefined) {
         block.totalProcessed = blockState.total_processed
       }
+      
+      // 블록 상태 업데이트
+      if (blockState.status !== undefined) {
+        block.status = blockState.status
+      }
     }
   })
 }
@@ -392,6 +397,17 @@ async function resetSimulationDisplay() {
   await resetSimulation()
   resetSignalsToInitialValues()
   clearSimulationLogs()
+  
+  // 모든 블록의 처리량 정보 및 상태 초기화
+  blocks.value.forEach(block => {
+    if (block.totalProcessed !== undefined) {
+      block.totalProcessed = 0
+    }
+    // 블록 상태 초기화
+    if (block.status !== undefined) {
+      block.status = null
+    }
+  })
 }
 
 // 시뮬레이션 설정 데이터 생성
@@ -414,6 +430,7 @@ function getSimulationSetupData() {
       id: String(cp.id),
       actions: (cp.actions || []).map(action => convertActionScript(action))
     }))
+    // status 필드는 의도적으로 제외 - 시뮬레이션 초기화 시 상태가 리셋되어야 함
   }))
   
   // connections도 ID를 string으로 변환

@@ -28,6 +28,7 @@ class ProcessBlockConfig(BaseModel):
     capacity: Optional[int] = None  # 블록의 최대 용량 (None이면 무제한)
     connectionPoints: Optional[List[ConnectionPoint]] = [] # 커넥터 정보
     script: Optional[str] = ''  # 블록 스크립트
+    status: Optional[str] = None  # 블록 상태 속성
     # x: int # Position for frontend, not directly used by SimPy logic here
     # y: int # Position for frontend
 

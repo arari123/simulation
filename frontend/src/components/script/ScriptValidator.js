@@ -44,6 +44,11 @@ export function validateScript(script, props) {
 function validateScriptLine(line, lowerLine, lineNum, props) {
   const errors = []
   
+  // 디버깅용 로그
+  if (line.includes('.status') || line.includes('int ')) {
+    console.log(`[ScriptValidator] 검증 중 - 라인 ${lineNum}: "${line}"`)
+  }
+  
   if (lowerLine.startsWith('delay ')) {
     const delayPart = line.replace(/delay /i, '').trim()
     if (!/^(\d+(\.\d+)?|\d+-\d+|[a-zA-Z_][a-zA-Z0-9_]*)$/.test(delayPart)) {
@@ -60,7 +65,13 @@ function validateScriptLine(line, lowerLine, lineNum, props) {
     const intErrors = validateIntOperation(line, lineNum, props)
     errors.push(...intErrors)
   }
+  else if (line.includes('.status = ')) {
+    // 블록 상태 명령 (블록이름.status = "값")
+    const statusErrors = validateBlockStatusAssignment(line, lineNum, props)
+    errors.push(...statusErrors)
+  }
   else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !line.trim().toLowerCase().startsWith('log ') && !lowerLine.startsWith('int ')) {
+    // 신호 설정 명령
     const signalErrors = validateSignalAssignment(line, lineNum, props)
     errors.push(...signalErrors)
   }
@@ -83,6 +94,9 @@ function validateScriptLine(line, lowerLine, lineNum, props) {
   else if (line.includes('product type +=') || line.includes('product type -=')) {
     // product type 명령은 유효함 - 에러 없음
   }
+  else if (line.trim() === 'create entity' || line.trim() === 'dispose entity' || line.trim() === 'force execution') {
+    // 엔티티 관련 명령어는 유효함 - 에러 없음
+  }
   else {
     errors.push(`라인 ${lineNum}: 인식되지 않는 명령어 "${line}"`)
   }
@@ -96,8 +110,10 @@ function validateScriptLine(line, lowerLine, lineNum, props) {
 function validateIntOperation(line, lineNum, props) {
   const errors = []
   
-  // int 변수명 연산자 값 형식 파싱
-  const intMatch = line.match(/^int\s+(\w+)\s*([\+\-\*\/]?=)\s*(.+)$/)
+  // int 변수명 연산자 값 형식 파싱 (한글 변수명 지원)
+  const intMatch = line.match(/^int\s+([a-zA-Z0-9_가-힣]+)\s*([\+\-\*\/]?=)\s*(.+)$/)
+  
+  console.log(`[ScriptValidator] int 명령어 매칭 결과:`, intMatch)
   
   if (!intMatch) {
     errors.push(`라인 ${lineNum}: 잘못된 int 명령어 형식 (예: int counter += 5)`)
@@ -114,14 +130,47 @@ function validateIntOperation(line, lineNum, props) {
     errors.push(`라인 ${lineNum}: 잘못된 연산자 "${operator}" (사용 가능: =, +=, -=, *=, /=)`)
   }
   
-  // 값 유효성 검사 - 숫자 또는 변수명
-  if (!/^-?\d+$/.test(value) && !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(value)) {
+  // 값 유효성 검사 - 숫자 또는 변수명 (한글 포함)
+  if (!/^-?\d+$/.test(value) && !/^[a-zA-Z_가-힣][a-zA-Z0-9_가-힣]*$/.test(value)) {
     errors.push(`라인 ${lineNum}: 잘못된 값 "${value}" (정수 또는 변수명이어야 합니다)`)
   }
   
   // 0으로 나누기 검사
   if (operator === '/=' && value === '0') {
     errors.push(`라인 ${lineNum}: 0으로 나눌 수 없습니다`)
+  }
+  
+  return errors
+}
+
+/**
+ * 블록 상태 설정 문 검증
+ */
+function validateBlockStatusAssignment(line, lineNum, props) {
+  const errors = []
+  const parts = line.split('.status = ')
+  
+  if (parts.length !== 2) {
+    errors.push(`라인 ${lineNum}: 잘못된 블록 상태 설정 형식 (예: 블록이름.status = "running")`)
+  } else {
+    const blockName = parts[0].trim()
+    const statusValue = parts[1].trim()
+    
+    // 블록 이름 유효성 검사
+    if (props.allBlocks && props.allBlocks.length > 0) {
+      const blockExists = props.allBlocks.some(block => block.name === blockName)
+      if (!blockExists) {
+        errors.push(`라인 ${lineNum}: 존재하지 않는 블록 "${blockName}"`)
+      }
+    }
+    
+    // 상태 값이 따옴표로 감싸져 있는지 확인
+    if (!((statusValue.startsWith('"') && statusValue.endsWith('"')) || 
+          (statusValue.startsWith("'") && statusValue.endsWith("'")))) {
+      errors.push(`라인 ${lineNum}: 상태 값은 따옴표로 감싸야 합니다 (예: "running" 또는 'idle')`)
+    } else if (statusValue.length <= 2) {
+      errors.push(`라인 ${lineNum}: 빈 상태 값은 허용되지 않습니다`)
+    }
   }
   
   return errors

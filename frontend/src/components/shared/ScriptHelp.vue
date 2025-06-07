@@ -51,6 +51,25 @@
         </div>
         
         <div class="help-section">
+          <h4>블록 상태 설정</h4>
+          <ul>
+            <li><code>블록이름.status = "running"</code> - 블록 상태를 "running"으로 설정</li>
+            <li><code>공정1.status = "idle"</code> - 공정1 블록의 상태를 "idle"로 설정</li>
+            <li><code>투입.status = "준비중"</code> - 한글 상태도 지원</li>
+            <li>상태 값은 반드시 따옴표로 감싸야 함</li>
+          </ul>
+        </div>
+        
+        <div class="help-section">
+          <h4>정수 변수 (한글 지원)</h4>
+          <ul>
+            <li><code>int 카운터 = 0</code> - 정수 변수 초기화</li>
+            <li><code>int 공정1처리수 += 1</code> - 한글 변수명 지원</li>
+            <li><code>int 총생산량 = 카운터</code> - 변수 복사</li>
+          </ul>
+        </div>
+        
+        <div class="help-section">
           <h4>주의사항</h4>
           <ul>
             <li>각 명령어는 한 줄에 하나씩 작성</li>
