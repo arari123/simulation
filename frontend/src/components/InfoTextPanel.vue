@@ -120,11 +120,10 @@ const fontSizes = [12, 14, 16, 18, 20, 22, 24]
 
 // 계산된 속성
 const panelStyle = computed(() => {
-  const baseLeft = props.controlPanelWidth + 10 // 10px 추가 여백
-  const additionalOffset = props.showBlockSettings ? 420 : 0
+  const baseLeft = props.controlPanelWidth + 22 // 20px 추가 여백으로 증가
   return {
-    left: `${baseLeft + additionalOffset}px`,
-    width: `calc(100% - ${baseLeft + additionalOffset}px)`
+    left: `${baseLeft}px`,
+    width: `calc(100% - ${baseLeft}px)`
   }
 })
 

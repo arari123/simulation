@@ -245,3 +245,26 @@ The simulation supports two types of global variables:
     - Proper Korean text input support
   - Auto-saves to simulation JSON configuration
   - Teleport-based rendering for consistent positioning
+
+### 2025-01-07: Simulation Log Viewer Implementation ✅
+- **Script Log Display**: Web UI display for script `log` commands
+  - LogPanel component positioned at bottom-left (next to control panel)
+  - Real-time log collection from script execution
+  - Variable interpolation support: `log "count: {variable}"`
+  - Log filtering by text search and block name
+  - Export functionality (TXT, CSV, JSON formats)
+  - Auto-scroll toggle and minimize/maximize
+  - Color coding for log levels (ERROR: red, WARNING: yellow)
+- **Backend Architecture**:
+  - Added log collection to SimpleScriptExecutor
+  - Block-level log aggregation in SimpleBlock
+  - Engine-level log collection and API response
+  - Added `script_logs` field to SimulationStepResult model
+- **Frontend Components**:
+  - LogPanel.vue: Main log viewer component
+  - useSimulationLogs.js: Log state management composable
+  - Initial state: minimized (collapsed)
+- **UI Improvements**:
+  - z-index hierarchy fixed for proper layering
+  - Responsive positioning to avoid control panel overlap
+  - Initial states: Log panel minimized, Global signals hidden

@@ -1,0 +1,287 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "name": "로그 테스트 소스",
+      "type": "source",
+      "x": 100,
+      "y": 100,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-1",
+          "name": "소스 스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"=== 시뮬레이션 시작 ===\"\nlog \"새로운 엔티티 생성 중...\"\ncreate entity\nlog \"엔티티 생성 완료\"\nint counter += 1\nlog \"총 생성된 엔티티: {counter}\"\ndelay 2\ngo to 검사 공정.입구,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "cp1",
+          "name": "출구",
+          "position": "right",
+          "isOutput": true,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "name": "검사 공정",
+      "type": "process",
+      "x": 300,
+      "y": 100,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-2",
+          "name": "검사 스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"검사 시작: 엔티티 ID {entity_id}\"\ndelay 3\nint inspected += 1\nlog \"검사 진행 중... ({inspected}번째)\"\n\n// 랜덤하게 불량품 판정\nif inspected > 5\n    log \"경고: 검사 장비 점검 필요!\"\n    warning = true\n\nif warning = true\n    log \"[WARNING] 품질 저하 감지\"\n    product type += defective(red)\n    log \"불량품으로 분류됨\"\n    go to 불량품 처리.입구,2\nif warning = false\n    product type += passed(green)\n    log \"정상 제품으로 확인됨\"\n    go to 포장 공정.입구,1\n\nlog \"검사 완료\""
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "cp2",
+          "name": "입구",
+          "position": "left",
+          "isOutput": false,
+          "actions": []
+        },
+        {
+          "id": "cp3",
+          "name": "정상품",
+          "position": "right",
+          "isOutput": true,
+          "actions": []
+        },
+        {
+          "id": "cp4",
+          "name": "불량품",
+          "position": "bottom",
+          "isOutput": true,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "name": "포장 공정",
+      "type": "process",
+      "x": 500,
+      "y": 100,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 2,
+      "actions": [
+        {
+          "id": "script-3",
+          "name": "포장 스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"포장 공정 진입\"\nint package_count += 1\nlog \"포장 진행 중... (누적: {package_count}개)\"\n\ndelay 2\n\nif package_count > 10\n    log \"[INFO] 포장재 재고 확인 필요\"\n    \nproduct type += packaged\nlog \"포장 완료\"\ngo to 완제품 창고.입구,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "cp5",
+          "name": "입구",
+          "position": "left",
+          "isOutput": false,
+          "actions": []
+        },
+        {
+          "id": "cp6",
+          "name": "출구",
+          "position": "right",
+          "isOutput": true,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "불량품 처리",
+      "type": "sink",
+      "x": 300,
+      "y": 250,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-4",
+          "name": "불량품 로그",
+          "type": "script",
+          "parameters": {
+            "script": "log \"[ERROR] 불량품 폐기 처리\"\nint defect_count += 1\nlog \"총 불량품 수: {defect_count}\"\ndispose entity"
+          }
+        },
+        {
+          "id": "sink-4",
+          "name": "폐기",
+          "type": "custom_sink",
+          "parameters": {}
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "cp7",
+          "name": "입구",
+          "position": "top",
+          "isOutput": false,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "name": "완제품 창고",
+      "type": "sink",
+      "x": 700,
+      "y": 100,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 10,
+      "actions": [
+        {
+          "id": "script-5",
+          "name": "창고 스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"완제품 창고 도착\"\nint storage_count += 1\nlog \"창고 재고: {storage_count}개\"\n\nif storage_count >= 20\n    log \"[CRITICAL] 창고 용량 초과 임박!\"\n    storage_full = true\n    \nif storage_count >= 25\n    log \"[ERROR] 창고 포화 상태!\"\n    \nlog \"보관 처리 완료\"\ndispose entity"
+          }
+        },
+        {
+          "id": "sink-5",
+          "name": "보관",
+          "type": "custom_sink",
+          "parameters": {}
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "cp8",
+          "name": "입구",
+          "position": "left",
+          "isOutput": false,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "6",
+      "name": "시스템 모니터",
+      "type": "process",
+      "x": 400,
+      "y": 350,
+      "width": 150,
+      "height": 80,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-6",
+          "name": "모니터링 스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "// 주기적인 시스템 상태 로깅\nlog \"===== 시스템 상태 보고 =====\"\nlog \"생성된 엔티티: {counter}\"\nlog \"검사된 제품: {inspected}\"\nlog \"포장된 제품: {package_count}\"\nlog \"불량품: {defect_count}\"\nlog \"창고 재고: {storage_count}\"\nlog \"==========================\"\n\nif warning = true\n    log \"[ALERT] 품질 경고 활성화 중\"\n    \nif storage_full = true\n    log \"[ALERT] 창고 용량 경고\"\n    \ndelay 10\nforce execution"
+          }
+        }
+      ],
+      "connectionPoints": []
+    }
+  ],
+  "connections": [
+    {
+      "from_block_id": "1",
+      "from_connector_id": "cp1",
+      "to_block_id": "2",
+      "to_connector_id": "cp2"
+    },
+    {
+      "from_block_id": "2",
+      "from_connector_id": "cp3",
+      "to_block_id": "3",
+      "to_connector_id": "cp5"
+    },
+    {
+      "from_block_id": "2",
+      "from_connector_id": "cp4",
+      "to_block_id": "4",
+      "to_connector_id": "cp7"
+    },
+    {
+      "from_block_id": "3",
+      "from_connector_id": "cp6",
+      "to_block_id": "5",
+      "to_connector_id": "cp8"
+    }
+  ],
+  "globalSignals": [
+    {
+      "name": "counter",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    },
+    {
+      "name": "inspected",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    },
+    {
+      "name": "package_count",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    },
+    {
+      "name": "defect_count",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    },
+    {
+      "name": "storage_count",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    },
+    {
+      "name": "warning",
+      "type": "boolean",
+      "value": false,
+      "initialValue": false
+    },
+    {
+      "name": "storage_full",
+      "type": "boolean",
+      "value": false,
+      "initialValue": false
+    }
+  ],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 14,
+    "deadlockTimeout": 20
+  },
+  "infoText": {
+    "content": "<h2>로그 뷰어 테스트 시뮬레이션</h2><p>이 시뮬레이션은 다양한 로그 메시지를 생성하여 로그 뷰어 기능을 테스트합니다.</p><ul><li><strong>일반 로그</strong>: 프로세스 진행 상황</li><li><strong>경고 로그</strong>: WARNING 키워드 포함</li><li><strong>오류 로그</strong>: ERROR 키워드 포함</li><li><strong>변수 보간</strong>: {variable} 형식으로 변수 값 표시</li><li><strong>시스템 모니터</strong>: 주기적인 상태 보고</li></ul>",
+    "style": {
+      "fontSize": 16,
+      "color": "#000000",
+      "fontWeight": "normal"
+    },
+    "isExpanded": true
+  }
+}

@@ -1,0 +1,275 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "name": "생산 라인",
+      "type": "source",
+      "x": 50,
+      "y": 200,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-1",
+          "name": "생산 스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"=== 새 제품 생산 시작 ===\"\ncreate entity\nint total_produced += 1\nlog \"제품 #{total_produced} 생산 완료\"\ndelay 3\nlog \"품질 검사로 이동\"\ngo to 품질검사.입구,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "cp1",
+          "name": "출구",
+          "position": "right",
+          "isOutput": true,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "name": "품질검사",
+      "type": "process",
+      "x": 250,
+      "y": 200,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-2",
+          "name": "검사 스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"품질 검사 시작\"\nint inspected += 1\ndelay 2\n\n// 3개마다 불량품\nif inspected = 3\n    log \"[WARNING] 불량품 발견!\"\n    product type += defective(red)\n    inspected = 0\n    go to 폐기장.입구,1\nif inspected != 3\n    log \"정상 제품 확인\"\n    product type += passed(green)\n    go to 포장공정.입구,1"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "cp2",
+          "name": "입구",
+          "position": "left",
+          "isOutput": false,
+          "actions": []
+        },
+        {
+          "id": "cp3",
+          "name": "정상",
+          "position": "right",
+          "isOutput": true,
+          "actions": []
+        },
+        {
+          "id": "cp4",
+          "name": "불량",
+          "position": "bottom",
+          "isOutput": true,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "name": "포장공정",
+      "type": "process",
+      "x": 450,
+      "y": 200,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 2,
+      "actions": [
+        {
+          "id": "script-3",
+          "name": "포장 스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"포장 시작\"\nint packaged += 1\nlog \"포장 작업 중... (누적: {packaged}개)\"\ndelay 4\nproduct type += boxed(blue)\nlog \"포장 완료\"\ngo to 출하장.입구,2"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "cp5",
+          "name": "입구",
+          "position": "left",
+          "isOutput": false,
+          "actions": []
+        },
+        {
+          "id": "cp6",
+          "name": "출구",
+          "position": "right",
+          "isOutput": true,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "폐기장",
+      "type": "sink",
+      "x": 250,
+      "y": 350,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-4",
+          "name": "폐기 스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"[ERROR] 불량품 폐기 처리\"\nint defects += 1\nlog \"총 불량품: {defects}개\"\ndispose entity"
+          }
+        },
+        {
+          "id": "sink-4",
+          "name": "폐기",
+          "type": "custom_sink",
+          "parameters": {}
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "cp7",
+          "name": "입구",
+          "position": "top",
+          "isOutput": false,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "name": "출하장",
+      "type": "sink",
+      "x": 650,
+      "y": 200,
+      "width": 120,
+      "height": 80,
+      "maxCapacity": 5,
+      "actions": [
+        {
+          "id": "script-5",
+          "name": "출하 스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"출하 준비\"\nint shipped += 1\nlog \"출하 대기 중... (누적: {shipped}개)\"\n\nif shipped > 5\n    log \"[INFO] 트럭 호출 필요\"\n\nif shipped > 8\n    log \"[CRITICAL] 출하장 포화!\"\n\ndelay 1\ndispose entity\nlog \"제품 출하 완료\""
+          }
+        },
+        {
+          "id": "sink-5",
+          "name": "출하",
+          "type": "custom_sink",
+          "parameters": {}
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "cp8",
+          "name": "입구",
+          "position": "left",
+          "isOutput": false,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "6",
+      "name": "시스템 모니터",
+      "type": "process",
+      "x": 400,
+      "y": 50,
+      "width": 150,
+      "height": 60,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-6",
+          "name": "모니터링",
+          "type": "script",
+          "parameters": {
+            "script": "log \"===== 생산 현황 보고 =====\"\nlog \"총 생산: {total_produced}개\"\nlog \"검사 완료: {inspected}개\"\nlog \"포장 완료: {packaged}개\"\nlog \"불량품: {defects}개\"\nlog \"출하 완료: {shipped}개\"\nlog \"========================\"\ndelay 15\nforce execution"
+          }
+        }
+      ],
+      "connectionPoints": []
+    }
+  ],
+  "connections": [
+    {
+      "from_block_id": "1",
+      "from_connector_id": "cp1",
+      "to_block_id": "2",
+      "to_connector_id": "cp2"
+    },
+    {
+      "from_block_id": "2",
+      "from_connector_id": "cp3",
+      "to_block_id": "3",
+      "to_connector_id": "cp5"
+    },
+    {
+      "from_block_id": "2",
+      "from_connector_id": "cp4",
+      "to_block_id": "4",
+      "to_connector_id": "cp7"
+    },
+    {
+      "from_block_id": "3",
+      "from_connector_id": "cp6",
+      "to_block_id": "5",
+      "to_connector_id": "cp8"
+    }
+  ],
+  "globalSignals": [
+    {
+      "name": "total_produced",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    },
+    {
+      "name": "inspected",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    },
+    {
+      "name": "packaged",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    },
+    {
+      "name": "defects",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    },
+    {
+      "name": "shipped",
+      "type": "integer",
+      "value": 0,
+      "initialValue": 0
+    }
+  ],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 14,
+    "deadlockTimeout": 20
+  },
+  "infoText": {
+    "content": "<h2>로그 뷰어 테스트 v2</h2><p>간단한 생산 라인 시뮬레이션으로 로그 기능을 테스트합니다.</p><ul><li>생산 → 검사 → 포장 → 출하 프로세스</li><li>3개마다 1개씩 불량품 발생</li><li>각 단계별 로그 생성</li><li>시스템 모니터가 주기적으로 현황 보고</li></ul>",
+    "style": {
+      "fontSize": 16,
+      "color": "#000000",
+      "fontWeight": "normal"
+    },
+    "isExpanded": true
+  }
+}

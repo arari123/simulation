@@ -87,7 +87,7 @@ class SimpleEngineAdapter:
         # 시간을 반올림하여 부동소수점 오차 제거 (소수점 1자리)
         simulation_time = round(result.get('simulation_time', 0), 1)
         
-        # block_states를 포함하여 반환
+        # block_states와 script_logs를 포함하여 반환
         return {
             'time': simulation_time,
             'event_description': f"Simulation step {result.get('step_count', 0)} completed",
@@ -96,6 +96,7 @@ class SimpleEngineAdapter:
             'current_signals': result.get('current_signals', {}),
             'globalSignals': result.get('globalSignals', []),  # 통합된 신호/변수 정보
             'block_states': result.get('block_states', {}),  # 블록 상태 정보 추가
+            'script_logs': result.get('script_logs', []),  # 스크립트 로그 추가
             'log': [{
                 'time': simulation_time,
                 'event': f"Step {result.get('step_count', 0)}: {result.get('total_entities_in_system', 0)} entities in system"

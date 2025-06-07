@@ -542,3 +542,9 @@ class IndependentBlock:
             'capacity': f"{len(self.entities_in_block)}/{self.max_capacity}",
             'warnings': self.warnings  # 경고 메시지 포함
         }
+    
+    def get_script_logs(self) -> List[Dict[str, Any]]:
+        """블록의 스크립트 실행 로그 반환"""
+        if self.script_executor:
+            return self.script_executor.get_simulation_logs()
+        return []

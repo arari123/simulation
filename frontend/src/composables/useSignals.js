@@ -9,7 +9,7 @@ import { SignalType, getDefaultValue, inferType } from '../constants/signalTypes
 export function useSignals() {
   // 신호 상태
   const globalSignals = ref([])
-  const showGlobalSignalPanel = ref(true)
+  const showGlobalSignalPanel = ref(false) // 초기값을 false로 변경하여 숨김 상태로 시작
 
   // 계산된 속성
   const getAllSignalNames = computed(() => {

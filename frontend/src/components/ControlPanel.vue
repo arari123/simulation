@@ -162,27 +162,23 @@ function togglePanel() {
 
 function stepExecution() {
   if (props.isSimulationEnded) {
-    console.log("시뮬레이션이 이미 종료되었습니다. 초기화 후 다시 실행해주세요.");
+    alert("시뮬레이션이 이미 종료되었습니다. 초기화 후 다시 실행해주세요.");
     alert("시뮬레이션이 종료되었습니다. 초기화 버튼을 눌러 다시 시작해주세요.");
     return;
   }
-  console.log("스텝 실행 요청");
   emit('step-simulation'); 
 }
 
 function handleFullExecutionToggle() {
   if (props.isFullExecutionRunning) {
-    console.log("전체 실행 일시 정지 요청");
     emit('stop-full-execution');
   } else {
-    console.log("전체 실행 시작 요청 - 모드:", executionMode.value);
     
     if (executionMode.value === 'quantity') {
       if (!inputQuantity.value || inputQuantity.value <= 0) {
         alert("올바른 투입 수량을 입력해주세요 (1 이상)");
         return;
       }
-      console.log("수량 기반 실행:", inputQuantity.value);
       emit('step-based-run', { 
         mode: 'quantity', 
         value: inputQuantity.value 
@@ -192,7 +188,6 @@ function handleFullExecutionToggle() {
         alert("진행 시간을 입력해주세요 (예: 100s, 30m, 1h)");
         return;
       }
-      console.log("시간 기반 실행:", runTimeInput.value);
       emit('step-based-run', { 
         mode: 'time', 
         value: runTimeInput.value 
@@ -205,12 +200,10 @@ function handleFullExecutionToggle() {
 function resetSimulationDisplayInternal() {
   if (confirm("시뮬레이션 진행 상태를 초기화하시겠습니까? (캔버스 배치는 유지됩니다)")) {
     emit('reset-simulation-display'); // App.vue로 이벤트 전달
-    console.log("시뮬레이션 표시가 초기화 요청되었습니다.");
   }
 }
 
 function previousExecution() {
-  console.log("이전 실행 요청");
   emit('previous-step');
 }
 
@@ -237,7 +230,6 @@ function closeSettingsPopup() {
 
 function applySettings() {
   emit('update-settings', { ...editableSettings.value })
-  console.log("설정 적용 중:", editableSettings.value)
   closeSettingsPopup()
 }
 
@@ -245,7 +237,6 @@ function triggerAddProcessBlock() {
   const processName = prompt("공정 블록 이름을 입력하세요:");
   if (processName) {
     emit('add-process-block', processName);
-    console.log("공정 블록 추가 중:", processName);
   }
 }
 
@@ -315,7 +306,7 @@ function toggleGlobalSignalPanel() {
   flex-shrink: 0;
   min-width: 50px;
   max-width: 350px;
-  z-index: 1000;
+  z-index: 100; /* 스크립트 편집창(5000)보다 낮게 설정 */
   box-shadow: 2px 0 4px rgba(0,0,0,0.1);
 }
 

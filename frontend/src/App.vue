@@ -116,6 +116,16 @@
       @update-signal-value="handleUpdateGlobalSignalValue"
       @edit-signal="handleEditGlobalSignal"
     />
+    
+    <!-- 시뮬레이션 로그 패널 -->
+    <LogPanel
+      :logs="simulationLogs"
+      :is-auto-scroll-enabled="isAutoScrollEnabled"
+      :control-panel-width="controlPanelWidth"
+      @clear-logs="clearSimulationLogs"
+      @export-logs="exportSimulationLogs"
+      @toggle-auto-scroll="toggleAutoScroll"
+    />
   </div>
 </template>
 
@@ -127,10 +137,12 @@ import BlockSettingsPopup from './components/BlockSettingsPopup.vue'
 import ConnectorSettingsPopup from './components/ConnectorSettingsPopup.vue'
 import GlobalSignalPanel from './components/GlobalSignalPanel.vue'
 import InfoTextPanel from './components/InfoTextPanel.vue'
+import LogPanel from './components/LogPanel.vue'
 
 // Composables
 import { useSimulation } from './composables/useSimulation.js'
 import { useBlocks } from './composables/useBlocks.js'
+import { useSimulationLogs } from './composables/useSimulationLogs.js'
 import { useSignals } from './composables/useSignals.js'
 
 // Services
@@ -251,6 +263,16 @@ const {
   resetSignalsToInitialValues
 } = useSignals()
 
+// 시뮬레이션 로그 관리
+const {
+  logs: simulationLogs,
+  addLogs: addSimulationLogs,
+  clearLogs: clearSimulationLogs,
+  exportLogs: exportSimulationLogs,
+  isAutoScrollEnabled,
+  toggleAutoScroll
+} = useSimulationLogs()
+
 // 초기 시나리오 설정
 async function setupInitialScenario() {
   try {
@@ -269,7 +291,6 @@ async function setupInitialScenario() {
     
     // 초기 로드 후 자동 연결 새로고침 (모든 연결을 자동 생성으로 다시 생성)
     setTimeout(() => {
-      console.log('[App] 초기 로드 완료 - 자동 연결 새로고침')
       refreshAllAutoConnections()
     }, 100)
   } catch (error) {
@@ -315,7 +336,7 @@ function handleAddProcessBlock(name) {
 async function handleStepSimulation() {
   // 첫 번째 스텝인 경우에만 설정 데이터 전송, 이후에는 null
   const setupData = isFirstStep.value ? getSimulationSetupData() : null
-  const result = await executeStep(setupData, updateBlockWarnings)
+  const result = await executeStep(setupData, updateBlockWarnings, addSimulationLogs)
   
   if (!result.success) {
     alert(`시뮬레이션 실행 실패: ${result.error}`)
@@ -357,7 +378,7 @@ async function handleStepBasedRun(options) {
   await startStepBasedExecution(setupData, (result) => {
     // 신호 상태 업데이트
     updateSignalsFromSimulation(result)
-  }, options, updateBlockWarnings)
+  }, options, updateBlockWarnings, addSimulationLogs)
 }
 
 
@@ -370,6 +391,7 @@ async function handlePreviousStep() {
 async function resetSimulationDisplay() {
   await resetSimulation()
   resetSignalsToInitialValues()
+  clearSimulationLogs()
 }
 
 // 시뮬레이션 설정 데이터 생성
@@ -619,7 +641,6 @@ onMounted(() => {
       sessionStorage.removeItem('pendingImportConfig')
       // 설정 적용
       applyImportedConfiguration(config)
-      console.log('[App] 저장된 설정을 적용했습니다.')
     } catch (error) {
       console.error('[App] 저장된 설정 적용 실패:', error)
       // 실패 시에도 기본 시나리오 설정
@@ -689,6 +710,8 @@ watch(currentSettings, (newSettings) => {
   transition: all 0.3s ease;
   overflow-y: auto;
   flex-shrink: 0;
+  z-index: 200; /* 정보 텍스트창(z-index: 50)보다 위에 표시 */
+  position: relative;
 }
 
 .debug-info {

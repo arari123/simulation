@@ -293,7 +293,7 @@ watch(() => props.scriptContent, () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 5000; /* 제어판(1000)보다 확실히 위에 표시 */
 }
 
 .script-editor {

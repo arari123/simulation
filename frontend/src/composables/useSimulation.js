@@ -97,7 +97,7 @@ export function useSimulation() {
   /**
    * 단일 스텝 실행
    */
-  async function executeStep(setupData, updateBlockWarnings) {
+  async function executeStep(setupData, updateBlockWarnings, updateLogs) {
     try {
       // 현재 상태를 히스토리에 저장
       if (!isFirstStep.value) {
@@ -113,7 +113,7 @@ export function useSimulation() {
       
       // 결과 처리 - 백엔드에서는 SimulationStepResult 모델을 반환하므로 success 필드가 없음
       if (result && typeof result === 'object') {
-        updateSimulationState(result, updateBlockWarnings)
+        updateSimulationState(result, updateBlockWarnings, updateLogs)
         isFirstStep.value = false
         return { success: true, result }
       } else {
@@ -163,7 +163,7 @@ export function useSimulation() {
   /**
    * 시뮬레이션 결과로 상태 업데이트
    */
-  function updateSimulationState(result, updateBlockWarnings) {
+  function updateSimulationState(result, updateBlockWarnings, updateLogs) {
     // 백엔드 응답 구조에 맞게 필드명 수정
     if (result.time !== undefined) {
       processTimeFromSim.value = result.time
@@ -183,6 +183,11 @@ export function useSimulation() {
     // 블록 상태 및 경고 정보 업데이트
     if (result.block_states && updateBlockWarnings) {
       updateBlockWarnings(result.block_states)
+    }
+    
+    // 스크립트 로그 업데이트
+    if (result.script_logs && updateLogs) {
+      updateLogs(result.script_logs)
     }
     
     // 배치 스텝 응답의 경우 추가 필드들 처리
@@ -209,7 +214,7 @@ export function useSimulation() {
   /**
    * 스텝 기반 전체 실행 시작
    */
-  async function startStepBasedExecution(setupData, onStepComplete, options = {}, updateBlockWarnings) {
+  async function startStepBasedExecution(setupData, onStepComplete, options = {}, updateBlockWarnings, updateLogs) {
     isFullExecutionRunning.value = true
     shouldStopFullExecution.value = false
     
@@ -218,7 +223,7 @@ export function useSimulation() {
       let initialDispatchedProducts = dispatchedProductsFromSim.value // 시작 시점의 배출 제품 수
       
       while (!isSimulationEnded.value && !shouldStopFullExecution.value) {
-        const result = await executeStep(currentSetupData, updateBlockWarnings)
+        const result = await executeStep(currentSetupData, updateBlockWarnings, updateLogs)
         
         if (!result.success) {
           console.error('[useSimulation] 스텝 실행 실패, 전체 실행 중단:', result.error)

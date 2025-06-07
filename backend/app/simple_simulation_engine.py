@@ -323,6 +323,17 @@ class SimpleSimulationEngine:
         except simpy.Interrupt:
             pass
     
+    def collect_script_logs(self) -> List[Dict[str, Any]]:
+        """모든 블록의 스크립트 로그 수집"""
+        all_logs = []
+        for block in self.blocks.values():
+            logs = block.get_script_logs()
+            all_logs.extend(logs)
+        
+        # 시간순 정렬
+        all_logs.sort(key=lambda x: x['time'])
+        return all_logs
+    
     def _collect_simulation_results(self) -> Dict[str, Any]:
         """시뮬레이션 결과 수집"""
         # 블록 상태 수집
@@ -354,6 +365,9 @@ class SimpleSimulationEngine:
         # 전역 신호/변수 (통합 형식)
         global_signals = self.variable_accessor.to_config_format()
         
+        # 스크립트 로그 수집
+        script_logs = self.collect_script_logs()
+        
         return {
             'block_states': block_states,
             'current_signals': signal_states,
@@ -361,7 +375,8 @@ class SimpleSimulationEngine:
             'total_entities_in_system': total_entities,
             'total_entities_processed': total_processed,
             'blocks_info': [block.get_status() for block in self.blocks.values()],
-            'event_queue_size': len(self.env._queue) if hasattr(self.env, '_queue') else 0
+            'event_queue_size': len(self.env._queue) if hasattr(self.env, '_queue') else 0,
+            'script_logs': script_logs
         }
     
     def run_simulation(self, max_steps: int = 100) -> Dict[str, Any]:

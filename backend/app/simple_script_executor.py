@@ -6,7 +6,7 @@ import simpy
 import re
 import random
 import logging
-from typing import Generator, Dict, Any, Optional
+from typing import Generator, Dict, Any, Optional, List
 
 logger = logging.getLogger(__name__)
 
@@ -387,21 +387,22 @@ class SimpleScriptExecutor:
         
         # 간단한 변수 치환 - "text {variable}" 형식 지원
         if self.variable_accessor:
-            # 모든 단어를 확인하여 변수인지 체크
-            words = message.split()
-            result_words = []
+            # 정규식을 사용하여 {변수명} 패턴을 찾아 치환
+            import re
+            pattern = r'\{([^}]+)\}'
             
+            def replace_variable(match):
+                var_name = match.group(1)
+                value = self.variable_accessor.get_value(var_name)
+                return str(value) if value is not None else match.group(0)
+            
+            interpolated_message = re.sub(pattern, replace_variable, message)
+            
+            # 중괄호 없이 변수명만 있는 경우도 처리 (기존 테스트 케이스 호환)
+            words = interpolated_message.split()
+            result_words = []
             for word in words:
-                # 중괄호로 둘러싸인 경우 변수로 간주
-                if word.startswith('{') and word.endswith('}'):
-                    var_name = word[1:-1]  # 중괄호 제거
-                    value = self.variable_accessor.get_value(var_name)
-                    if value is not None:
-                        result_words.append(str(value))
-                    else:
-                        result_words.append(word)  # 변수가 없으면 원본 유지
-                # 중괄호 없이 변수명만 있는 경우도 처리 (기존 테스트 케이스 호환)
-                elif self.variable_accessor.has_variable(word):
+                if self.variable_accessor.has_variable(word):
                     value = self.variable_accessor.get_value(word)
                     result_words.append(str(value))
                 else:
@@ -444,6 +445,14 @@ class SimpleScriptExecutor:
             yield from block.dispose_entity(env, entity)
             logger.info(f"[{env.now:.1f}s] Block {block.name} disposed entity {entity.id}")
         yield env.timeout(0)
+    
+    def get_simulation_logs(self) -> List[Dict[str, Any]]:
+        """현재까지 수집된 시뮬레이션 로그 반환"""
+        return self.simulation_logs.copy()
+    
+    def clear_logs(self):
+        """로그 초기화 (선택적)"""
+        self.simulation_logs = []
     
     def execute_int_operation(self, env: simpy.Environment, params: Dict[str, str]) -> Generator:
         """int 변수 산술 연산 실행"""
