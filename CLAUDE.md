@@ -224,3 +224,24 @@ The simulation supports two types of global variables:
   - Added line decorations for if statements and indented blocks
   - No additional dependencies or complex imports
   - Works with tabs, 4 spaces, and 2 spaces indentation
+
+### 2025-01-07: Block Processing Count Display ✅
+- **Block Processing Counter**: Display total processed entities for each block
+  - Shows "처리: X" below each block in green color
+  - Counts entities processed via `dispose entity` command
+  - Real-time updates during simulation
+  - Positioned outside block boundaries for better visibility
+
+### 2025-01-07: Canvas Information Text Panel ✅
+- **Info Text Panel**: Rich text information display at canvas top
+  - Fixed position panel responsive to control panel width
+  - Click to toggle minimize/expand states
+  - Minimized: Shows first line only with ellipsis
+  - Expanded: Shows full text with transparent background
+  - Rich Text Editor Features:
+    - Bold formatting for selected text
+    - Color picker for selected text
+    - Font size adjustment (12-24px) for selected text
+    - Proper Korean text input support
+  - Auto-saves to simulation JSON configuration
+  - Teleport-based rendering for consistent positioning

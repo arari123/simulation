@@ -1,0 +1,69 @@
+{
+  "blocks": [
+    {
+      "id": 1,
+      "name": "투입",
+      "x": 100,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 10,
+      "script": "go to 처리.L,2",
+      "connectionPoints": [
+        {"id": "1-out", "name": "OUT", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "처리",
+      "x": 300,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 5,
+      "script": "delay 3\nif count > 3\n    dispose entity\nif count <= 3\n    go to 배출.L,1\nint count += 1",
+      "connectionPoints": [
+        {"id": "2-in", "name": "L", "x": 0, "y": 50},
+        {"id": "2-out", "name": "R", "x": 100, "y": 50}
+      ]
+    },
+    {
+      "id": 3,
+      "name": "배출",
+      "x": 500,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 10,
+      "script": "",
+      "connectionPoints": [
+        {"id": "3-in", "name": "L", "x": 0, "y": 50}
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "fromBlockId": 1,
+      "fromConnectorId": "1-out",
+      "toBlockId": 2,
+      "toConnectorId": "2-in"
+    },
+    {
+      "fromBlockId": 2,
+      "fromConnectorId": "2-out",
+      "toBlockId": 3,
+      "toConnectorId": "3-in"
+    }
+  ],
+  "globalSignals": [
+    {
+      "name": "count",
+      "type": "integer",
+      "value": 0
+    }
+  ],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 14
+  }
+}

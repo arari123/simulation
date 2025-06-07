@@ -388,10 +388,29 @@ function addBlockContent(blockGroup, blockData) {
     y: (props.currentSettings.fontSize + 5),
   });
   blockGroup.add(capacityText);
+  
+  // 처리된 엔티티 수 표시 (disposed 포함) - 블록 밖 하단에 표시
+  if (blockData.totalProcessed !== undefined && blockData.totalProcessed > 0) {
+    const blockHeight = blockData.height || props.currentSettings.boxSize;
+    const processedText = new Konva.Text({
+      text: `처리: ${blockData.totalProcessed}`,
+      fontSize: props.currentSettings.fontSize * 0.8, // 0.5에서 0.8로 증가
+      fill: '#2E7D32', // 녹색
+      align: 'center',
+      width: blockData.width || props.currentSettings.boxSize,
+      x: 0,
+      y: blockHeight + 10, // 블록 하단 밖으로 이동
+      fontStyle: 'bold'
+    });
+    blockGroup.add(processedText);
+  }
 
   // 경고 메시지 표시 (용량 초과 등)
   if (blockData.warnings && blockData.warnings.length > 0) {
     const latestWarning = blockData.warnings[blockData.warnings.length - 1]; // 가장 최근 경고
+    // 경고 메시지는 블록 내부 하단에 표시
+    const warningYPos = (props.currentSettings.fontSize * 1.8 + 10);
+      
     const warningText = new Konva.Text({
       text: `⚠️ 용량 초과`,
       fontSize: props.currentSettings.fontSize * 0.5,
@@ -399,7 +418,7 @@ function addBlockContent(blockGroup, blockData) {
       align: 'center',
       width: blockData.width || props.currentSettings.boxSize,
       x: 0,
-      y: (props.currentSettings.fontSize * 1.8 + 10),
+      y: warningYPos,
       fontStyle: 'bold'
     });
     blockGroup.add(warningText);
@@ -409,7 +428,7 @@ function addBlockContent(blockGroup, blockData) {
       width: (blockData.width || props.currentSettings.boxSize) - 4,
       height: props.currentSettings.fontSize * 0.7,
       x: 2,
-      y: (props.currentSettings.fontSize * 1.8 + 8),
+      y: warningYPos - 2,
       fill: 'rgba(255, 0, 0, 0.1)',
       stroke: 'red',
       strokeWidth: 1,

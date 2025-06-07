@@ -1,0 +1,80 @@
+{
+  "blocks": [
+    {
+      "id": "source1",
+      "name": "투입",
+      "type": "source",
+      "x": 100,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 5,
+      "script": "delay 1\ngo to process1.IN,2",
+      "connectors": [
+        {"id": "OUT", "type": "output", "position": {"relX": 1, "relY": 0.5}}
+      ]
+    },
+    {
+      "id": "process1",
+      "name": "처리",
+      "type": "process",
+      "x": 300,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 3,
+      "script": "delay 2\ngo to sink1.IN,1",
+      "connectors": [
+        {"id": "IN", "type": "input", "position": {"relX": 0, "relY": 0.5}},
+        {"id": "OUT", "type": "output", "position": {"relX": 1, "relY": 0.5}}
+      ]
+    },
+    {
+      "id": "sink1",
+      "name": "배출1",
+      "type": "sink",
+      "x": 500,
+      "y": 100,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 10,
+      "script": "delay 1\ndispose entity",
+      "connectors": [
+        {"id": "IN", "type": "input", "position": {"relX": 0, "relY": 0.5}}
+      ]
+    },
+    {
+      "id": "sink2",
+      "name": "배출2",
+      "type": "sink",
+      "x": 500,
+      "y": 250,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 10,
+      "script": "log \"Entity arrived at sink2\"\ndispose entity",
+      "connectors": [
+        {"id": "IN", "type": "input", "position": {"relX": 0, "relY": 0.5}}
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "fromBlockId": "source1",
+      "fromConnectorId": "OUT",
+      "toBlockId": "process1",
+      "toConnectorId": "IN"
+    },
+    {
+      "fromBlockId": "process1",
+      "fromConnectorId": "OUT",
+      "toBlockId": "sink1",
+      "toConnectorId": "IN"
+    }
+  ],
+  "globalSignals": [],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 18
+  }
+}

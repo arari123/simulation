@@ -25,6 +25,14 @@
     
     <div class="main-content">
       <div class="canvas-container">
+        <!-- 정보 텍스트 패널 -->
+        <InfoTextPanel 
+          :info-text="infoText"
+          :control-panel-width="controlPanelWidth"
+          :show-block-settings="showBlockSettingsPopup"
+          @update:info-text="handleUpdateInfoText"
+        />
+        
         <CanvasArea 
           :blocks="blocks"
           :connections="connections"
@@ -118,6 +126,7 @@ import CanvasArea from './components/CanvasArea.vue'
 import BlockSettingsPopup from './components/BlockSettingsPopup.vue'
 import ConnectorSettingsPopup from './components/ConnectorSettingsPopup.vue'
 import GlobalSignalPanel from './components/GlobalSignalPanel.vue'
+import InfoTextPanel from './components/InfoTextPanel.vue'
 
 // Composables
 import { useSimulation } from './composables/useSimulation.js'
@@ -140,6 +149,17 @@ const controlPanelWidth = ref(300)
 // 디버그 정보
 const showDebugInfo = ref(false)
 const canvasAreaRef = ref(null)
+
+// 정보 텍스트
+const infoText = ref({
+  content: '시뮬레이션 정보를 입력하세요',
+  style: {
+    fontSize: 16,
+    color: '#000000',
+    fontWeight: 'normal'
+  },
+  isExpanded: false
+})
 
 // 창 크기 추적
 const windowSize = ref({
@@ -277,6 +297,11 @@ async function updateBackendSettings(settings) {
   }
 }
 
+// 정보 텍스트 업데이트
+function handleUpdateInfoText(updatedInfoText) {
+  infoText.value = updatedInfoText
+}
+
 // 새 블록 추가 처리
 function handleAddProcessBlock(name) {
   const newBlock = addNewBlockToCanvas(name, currentSettings.value)
@@ -309,12 +334,18 @@ function updateBlockWarnings(blockStates) {
   // 각 블록의 경고 정보를 업데이트
   blocks.value.forEach(block => {
     const blockState = blockStates[block.id]
-    if (blockState && blockState.warnings) {
-      // 기존 블록 데이터에 경고 정보 추가
-      block.warnings = blockState.warnings
-    } else {
-      // 경고가 없으면 기존 경고 제거
-      block.warnings = []
+    if (blockState) {
+      // 경고 정보 업데이트
+      if (blockState.warnings) {
+        block.warnings = blockState.warnings
+      } else {
+        block.warnings = []
+      }
+      
+      // total_processed 정보 업데이트
+      if (blockState.total_processed !== undefined) {
+        block.totalProcessed = blockState.total_processed
+      }
     }
   })
 }
@@ -446,7 +477,8 @@ function handleExportConfiguration() {
     blocks: blocks.value,
     connections: connections.value,
     globalSignals: globalSignals.value,
-    settings: currentSettings.value
+    settings: currentSettings.value,
+    infoText: infoText.value
   }
   
   const dataStr = JSON.stringify(config, null, 2)
@@ -545,6 +577,9 @@ function applyImportedConfiguration(config) {
     }
     if (config.settings) {
       currentSettings.value = { ...currentSettings.value, ...config.settings };
+    }
+    if (config.infoText) {
+      infoText.value = config.infoText;
     }
     
     // 설정 적용 후 자동 연결 새로고침

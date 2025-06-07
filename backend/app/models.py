@@ -70,6 +70,7 @@ class SimulationStepResult(BaseModel):
     active_entities: List[EntityState] = [] # 활성 엔티티 상태 추가
     current_signals: Optional[Dict[str, bool]] = None # 현재 신호값들 추가
     globalSignals: Optional[List[Dict[str, Any]]] = None # 타입 정보를 포함한 전역 변수/신호
+    block_states: Optional[Dict[str, Any]] = None # 블록 상태 정보 (경고, 처리량 등)
 
 class SimulationRunResult(BaseModel): # 전체 실행 결과 모델
     message: str
