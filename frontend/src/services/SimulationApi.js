@@ -3,7 +3,7 @@
  * 백엔드와의 모든 API 통신을 담당합니다.
  */
 
-const API_BASE = 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 export class SimulationApi {
   /**
