@@ -126,6 +126,11 @@ class SimpleEngineAdapter:
         self.engine.set_debug_manager(self.global_debug_manager)
         # Debug manager connected to engine
         
+        # 실행 모드 설정 적용
+        if self.execution_mode != "default" or self.mode_config:
+            self.engine.set_execution_mode(self.execution_mode, self.mode_config)
+            logger.info(f"Applied execution mode {self.execution_mode} to new simulation")
+        
         self.step_counter = 0
     
     def step_simulation(self) -> SimulationStepResult:
@@ -247,8 +252,8 @@ class SimpleEngineAdapter:
         
         # 엔진이 있으면 모드 설정 적용
         if self.has_engine():
-            # 향후 엔진에 모드 적용 로직 추가
-            pass
+            self.engine.set_execution_mode(mode, self.mode_config)
+            logger.info(f"Execution mode set to: {mode} with config: {self.mode_config}")
     
     def get_execution_mode(self) -> str:
         """현재 실행 모드 반환"""
@@ -256,6 +261,9 @@ class SimpleEngineAdapter:
     
     def get_mode_config(self) -> dict:
         """현재 모드 설정 반환"""
+        # 엔진이 있다면 엔진에서 설정 가져오기
+        if self.has_engine():
+            return self.engine.get_mode_config()
         return self.mode_config
 
 # 전역 어댑터 인스턴스

@@ -48,6 +48,10 @@ class SimpleSimulationEngine:
         # 설정
         self.max_simulation_time = 1000.0
         self.step_timeout = 10.0
+        
+        # 실행 모드 관련
+        self.execution_mode = "default"
+        self.time_step_duration = 1.0  # 시간 스텝 모드에서 1스텝당 시간(초)
     
     def reset(self):
         """시뮬레이션 초기화"""
@@ -92,6 +96,29 @@ class SimpleSimulationEngine:
         
         logger.info(f"Simulation setup completed with {len(self.blocks)} blocks")
         # Debug manager status checked
+    
+    def set_execution_mode(self, mode: str, config: Dict[str, Any] = None):
+        """실행 모드 설정"""
+        valid_modes = ["default", "time_step", "high_speed"]
+        if mode not in valid_modes:
+            raise ValueError(f"Invalid execution mode: {mode}. Valid modes: {valid_modes}")
+        
+        self.execution_mode = mode
+        
+        if config:
+            if mode == "time_step" and "step_duration" in config:
+                self.time_step_duration = float(config["step_duration"])
+                logger.info(f"Time step mode configured: {self.time_step_duration} seconds per step")
+    
+    def get_execution_mode(self) -> str:
+        """현재 실행 모드 반환"""
+        return self.execution_mode
+    
+    def get_mode_config(self) -> Dict[str, Any]:
+        """현재 모드 설정 반환"""
+        if self.execution_mode == "time_step":
+            return {"step_duration": self.time_step_duration}
+        return {}
     
     def _create_block(self, block_config: Dict[str, Any]):
         """블록 생성"""
@@ -258,8 +285,84 @@ class SimpleSimulationEngine:
             logger.error(f"Target block {target_block_id} not found")
             yield env.timeout(0)
     
+    def step_simulation_time_based(self, step_duration: Optional[float] = None) -> Dict[str, Any]:
+        """시간 기반 시뮬레이션 스텝 실행"""
+        if not self.env:
+            return {'error': 'Simulation not initialized'}
+        
+        # 블록이 없으면 초기화되지 않은 것으로 간주
+        if not self.blocks:
+            logger.warning("No blocks found - simulation not properly initialized")
+            return {'error': 'Simulation not initialized - no blocks found'}
+        
+        # 스텝 지속 시간 결정 (매개변수 > 모드 설정 > 기본값)
+        duration = step_duration or self.time_step_duration
+        
+        # 시작 시간과 목표 시간 설정
+        start_time = self.env.now
+        target_time = start_time + duration
+        
+        logger.info(f"Time step execution: {start_time} -> {target_time} (duration: {duration}s)")
+        
+        try:
+            # 디버그 매니저가 방금 재개되었는지 확인
+            if self.debug_manager and getattr(self.debug_manager, 'just_resumed', False):
+                self.debug_manager.just_resumed = False
+            
+            # 지정된 시간까지 실행
+            while self.env.now < target_time:
+                # 디버그 매니저가 일시정지 상태인지 확인
+                if self.debug_manager and self.debug_manager.debug_state.is_paused:
+                    logger.info(f"Execution paused at breakpoint at time {self.env.now}")
+                    break
+                
+                # 다음 이벤트가 없으면 목표 시간까지 진행
+                if self.env.peek() >= float('inf'):
+                    self.env.run(until=target_time)
+                    break
+                
+                # 다음 이벤트가 목표 시간을 초과하면 목표 시간까지만 진행
+                next_event_time = self.env.peek()
+                if next_event_time > target_time:
+                    self.env.run(until=target_time)
+                    break
+                
+                # 다음 이벤트 실행
+                self.env.step()
+            
+            self.step_count += 1
+            
+            # 결과 수집
+            result = self._collect_simulation_results()
+            result['step_count'] = self.step_count
+            result['simulation_time'] = round(self.env.now, 1)
+            result['time_advanced'] = round(self.env.now - start_time, 1)
+            result['target_time_reached'] = self.env.now >= target_time
+            result['execution_mode'] = 'time_step'
+            result['step_duration'] = duration
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Time step execution error: {e}")
+            return {
+                'error': str(e),
+                'step_count': self.step_count,
+                'simulation_time': round(self.env.now, 1),
+                'execution_mode': 'time_step'
+            }
+    
     def step_simulation(self) -> Dict[str, Any]:
-        """시뮬레이션 1스텝 실행 - 엔티티 이동 기반"""
+        """시뮬레이션 1스텝 실행 - 실행 모드에 따라 적절한 방법 선택"""
+        # 실행 모드에 따라 다른 실행 방법 사용
+        if self.execution_mode == "time_step":
+            return self.step_simulation_time_based()
+        else:
+            # 기본 모드 (엔티티 이동 기반)
+            return self._step_simulation_default()
+    
+    def _step_simulation_default(self) -> Dict[str, Any]:
+        """기본 모드 시뮬레이션 1스텝 실행 - 엔티티 이동 기반"""
         if not self.env:
             return {'error': 'Simulation not initialized'}
         
@@ -321,7 +424,7 @@ class SimpleSimulationEngine:
             result['simulation_time'] = round(self.env.now, 1)
             result['time_advanced'] = round(self.env.now - initial_time, 1)
             result['movement_detected'] = movement_detected
-            
+            result['execution_mode'] = 'default'
             
             return result
             
@@ -330,7 +433,8 @@ class SimpleSimulationEngine:
             return {
                 'error': str(e),
                 'step_count': self.step_count,
-                'simulation_time': round(self.env.now, 1)
+                'simulation_time': round(self.env.now, 1),
+                'execution_mode': 'default'
             }
     
     def _get_total_entity_count(self) -> int:

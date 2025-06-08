@@ -103,39 +103,39 @@ class SimpleSimulationEngine:
 
 ## 4. 구현 작업 목록
 
-### Phase 1: 모드 선택 기반 구조 (2시간)
+### Phase 1: 모드 선택 기반 구조 (2시간) ✅ **완료**
 
 #### 1.1 백엔드 최소 수정
-- [ ] `models.py`에 ExecutionModeRequest 모델 추가
-- [ ] `routes/simulation.py`에 모드 설정/조회 API 추가
-  - [ ] POST `/simulation/execution-mode`
-  - [ ] GET `/simulation/execution-mode`
-- [ ] 현재는 default 모드만 허용, 다른 모드는 501 에러 반환
+- [x] `models.py`에 ExecutionModeRequest 모델 추가
+- [x] `routes/simulation.py`에 모드 설정/조회 API 추가
+  - [x] POST `/simulation/execution-mode`
+  - [x] GET `/simulation/execution-mode`
+- [x] 현재는 default 모드만 허용, 다른 모드는 501 에러 반환
 
 #### 1.2 프론트엔드 UI 추가
-- [ ] `SimulationApi.js`에 모드 관련 API 함수 추가
-- [ ] `ControlPanel.vue`에 모드 선택 드롭다운 추가
-- [ ] 실행 중에는 모드 변경 비활성화
-- [ ] 미구현 모드는 disabled 표시
+- [x] `SimulationApi.js`에 모드 관련 API 함수 추가
+- [x] `ControlPanel.vue`에 모드 선택 드롭다운 추가
+- [x] 실행 중에는 모드 변경 비활성화
+- [x] 미구현 모드는 disabled 표시
 
 #### 1.3 기본 모드 동작 테스트
-- [ ] 모든 기존 기능 정상 동작 확인
-- [ ] 브레이크포인트, 신호, 변수, 스크립트 등
-- [ ] 페이지 새로고침 후 모드 유지 확인
+- [x] 모든 기존 기능 정상 동작 확인
+- [x] 브레이크포인트, 신호, 변수, 스크립트 등
+- [x] 페이지 새로고침 후 모드 유지 확인
 
-### Phase 2: 시간 스텝 모드 구현 (Phase 1 완료 후)
+### Phase 2: 시간 스텝 모드 구현 (Phase 1 완료 후) ✅ **완료**
 
 #### 2.1 백엔드 엔진 확장
-- [ ] `simple_simulation_engine.py`에 시간 기반 스텝 로직 추가
-- [ ] 1스텝 = 사용자 지정 시간 처리
-- [ ] 시간 단위 스텝 실행 루프 구현
-- [ ] 브레이크포인트 통합
+- [x] `simple_simulation_engine.py`에 시간 기반 스텝 로직 추가
+- [x] 1스텝 = 사용자 지정 시간 처리
+- [x] 시간 단위 스텝 실행 루프 구현
+- [x] 브레이크포인트 통합
 
 #### 2.2 프론트엔드 UI 활성화
-- [ ] 시간 스텝 모드 선택 시 설정 UI 표시
-- [ ] "1스텝 = [ ] 초" 입력 필드
-- [ ] 설정 저장 버튼
-- [ ] 현재 시뮬레이션 시간 표시
+- [x] 시간 스텝 모드 선택 시 설정 UI 표시
+- [x] "1스텝 = [ ] 초" 입력 필드
+- [x] 설정 저장 버튼
+- [x] 현재 시뮬레이션 시간 표시
 
 #### 2.3 테스트
 - [ ] 다양한 시간 설정 테스트 (0.5초, 2.3초, 100초 등)

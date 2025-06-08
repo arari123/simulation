@@ -287,8 +287,8 @@ async def set_execution_mode(request: ExecutionModeRequest):
         if request.mode not in valid_modes:
             raise HTTPException(status_code=400, detail=f"Invalid execution mode: {request.mode}")
         
-        # 현재는 default만 허용
-        if request.mode != "default":
+        # time_step 모드도 허용
+        if request.mode not in ["default", "time_step"]:
             raise HTTPException(status_code=501, detail=f"Mode '{request.mode}' is not implemented yet")
         
         # 엔진 어댑터에 모드 설정

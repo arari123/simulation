@@ -11,9 +11,28 @@
         <label>실행 모드:</label>
         <select v-model="selectedExecutionMode" @change="changeExecutionMode" :disabled="isRunning">
           <option value="default">기본 모드 (엔티티 이벤트)</option>
-          <option value="time_step" disabled>시간 스텝 모드 (준비중)</option>
+          <option value="time_step">시간 스텝 모드</option>
           <option value="high_speed" disabled>고속 진행 모드 (준비중)</option>
         </select>
+      </div>
+      
+      <!-- 시간 스텝 모드 설정 -->
+      <div v-if="selectedExecutionMode === 'time_step'" class="time-step-config">
+        <h5>시간 스텝 설정</h5>
+        <div class="config-row">
+          <label>1스텝 = </label>
+          <input 
+            type="number" 
+            v-model.number="timeStepDuration" 
+            step="0.1" 
+            min="0.1" 
+            max="3600"
+            class="time-input"
+          /> 
+          <span> 초</span>
+          <button @click="saveTimeStepConfig" :disabled="isRunning" class="save-config-btn">설정</button>
+        </div>
+        <small class="help-text">스텝 실행 시 이 시간만큼 시뮬레이션이 진행됩니다</small>
       </div>
       
       <div>배출된 제품: {{ currentDispatchedProducts }} 개</div>
@@ -181,6 +200,9 @@ const panelWidth = computed(() => (isMinimized.value ? '50px' : '300px'))
 // 실행 모드 관련
 const selectedExecutionMode = ref('default')
 const isRunning = computed(() => props.isFullExecutionRunning)
+
+// 시간 스텝 모드 관련
+const timeStepDuration = ref(1.0)  // 기본값 1초
 
 // 브레이크포인트가 있는지 확인하는 computed
 const hasBreakpoints = computed(() => {
@@ -424,7 +446,14 @@ import SimulationApi from '../services/SimulationApi'
 
 async function changeExecutionMode() {
   try {
-    await SimulationApi.setExecutionMode(selectedExecutionMode.value)
+    let config = {}
+    
+    // 시간 스텝 모드인 경우 설정 포함
+    if (selectedExecutionMode.value === 'time_step') {
+      config = { step_duration: timeStepDuration.value }
+    }
+    
+    await SimulationApi.setExecutionMode(selectedExecutionMode.value, config)
   } catch (error) {
     alert(error.message)
     // 실패 시 원래 모드로 복원
@@ -432,11 +461,26 @@ async function changeExecutionMode() {
   }
 }
 
+async function saveTimeStepConfig() {
+  try {
+    const config = { step_duration: timeStepDuration.value }
+    await SimulationApi.setExecutionMode('time_step', config)
+    alert(`시간 스텝 모드가 ${timeStepDuration.value}초로 설정되었습니다.`)
+  } catch (error) {
+    alert(`설정 저장 실패: ${error.message}`)
+  }
+}
+
 // 컴포넌트 마운트 시 현재 모드 조회
 onMounted(async () => {
   try {
-    const { mode } = await SimulationApi.getExecutionMode()
+    const { mode, config } = await SimulationApi.getExecutionMode()
     selectedExecutionMode.value = mode
+    
+    // 시간 스텝 모드인 경우 설정도 로드
+    if (mode === 'time_step' && config && config.step_duration) {
+      timeStepDuration.value = config.step_duration
+    }
   } catch (error) {
     console.error('Failed to get execution mode:', error)
   }
@@ -667,6 +711,64 @@ onMounted(async () => {
 
 .execution-mode-selector select:disabled {
   background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+/* 시간 스텝 모드 설정 스타일 */
+.time-step-config {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px solid #28a745;
+  border-radius: 4px;
+  background-color: #f8fff9;
+}
+
+.time-step-config h5 {
+  margin: 0 0 8px 0;
+  color: #28a745;
+  font-size: 14px;
+}
+
+.config-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.config-row label {
+  min-width: 60px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.time-input {
+  width: 60px;
+  padding: 3px 5px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.save-config-btn {
+  padding: 3px 8px;
+  font-size: 12px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  margin: 0;
+  width: auto;
+  display: inline-block;
+}
+
+.save-config-btn:hover:not(:disabled) {
+  background-color: #218838;
+}
+
+.save-config-btn:disabled {
+  background-color: #6c757d;
   cursor: not-allowed;
 }
 
