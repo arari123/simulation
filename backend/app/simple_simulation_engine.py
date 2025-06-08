@@ -387,6 +387,7 @@ class SimpleSimulationEngine:
             # 종료 조건 체크 함수
             def check_termination_conditions():
                 current_entities_processed = self._get_total_entities_processed()
+                logger.debug(f"High speed mode check: current_entities={current_entities_processed}, target={target_entity_count}, time={self.env.now:.1f}")
                 
                 # 1. 목표 엔티티 개수 달성
                 if target_entity_count and current_entities_processed >= target_entity_count:
@@ -419,6 +420,8 @@ class SimpleSimulationEngine:
             max_iterations = 10000  # 무한 루프 방지 (더 큰 값으로 설정)
             iteration_count = 0
             
+            logger.info(f"High speed mode: Starting loop. Initial entities={start_entities_processed}, iterations={max_iterations}")
+            
             while iteration_count < max_iterations:
                 iteration_count += 1
                 
@@ -435,11 +438,13 @@ class SimpleSimulationEngine:
                 
                 # 다음 이벤트가 없으면 목표 시간까지 진행
                 if self.env.peek() >= float('inf'):
+                    logger.info(f"High speed mode: No more events. Current time={self.env.now:.1f}")
                     # 이벤트가 없으면 목표 시간까지 즉시 진행
                     if target_simulation_time and self.env.now < target_simulation_time:
                         self.env.run(until=target_simulation_time)
                     else:
                         self.env.run(until=target_time)
+                    logger.info(f"High speed mode: No events - breaking loop at time {self.env.now:.1f}")
                     break
                 
                 # 다음 이벤트가 목표 시간을 초과하면 목표 시간까지만 진행
@@ -466,6 +471,9 @@ class SimpleSimulationEngine:
             
             self.step_count += 1
             
+            # 루프 종료 후 상태 로그
+            logger.info(f"High speed mode: Loop ended. iterations={iteration_count}, time={self.env.now:.1f}")
+            
             # 최종 종료 조건 체크
             should_terminate, termination_reason = check_termination_conditions()
             
@@ -477,6 +485,7 @@ class SimpleSimulationEngine:
             result['execution_mode'] = 'high_speed'
             result['large_time_step'] = large_time_step
             result['entities_processed_this_step'] = self._get_total_entities_processed() - start_entities_processed
+            result['iterations_executed'] = iteration_count
             
             # 종료 조건 정보 추가
             if should_terminate:
@@ -601,13 +610,19 @@ class SimpleSimulationEngine:
         total_in_system = 0
         total_processed = 0
         
-        for block in self.blocks.values():
+        for block_id, block in self.blocks.items():
             status = block.get_status()
-            total_in_system += status.get('entities_count', 0)
-            total_processed += status.get('total_processed', 0)
+            in_system = status.get('entities_count', 0)
+            processed = status.get('total_processed', 0)
+            total_in_system += in_system
+            total_processed += processed
+            # logger.debug(f"Block {block_id}: in_system={in_system}, processed={processed}")
+        
+        total = total_in_system + total_processed
+        # logger.debug(f"Total entities: in_system={total_in_system}, processed={total_processed}, total={total}")
         
         # 전체 엔티티 수 = 현재 시스템에 있는 엔티티 + 처리된(배출된) 엔티티
-        return total_in_system + total_processed
+        return total
     
     def _capture_block_states(self) -> Dict[str, List[str]]:
         """각 블록의 엔티티 ID 목록을 캡처"""
