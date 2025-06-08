@@ -283,13 +283,9 @@ async def set_execution_mode(request: ExecutionModeRequest):
     """실행 모드 설정"""
     try:
         # 유효한 모드인지 확인
-        valid_modes = ["default", "time_step", "high_speed"]
+        valid_modes = ["default", "time_step"]
         if request.mode not in valid_modes:
             raise HTTPException(status_code=400, detail=f"Invalid execution mode: {request.mode}")
-        
-        # time_step 및 high_speed 모드 허용
-        if request.mode not in ["default", "time_step", "high_speed"]:
-            raise HTTPException(status_code=501, detail=f"Mode '{request.mode}' is not implemented yet")
         
         # 엔진 어댑터에 모드 설정
         engine_adapter.set_execution_mode(request.mode, request.config)

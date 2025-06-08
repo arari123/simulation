@@ -52,7 +52,6 @@ class SimpleSimulationEngine:
         # 실행 모드 관련
         self.execution_mode = "default"
         self.time_step_duration = 1.0  # 시간 스텝 모드에서 1스텝당 시간(초)
-        self.high_speed_config = {}  # 고속 모드 설정
     
     def reset(self):
         """시뮬레이션 초기화"""
@@ -73,7 +72,6 @@ class SimpleSimulationEngine:
         # 현재 실행 모드와 설정을 보존
         preserved_mode = self.execution_mode
         preserved_time_step_duration = self.time_step_duration
-        preserved_high_speed_config = self.high_speed_config.copy()
         
         self.env = simpy.Environment()
         self.entity_queue = simpy.Store(self.env)
@@ -103,14 +101,13 @@ class SimpleSimulationEngine:
         # 실행 모드 복원
         self.execution_mode = preserved_mode
         self.time_step_duration = preserved_time_step_duration
-        self.high_speed_config = preserved_high_speed_config
         
         logger.info(f"Simulation setup completed with {len(self.blocks)} blocks, execution mode: {self.execution_mode}")
         # Debug manager status checked
     
     def set_execution_mode(self, mode: str, config: Dict[str, Any] = None):
         """실행 모드 설정"""
-        valid_modes = ["default", "time_step", "high_speed"]
+        valid_modes = ["default", "time_step"]
         if mode not in valid_modes:
             raise ValueError(f"Invalid execution mode: {mode}. Valid modes: {valid_modes}")
         
@@ -122,10 +119,6 @@ class SimpleSimulationEngine:
                 self.time_step_duration = float(config["step_duration"])
                 logger.info(f"SimpleSimulationEngine: Time step duration set to: {self.time_step_duration}")
                 logger.info(f"Time step mode configured: {self.time_step_duration} seconds per step")
-            elif mode == "high_speed":
-                # 고속 모드 설정
-                self.high_speed_config = config
-                logger.info(f"High speed mode configured: {config}")
     
     def get_execution_mode(self) -> str:
         """현재 실행 모드 반환"""
@@ -135,8 +128,6 @@ class SimpleSimulationEngine:
         """현재 모드 설정 반환"""
         if self.execution_mode == "time_step":
             return {"step_duration": self.time_step_duration}
-        elif self.execution_mode == "high_speed":
-            return self.high_speed_config
         return {}
     
     def _create_block(self, block_config: Dict[str, Any]):
@@ -371,152 +362,6 @@ class SimpleSimulationEngine:
                 'execution_mode': 'time_step'
             }
     
-    def step_simulation_high_speed(self) -> Dict[str, Any]:
-        """고속 모드 시뮬레이션 실행 - 종료 조건까지 실행"""
-        if not self.env:
-            return {'error': 'Simulation not initialized'}
-        
-        # 블록이 없으면 초기화되지 않은 것으로 간주
-        if not self.blocks:
-            logger.warning("No blocks found - simulation not properly initialized")
-            return {'error': 'Simulation not initialized - no blocks found'}
-        
-        # 고속 모드 설정 가져오기
-        config = self.high_speed_config
-        target_entity_count = config.get('target_entity_count', None)
-        target_simulation_time = config.get('target_simulation_time', None)
-        
-        logger.info(f"High speed mode execution START: mode={self.execution_mode}, target_entity_count={target_entity_count}, target_time={target_simulation_time}")
-        
-        try:
-            # 시작 상태 저장
-            start_time = self.env.now
-            start_entities_processed = self._get_total_entities_processed()
-            
-            # 종료 조건 체크 함수
-            def check_termination_conditions():
-                current_entities_processed = self._get_total_entities_processed()
-                logger.debug(f"High speed mode check: current_entities={current_entities_processed}, target={target_entity_count}, time={self.env.now:.1f}")
-                
-                # 1. 목표 엔티티 개수 달성
-                if target_entity_count and current_entities_processed >= target_entity_count:
-                    return True, f"Target entity count reached: {current_entities_processed}/{target_entity_count}"
-                
-                # 2. 목표 시뮬레이션 시간 달성
-                if target_simulation_time and self.env.now >= target_simulation_time:
-                    return True, f"Target simulation time reached: {self.env.now:.1f}/{target_simulation_time}"
-                
-                return False, None
-            
-            # 첫 번째 종료 조건 체크
-            should_terminate, termination_reason = check_termination_conditions()
-            if should_terminate:
-                logger.info(f"High speed mode - already at termination condition: {termination_reason}")
-                result = self._collect_simulation_results()
-                result['execution_mode'] = 'high_speed'
-                result['termination_reason'] = termination_reason
-                result['time_advanced'] = 0
-                return result
-            
-            # 디버그 매니저가 방금 재개되었는지 확인
-            if self.debug_manager and getattr(self.debug_manager, 'just_resumed', False):
-                self.debug_manager.just_resumed = False
-            
-            # 종료 조건이 만족될 때까지 실행
-            max_iterations = 50000  # 무한 루프 방지
-            iteration_count = 0
-            
-            logger.info(f"High speed mode: Starting execution until target is reached")
-            
-            while iteration_count < max_iterations:
-                iteration_count += 1
-                
-                # 종료 조건 체크 (매 스텝마다)
-                should_terminate, termination_reason = check_termination_conditions()
-                if should_terminate:
-                    logger.info(f"High speed mode termination: {termination_reason}")
-                    
-                    # 목표 달성 시 시스템에 남은 엔티티들만 처리
-                    if target_entity_count:
-                        # 시스템의 현재 상태 확인
-                        total_in_system = self._get_total_entity_count()
-                        logger.info(f"Target reached. Entities still in system: {total_in_system}")
-                        
-                        # 남은 엔티티들이 모두 배출될 때까지 계속 실행
-                        extra_iterations = 0
-                        while total_in_system > 0 and extra_iterations < 5000:
-                            extra_iterations += 1
-                            
-                            # 다음 이벤트가 없으면 종료
-                            if self.env.peek() >= float('inf'):
-                                logger.info("No more events, stopping")
-                                break
-                            
-                            # 한 이벤트씩 실행
-                            self.env.step()
-                            
-                            # 시스템에 남은 엔티티 재확인
-                            total_in_system = self._get_total_entity_count()
-                            
-                            # 목표를 초과하지 않도록 확인
-                            current_processed = self._get_total_entities_processed()
-                            if current_processed > target_entity_count:
-                                logger.warning(f"Processed count ({current_processed}) exceeded target ({target_entity_count})")
-                                break
-                        
-                        logger.info(f"Cleanup completed. Extra iterations: {extra_iterations}, final entities in system: {total_in_system}")
-                    break
-                
-                # 디버그 매니저가 일시정지 상태인지 확인
-                if self.debug_manager and self.debug_manager.debug_state.is_paused:
-                    logger.info(f"High speed mode paused at breakpoint at time {self.env.now}")
-                    break
-                
-                # 다음 이벤트가 없으면 종료
-                if self.env.peek() >= float('inf'):
-                    logger.info(f"High speed mode: No more events at time {self.env.now:.1f}")
-                    break
-                
-                # 다음 이벤트 실행
-                self.env.step()
-            
-            self.step_count += 1
-            
-            # 루프 종료 후 상태 로그
-            logger.info(f"High speed mode: Loop ended. iterations={iteration_count}, time={self.env.now:.1f}")
-            
-            # 최종 종료 조건 체크
-            should_terminate, termination_reason = check_termination_conditions()
-            
-            
-            # 결과 수집
-            result = self._collect_simulation_results()
-            result['step_count'] = self.step_count
-            result['simulation_time'] = round(self.env.now, 1)
-            result['time_advanced'] = round(self.env.now - start_time, 1)
-            result['execution_mode'] = 'high_speed'
-            result['entities_processed_this_step'] = self._get_total_entities_processed() - start_entities_processed
-            result['iterations_executed'] = iteration_count
-            
-            # 종료 조건 정보 추가
-            if should_terminate:
-                result['termination_condition_met'] = True
-                result['termination_reason'] = termination_reason
-            else:
-                result['termination_condition_met'] = False
-                result['termination_reason'] = "Max iterations reached or other stop condition"
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"High speed execution error: {e}")
-            return {
-                'error': str(e),
-                'step_count': self.step_count,
-                'simulation_time': round(self.env.now, 1),
-                'execution_mode': 'high_speed'
-            }
-    
     def step_simulation(self) -> Dict[str, Any]:
         """시뮬레이션 1스텝 실행 - 실행 모드에 따라 적절한 방법 선택"""
         logger.info(f"SimpleSimulationEngine: step_simulation called with mode: {self.execution_mode}")
@@ -525,9 +370,6 @@ class SimpleSimulationEngine:
         if self.execution_mode == "time_step":
             logger.info("SimpleSimulationEngine: Using time-based step execution")
             return self.step_simulation_time_based()
-        elif self.execution_mode == "high_speed":
-            logger.info("SimpleSimulationEngine: Using high-speed step execution")
-            return self.step_simulation_high_speed()
         else:
             # 기본 모드 (엔티티 이동 기반)
             logger.info("SimpleSimulationEngine: Using default (entity event) step execution")

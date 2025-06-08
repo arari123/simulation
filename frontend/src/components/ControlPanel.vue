@@ -12,7 +12,6 @@
         <select v-model="selectedExecutionMode" @change="changeExecutionMode" :disabled="isConfigurationDisabled" :title="getExecutionModeTooltip()">
           <option value="default">📦 제품 이동 스텝 모드</option>
           <option value="time_step">⏱️ 시간 스텝 모드</option>
-          <option value="high_speed">🚀 고속 진행 모드</option>
         </select>
         <small class="mode-help-text">{{ getExecutionModeDescription() }}</small>
       </div>
@@ -38,55 +37,6 @@
         <small class="help-text">스텝 실행 시 이 시간만큼 시뮬레이션이 진행됩니다</small>
       </div>
       
-      <!-- 고속 진행 모드 설정 -->
-      <div v-if="selectedExecutionMode === 'high_speed'" class="high-speed-config">
-        <h5>고속 진행 모드 설정</h5>
-        
-        <div class="termination-conditions">
-          <h6>종료 조건 (하나 이상 선택):</h6>
-          
-          <div class="condition-row">
-            <label>
-              <input type="checkbox" v-model="highSpeedConfig.useEntityCount" :disabled="isConfigurationDisabled" />
-              목표 엔티티 처리 수:
-            </label>
-            <input 
-              type="number" 
-              v-model.number="highSpeedConfig.targetEntityCount" 
-              :disabled="!highSpeedConfig.useEntityCount || isConfigurationDisabled"
-              min="1" 
-              placeholder="예: 100"
-              class="condition-input"
-            />
-            <span>개</span>
-          </div>
-          
-          <div class="condition-row">
-            <label>
-              <input type="checkbox" v-model="highSpeedConfig.useSimulationTime" :disabled="isConfigurationDisabled" />
-              목표 시뮬레이션 시간:
-            </label>
-            <input 
-              type="number" 
-              v-model.number="highSpeedConfig.targetSimulationTime" 
-              :disabled="!highSpeedConfig.useSimulationTime || isConfigurationDisabled"
-              min="1" 
-              placeholder="예: 3600"
-              class="condition-input"
-            />
-            <span>초</span>
-          </div>
-          
-          <div class="config-row">
-            <button @click="saveHighSpeedConfig" :disabled="isConfigurationDisabled || !isHighSpeedConfigValid" class="save-config-btn">설정</button>
-          </div>
-        </div>
-        
-        <small class="help-text">
-          고속 모드는 매우 큰 시간 스텝으로 실행하여 종료 조건에 도달할 때까지 빠르게 진행합니다.
-          <br>적어도 하나의 종료 조건을 설정해야 합니다.
-        </small>
-      </div>
       
       <div>배출된 제품: {{ currentDispatchedProducts }} 개</div>
       <div>진행 시간: {{ currentProcessTime.toFixed(1) }} 초</div>
@@ -259,19 +209,6 @@ const isRunning = computed(() => props.isFullExecutionRunning)
 // 시간 스텝 모드 관련
 const timeStepDuration = ref(1.0)  // 기본값 1초
 
-// 고속 진행 모드 관련
-const highSpeedConfig = ref({
-  useEntityCount: false,
-  targetEntityCount: 100,
-  useSimulationTime: false,
-  targetSimulationTime: 3600,
-  largeTimeStep: 9000000  // 기본 9백만초
-})
-
-// 고속 모드 설정 유효성 검사
-const isHighSpeedConfigValid = computed(() => {
-  return highSpeedConfig.value.useEntityCount || highSpeedConfig.value.useSimulationTime
-})
 
 // 브레이크포인트가 있는지 확인하는 computed
 const hasBreakpoints = computed(() => {
@@ -304,15 +241,6 @@ onMounted(async () => {
       // 모드별 설정 적용
       if (modeInfo.mode === 'time_step' && modeInfo.config.step_duration) {
         timeStepDuration.value = modeInfo.config.step_duration
-      } else if (modeInfo.mode === 'high_speed' && modeInfo.config) {
-        if (modeInfo.config.target_entity_count) {
-          highSpeedConfig.value.useEntityCount = true
-          highSpeedConfig.value.targetEntityCount = modeInfo.config.target_entity_count
-        }
-        if (modeInfo.config.target_simulation_time) {
-          highSpeedConfig.value.useSimulationTime = true
-          highSpeedConfig.value.targetSimulationTime = modeInfo.config.target_simulation_time
-        }
       }
     }
   } catch (error) {
@@ -344,11 +272,6 @@ watch(selectedExecutionMode, async (newMode, oldMode) => {
       let config = {}
       if (newMode === 'time_step') {
         config = { step_duration: timeStepDuration.value }
-      } else if (newMode === 'high_speed') {
-        config = {
-          target_entity_count: highSpeedConfig.value.useEntityCount ? highSpeedConfig.value.targetEntityCount : null,
-          target_simulation_time: highSpeedConfig.value.useSimulationTime ? highSpeedConfig.value.targetSimulationTime : null
-        }
       }
       
       await SimulationApi.setExecutionMode(newMode, config)
@@ -597,14 +520,6 @@ async function changeExecutionMode() {
     else if (selectedExecutionMode.value === 'time_step') {
       config = { step_duration: timeStepDuration.value }
     }
-    // 고속 모드인 경우 기본 설정 포함
-    else if (selectedExecutionMode.value === 'high_speed') {
-      if (!isHighSpeedConfigValid.value) {
-        alert('고속 모드를 사용하려면 적어도 하나의 종료 조건을 설정해야 합니다.')
-        return
-      }
-      config = buildHighSpeedConfig()
-    }
     
     // 백엔드에 모드 변경 요청
     await SimulationApi.setExecutionMode(selectedExecutionMode.value, config)
@@ -659,49 +574,7 @@ async function saveTimeStepConfig() {
   }
 }
 
-// 고속 모드 설정 빌드
-function buildHighSpeedConfig() {
-  const config = {
-    large_time_step: highSpeedConfig.value.largeTimeStep
-  }
-  
-  if (highSpeedConfig.value.useEntityCount) {
-    config.target_entity_count = highSpeedConfig.value.targetEntityCount
-  }
-  
-  if (highSpeedConfig.value.useSimulationTime) {
-    config.target_simulation_time = highSpeedConfig.value.targetSimulationTime
-  }
-  
-  return config
-}
 
-async function saveHighSpeedConfig() {
-  try {
-    if (!isHighSpeedConfigValid.value) {
-      alert('적어도 하나의 종료 조건을 설정해야 합니다.')
-      return
-    }
-    
-    const config = buildHighSpeedConfig()
-    await SimulationApi.setExecutionMode('high_speed', config)
-    
-    let message = '고속 진행 모드가 설정되었습니다.\n종료 조건: '
-    const conditions = []
-    
-    if (config.target_entity_count) {
-      conditions.push(`엔티티 ${config.target_entity_count}개 처리`)
-    }
-    if (config.target_simulation_time) {
-      conditions.push(`시간 ${config.target_simulation_time}초 경과`)
-    }
-    
-    message += conditions.join(' 또는 ')
-    alert(message)
-  } catch (error) {
-    alert(`설정 저장 실패: ${error.message}`)
-  }
-}
 
 // 모드별 상태 초기화
 function initializeStateForMode(mode) {
@@ -715,21 +588,11 @@ function initializeStateForMode(mode) {
         timeStepDuration.value = 1.0
       }
       break
-    case 'high_speed':
-      // 고속 모드: 기본 종료 조건 설정
-      if (!highSpeedConfig.value.useEntityCount && !highSpeedConfig.value.useSimulationTime) {
-        highSpeedConfig.value.useEntityCount = true
-        highSpeedConfig.value.targetEntityCount = 100
-      }
-      break
   }
 }
 
 // 실행 허용 여부 계산
 const isExecutionAllowed = computed(() => {
-  if (selectedExecutionMode.value === 'high_speed') {
-    return isHighSpeedConfigValid.value
-  }
   if (selectedExecutionMode.value === 'time_step') {
     return timeStepDuration.value > 0
   }
@@ -778,8 +641,6 @@ function getExecutionModeDescription() {
       return '엔티티 이동/생성/배출 이벤트마다 1스텝씩 실행'
     case 'time_step':
       return '사용자가 지정한 시간 단위로 스텝 실행'
-    case 'high_speed':
-      return '종료 조건까지 빠르게 연속 실행'
     default:
       return ''
   }
@@ -795,9 +656,6 @@ function getStepExecutionTooltip() {
   if (!isExecutionAllowed.value) {
     if (selectedExecutionMode.value === 'time_step' && timeStepDuration.value <= 0) {
       return '시간 스텝 모드: 올바른 시간을 설정해주세요 (0초 초과)'
-    }
-    if (selectedExecutionMode.value === 'high_speed' && !isHighSpeedConfigValid.value) {
-      return '고속 모드: 적어도 하나의 종료 조건을 설정해주세요'
     }
     return '실행하려면 먼저 모드 설정을 완료해주세요'
   }
@@ -815,12 +673,20 @@ function getFullExecutionTooltip() {
     if (selectedExecutionMode.value === 'time_step' && timeStepDuration.value <= 0) {
       return '시간 스텝 모드: 올바른 시간을 설정해주세요'
     }
-    if (selectedExecutionMode.value === 'high_speed' && !isHighSpeedConfigValid.value) {
-      return '고속 모드: 종료 조건을 설정해주세요'
-    }
     return '설정을 완료해주세요'
   }
   return `${getExecutionModeDisplayName(selectedExecutionMode.value)}로 연속 실행합니다`
+}
+
+function getExecutionModeDisplayName(mode) {
+  switch(mode) {
+    case 'default':
+      return '제품 이동 스텝 모드'
+    case 'time_step':
+      return '시간 스텝 모드'
+    default:
+      return mode
+  }
 }
 
 // 컴포넌트 마운트 시 현재 모드 조회
@@ -832,20 +698,6 @@ onMounted(async () => {
     // 시간 스텝 모드인 경우 설정도 로드
     if (mode === 'time_step' && config && config.step_duration) {
       timeStepDuration.value = config.step_duration
-    }
-    // 고속 모드인 경우 설정도 로드
-    else if (mode === 'high_speed' && config) {
-      if (config.large_time_step) {
-        highSpeedConfig.value.largeTimeStep = config.large_time_step
-      }
-      if (config.target_entity_count) {
-        highSpeedConfig.value.useEntityCount = true
-        highSpeedConfig.value.targetEntityCount = config.target_entity_count
-      }
-      if (config.target_simulation_time) {
-        highSpeedConfig.value.useSimulationTime = true
-        highSpeedConfig.value.targetSimulationTime = config.target_simulation_time
-      }
     }
     
     // 모드에 맞는 상태 초기화
