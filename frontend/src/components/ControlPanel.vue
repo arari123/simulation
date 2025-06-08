@@ -29,7 +29,7 @@
             max="10"
             class="time-input"
             :disabled="isConfigurationDisabled"
-            @input="validateTimeStepInput"
+            @blur="validateTimeStepInput"
           /> 
           <span> 초</span>
           <button @click="saveTimeStepConfig" :disabled="isConfigurationDisabled" class="save-config-btn">설정</button>
@@ -547,10 +547,17 @@ async function changeExecutionMode() {
 
 // 시간 스텝 입력 검증
 function validateTimeStepInput(event) {
-  const value = parseFloat(event.target.value)
+  const inputValue = event.target.value
+  
+  // 빈 값이면 기본값으로 설정하지 않고 그대로 둠
+  if (inputValue === '' || inputValue === null) {
+    return
+  }
+  
+  const value = parseFloat(inputValue)
   if (isNaN(value) || value <= 0) {
     console.warn('시간 스텝은 0보다 큰 숫자여야 합니다')
-    timeStepDuration.value = 0.1
+    timeStepDuration.value = 1.0  // 기본값을 1초로 변경
   } else if (value > 10) {
     console.warn('안정적인 화면 업데이트를 위해 시간 스텝은 10초를 초과할 수 없습니다')
     timeStepDuration.value = 10
@@ -559,8 +566,10 @@ function validateTimeStepInput(event) {
 
 async function saveTimeStepConfig() {
   try {
-    if (timeStepDuration.value <= 0) {
-      alert('시간 스텝은 0초보다 커야 합니다.')
+    // 빈 값이거나 유효하지 않은 값 체크
+    if (!timeStepDuration.value || isNaN(timeStepDuration.value) || timeStepDuration.value <= 0) {
+      alert('올바른 시간 값을 입력해주세요. (0.1 ~ 10초)')
+      timeStepDuration.value = 1.0
       return
     }
     if (timeStepDuration.value > 10) {
