@@ -7,17 +7,19 @@ from .routes.basic import router as basic_router
 from .routes.testing import router as testing_router
 from .routes.debug import router as debug_router
 from .logger_config import setup_logging
+from .config import settings
 
 app = FastAPI(
-    title="시뮬레이션 API",
-    description="이산 사건 시뮬레이션 API",
-    version="2.0.0"
+    title=settings.api_title,
+    description=settings.api_description,
+    version=settings.api_version,
+    debug=settings.debug
 )
 
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 개발용으로 모든 오리진 허용
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,6 +31,16 @@ app.include_router(basic_router)
 app.include_router(testing_router)
 app.include_router(debug_router)
 
+# Health check endpoint
+@app.get(settings.health_check_path)
+async def health_check():
+    """Health check endpoint for load balancers and monitoring"""
+    return {
+        "status": "healthy",
+        "environment": settings.environment,
+        "version": settings.api_version
+    }
+
 # 애플리케이션 시작 시 초기화
 @app.on_event("startup")
 async def startup_event():
@@ -38,9 +50,14 @@ async def startup_event():
     logger = logging.getLogger(__name__)
     
     logger.info("🚀 시뮬레이션 API 서버가 시작되었습니다.")
-    logger.info("📚 API 문서: http://localhost:8000/docs")
+    logger.info(f"🌍 환경: {settings.environment}")
+    logger.info(f"🔧 디버그 모드: {settings.debug}")
+    logger.info(f"📚 API 문서: http://localhost:{settings.port}/docs")
+    logger.info(f"❤️ 헬스체크: http://localhost:{settings.port}{settings.health_check_path}")
+    
     print("🚀 시뮬레이션 API 서버가 시작되었습니다.")
-    print("📚 API 문서: http://localhost:8000/docs")
+    print(f"🌍 환경: {settings.environment}")
+    print(f"📚 API 문서: http://localhost:{settings.port}/docs")
 
 @app.on_event("shutdown") 
 async def shutdown_event():

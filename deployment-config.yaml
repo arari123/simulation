@@ -1,0 +1,56 @@
+# Deployment Configuration
+# This file contains deployment settings for different environments
+
+# Google Cloud Settings
+google_cloud:
+  project_id: "your-project-id"
+  region: "asia-northeast3"  # Seoul region
+  zone: "asia-northeast3-a"
+  
+# Cloud Run Settings  
+cloud_run:
+  service_name: "simulation-backend"
+  memory: "1Gi"
+  cpu: "1"
+  min_instances: 0
+  max_instances: 10
+  timeout: 300
+  concurrency: 80
+  port: 8080
+
+# Firebase Settings
+firebase:
+  project_id: "your-firebase-project-id"
+  hosting_site: "your-site-name"  # Optional: custom domain
+
+# Environment Specific Settings
+environments:
+  development:
+    backend_url: "http://localhost:8000"
+    debug: true
+    log_level: "DEBUG"
+    
+  staging:
+    backend_url: "https://simulation-backend-staging-hash.a.run.app"
+    debug: false
+    log_level: "INFO"
+    
+  production:
+    backend_url: "https://simulation-backend-prod-hash.a.run.app"
+    debug: false
+    log_level: "WARNING"
+    cors_origins:
+      - "https://your-domain.web.app"
+      - "https://your-custom-domain.com"
+
+# Build Settings
+build:
+  node_version: "18"
+  python_version: "3.11"
+  docker_registry: "gcr.io"
+  
+# Monitoring and Alerts
+monitoring:
+  enable_logging: true
+  enable_monitoring: true
+  alert_email: "admin@your-domain.com"
