@@ -4,8 +4,18 @@ import os
 from datetime import datetime
 
 # Create logs directory if it doesn't exist
-LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
-os.makedirs(LOG_DIR, exist_ok=True)
+# In Cloud Run, we'll log to console only
+IS_CLOUD_RUN = os.getenv("K_SERVICE") is not None
+if IS_CLOUD_RUN:
+    LOG_DIR = "/tmp/logs"  # Use /tmp in Cloud Run
+else:
+    LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
+    
+try:
+    os.makedirs(LOG_DIR, exist_ok=True)
+except Exception:
+    # If we can't create directory, use /tmp
+    LOG_DIR = "/tmp"
 
 # Log file path
 LOG_FILE = os.path.join(LOG_DIR, "backend_server.log")
@@ -84,20 +94,28 @@ def setup_logging():
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     
-    # Create file handler with line count rotation
-    file_handler = LineCountRotatingFileHandler(
-        LOG_FILE,
-        max_lines=200,
-        maxBytes=0,  # Disable size-based rotation
-        backupCount=0  # No backup files
-    )
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.INFO)  # DEBUG -> INFO로 변경
-    
     # Create console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     console_handler.setLevel(logging.INFO)
+    
+    handlers = [console_handler]
+    
+    # Only add file handler if not in Cloud Run
+    if not IS_CLOUD_RUN:
+        try:
+            # Create file handler with line count rotation
+            file_handler = LineCountRotatingFileHandler(
+                LOG_FILE,
+                max_lines=200,
+                maxBytes=0,  # Disable size-based rotation
+                backupCount=0  # No backup files
+            )
+            file_handler.setFormatter(formatter)
+            file_handler.setLevel(logging.INFO)  # DEBUG -> INFO로 변경
+            handlers.append(file_handler)
+        except Exception as e:
+            print(f"Warning: Could not create file handler: {e}")
     
     # Configure root logger
     root_logger = logging.getLogger()
@@ -108,20 +126,20 @@ def setup_logging():
         root_logger.removeHandler(handler)
     
     # Add our handlers
-    root_logger.addHandler(file_handler)
-    root_logger.addHandler(console_handler)
+    for handler in handlers:
+        root_logger.addHandler(handler)
     
     # Configure uvicorn access logs to also go to our file
     uvicorn_logger = logging.getLogger("uvicorn.access")
     uvicorn_logger.handlers = []
-    uvicorn_logger.addHandler(file_handler)
-    uvicorn_logger.addHandler(console_handler)
+    for handler in handlers:
+        uvicorn_logger.addHandler(handler)
     
     # Configure uvicorn error logs
     uvicorn_error_logger = logging.getLogger("uvicorn.error")
     uvicorn_error_logger.handlers = []
-    uvicorn_error_logger.addHandler(file_handler)
-    uvicorn_error_logger.addHandler(console_handler)
+    for handler in handlers:
+        uvicorn_error_logger.addHandler(handler)
     
     # Configure app loggers
     app_loggers = [
@@ -139,8 +157,8 @@ def setup_logging():
         logger = logging.getLogger(logger_name)
         logger.setLevel(logging.INFO)  # DEBUG -> INFO로 변경
         logger.handlers = []
-        logger.addHandler(file_handler)
-        logger.addHandler(console_handler)
+        for handler in handlers:
+            logger.addHandler(handler)
         logger.propagate = False  # Prevent duplicate logs
     
     # Intercept print statements and redirect to logger

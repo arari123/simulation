@@ -3,7 +3,7 @@
 
 # Google Cloud Settings
 google_cloud:
-  project_id: "your-project-id"
+  project_id: "my-simulation-app-462307"
   region: "asia-northeast3"  # Seoul region
   zone: "asia-northeast3-a"
   
@@ -20,8 +20,8 @@ cloud_run:
 
 # Firebase Settings
 firebase:
-  project_id: "your-firebase-project-id"
-  hosting_site: "your-site-name"  # Optional: custom domain
+  project_id: "my-simulation-app-462307"
+  hosting_site: "my-simulation-app-462307"  # Optional: custom domain
 
 # Environment Specific Settings
 environments:
@@ -40,7 +40,7 @@ environments:
     debug: false
     log_level: "WARNING"
     cors_origins:
-      - "https://your-domain.web.app"
+      - "https://my-simulation-app-462307.web.app"
       - "https://your-custom-domain.com"
 
 # Build Settings

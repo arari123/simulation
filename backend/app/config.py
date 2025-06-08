@@ -3,7 +3,8 @@ Configuration module for environment variables and application settings
 """
 import os
 from typing import List
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings
+from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
     api_version: str = Field(default="2.0.0", env="API_VERSION")
     
     # CORS settings
-    allowed_origins: List[str] = Field(
+    allowed_origins: List[str] | str = Field(
         default=["*"], 
         env="ALLOWED_ORIGINS",
         description="Comma-separated list of allowed origins"

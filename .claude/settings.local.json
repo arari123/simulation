@@ -38,7 +38,23 @@
       "Bash(node:*)",
       "Bash(npm ls:*)",
       "Bash(git reset:*)",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(docker build:*)",
+      "Bash(gcloud builds submit:*)",
+      "Bash(gcloud run deploy:*)",
+      "Bash(npm run build:*)",
+      "Bash(echo:*)",
+      "Bash(gcloud config:*)",
+      "Bash(gcloud container images list:*)",
+      "Bash(firebase deploy:*)",
+      "Bash(firebase init:*)",
+      "Bash(firebase hosting:sites:create:*)",
+      "Bash(firebase projects:list:*)",
+      "Bash(firebase use:*)",
+      "Bash(gcloud run services update:*)",
+      "Bash(/home/arari123/.claude/local/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -n -A 5 -B 5 \"loadConfigFile|load-config\" /home/arari123/project/simulation/frontend/src/App.vue)",
+      "Bash(./build-and-deploy.sh:*)",
+      "Bash(bash:*)"
     ],
     "deny": []
   }

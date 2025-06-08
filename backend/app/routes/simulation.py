@@ -243,8 +243,20 @@ def load_config_file(request: Dict[str, Any]):
         logger.info(f"📁 설정 파일 로드 시작: {file_path}")
         
         # 상대 경로를 절대 경로로 변환
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-        full_path = os.path.join(project_root, file_path)
+        # Cloud Run 환경에서는 /app 디렉토리에서 실행됨
+        if os.path.exists(f"/app/{file_path}"):
+            # Cloud Run 환경
+            full_path = f"/app/{file_path}"
+            logger.info(f"🌩️ Cloud Run 환경에서 파일 찾음: {full_path}")
+        else:
+            # 로컬 개발 환경
+            project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+            full_path = os.path.join(project_root, file_path)
+            logger.info(f"💻 로컬 환경 경로: {full_path}")
+        
+        # 디버깅을 위한 추가 로깅
+        logger.info(f"📂 현재 작업 디렉토리: {os.getcwd()}")
+        logger.info(f"📂 __file__ 경로: {__file__}")
         
         if os.path.exists(full_path):
             with open(full_path, 'r', encoding='utf-8') as f:

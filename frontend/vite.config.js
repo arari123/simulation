@@ -17,8 +17,8 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173
   },
-  // GitHub Pages configuration
-  base: process.env.NODE_ENV === 'production' ? '/simulation/' : '/',
+  // Firebase Hosting configuration (use root path)
+  base: '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',

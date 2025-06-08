@@ -11,11 +11,11 @@
       "script": "wait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\tgo to 공정1.L,10\nif 공정2 load enable = true\n\t공정2 load enable = false\n\tgo to 공정2.L,10",
       "actions": [
         {
-          "id": "script-1749301586742",
+          "id": "script-1749299306346",
           "name": "스크립트",
           "type": "script",
           "parameters": {
-            "script": "force execution\n투입.status = \"대기중\"\ncreate entity\n투입.status = \"생성중\"\nint count += 1\nif count >= 5\n  투입.status = \"재정비중\"\n  delay 20\n  int count = 0\n  투입.status = \"준비완료\"\n투입.status = \"공정대기\"\nwait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\t공정1 load enable = false\n\t투입.status = \"이송중-공정1\"\n\tgo from R to 공정1.L,3\nif 공정2 load enable = true and product type != transit\n\t공정2 load enable = false\n\t투입.status = \"이송중-공정2\"\n\tgo from R to 공정2.L,3",
+            "script": "force execution\n투입.status = \"대기중\"\nlog \"=== 생산 시작 ===\"\ncreate entity\nlog \"엔티티 생성 확인\"\n투입.status = \"생성중\"\nint count += 1\nlog \"새 제품 생성 완료 (누적: {count}개)\"\nif count >= 5\n  투입.status = \"재정비중\"\n  log \"[INFO] 5개 생산 완료, 20초 대기\"\n  delay 20\n  int count = 0\n  투입.status = \"준비완료\"\nlog \"가용한 공정 확인 중...\"\n투입.status = \"공정대기\"\nwait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true\n\tlog \"공정1이 준비됨, 제품 이송\"\n\t공정1 load enable = false\n\t투입.status = \"이송중-공정1\"\n\tgo from R to 공정1.L,3\nif 공정2 load enable = true and product type != transit\n\tlog \"공정2가 준비됨, 제품 이송\"\n\t공정2 load enable = false\n\t투입.status = \"이송중-공정2\"\n\tgo from R to 공정2.L,3",
             "breakpoints": []
           }
         }
@@ -46,12 +46,11 @@
       "script": "delay 10\n공정1 unload enable = true\nwait 배출 load enable = true\n배출 load enable = false\n공정1 unload enable = false\ngo to 배출.L,10\n공정1 load enable = true\n배출 load enable = true",
       "actions": [
         {
-          "id": "script-1749301622402",
+          "id": "script-1749043721479",
           "name": "스크립트",
           "type": "script",
           "parameters": {
-            "script": "공정1.status = \"처리중\"\nint 공정1처리수 += 1\nif 공정1처리수 > 10\n    공정1.status = \"점검필요\"\ndelay 10\n공정1.status = \"품질검사\"\ndelay 2\n공정1 unload enable = true\n공정1.status = \"배출대기\"\nwait 배출 load enable = true\n배출 load enable = false\n공정1 unload enable = false\n공정1.status = \"이송중\"\ngo from R to 배출.L,3\n공정1 load enable = true\n배출 load enable = true\n공정1.status = \"준비완료\"",
-            "breakpoints": []
+            "script": "공정1.status = \"처리중\"\nlog \"공정1: 제품 도착, 처리 시작\"\nint 공정1처리수 += 1\nif 공정1처리수 > 10\n    공정1.status = \"점검필요\"\n    log \"[WARNING] 공정1 10개 이상 처리, 점검 필요\"\ndelay 10\nlog \"공정1: 처리 완료\"\n공정1.status = \"품질검사\"\ndelay 2\n공정1 unload enable = true\nlog \"배출 대기 중...\"\n공정1.status = \"배출대기\"\nwait 배출 load enable = true\nlog \"배출 가능, 제품 이송\"\n배출 load enable = false\n공정1 unload enable = false\n공정1.status = \"이송중\"\ngo from R to 배출.L,3\n공정1 load enable = true\n배출 load enable = true\n공정1.status = \"준비완료\"\nlog \"공정1: 다음 제품 준비 완료\""
           }
         }
       ],
@@ -73,9 +72,7 @@
       ],
       "warnings": [],
       "totalProcessed": 0,
-      "status": null,
-      "backgroundColor": "#cfdff7",
-      "textColor": "#000000"
+      "status": null
     },
     {
       "id": "3",
@@ -88,12 +85,11 @@
       "script": "// 싱크 블록 - 엔티티 자동 처리",
       "actions": [
         {
-          "id": "script-1749301652731",
+          "id": "script-1749183163154",
           "name": "스크립트",
           "type": "script",
           "parameters": {
-            "script": "배출.status = \"수령중\"\nint total_disposed += 1\nif total_disposed > 10\n    배출.status = \"경고-과부하\"\nif total_disposed > 20\n    배출.status = \"위험-과부하\"\nif total_disposed <= 10\n    배출.status = \"정상처리\"\n배출.status = \"처리중\"\ndelay 1\ndispose entity\n배출.status = \"완료\"\ndelay 0.5\n배출.status = \"대기중\"",
-            "breakpoints": []
+            "script": "배출.status = \"수령중\"\nlog \"배출: 제품 도착\"\nint total_disposed += 1\nlog \"총 처리된 제품: {total_disposed}개\"\nif total_disposed > 10\n    배출.status = \"경고-과부하\"\n    log \"[WARNING] 처리량이 10개를 초과했습니다\"\nif total_disposed > 20\n    배출.status = \"위험-과부하\"\n    log \"[CRITICAL] 처리량이 20개를 초과했습니다!\"\nif total_disposed <= 10\n    배출.status = \"정상처리\"\n배출.status = \"처리중\"\ndelay 1\ndispose entity\n배출.status = \"완료\"\nlog \"배출: 처리 완료\"\ndelay 0.5\n배출.status = \"대기중\""
           }
         }
       ],
@@ -108,9 +104,7 @@
       ],
       "warnings": [],
       "totalProcessed": 0,
-      "status": null,
-      "backgroundColor": "#cfdff7",
-      "textColor": "#000000"
+      "status": null
     },
     {
       "id": "4",
@@ -123,12 +117,11 @@
       "script": "delay 10\n공정2 unload enable = true\nwait 배출 load enable = true\n배출 load enable = false\n공정2 unload enable = false\ngo to 배출.L,10\n공정2 load enable = true\n배출 load enable = true",
       "actions": [
         {
-          "id": "script-1749301639918",
+          "id": "script-1749218169150",
           "name": "스크립트",
           "type": "script",
           "parameters": {
-            "script": "공정2.status = \"처리중\"\nint 공정2처리수 += 1\nif 공정2처리수 > 5\n    공정2.status = \"유지보수필요\"\ndelay 10\n공정2.status = \"품질확인\"\ndelay 1\n공정2 unload enable = true\n공정2.status = \"배출대기\"\nwait 배출 load enable = true\n배출 load enable = false\n공정2 unload enable = false\n공정2.status = \"이송중\"\ngo from R to 배출.L,3\n공정2 load enable = true\n배출 load enable = true\n공정2.status = \"가동대기\"",
-            "breakpoints": []
+            "script": "공정2.status = \"처리중\"\nlog \"공정2: 제품 도착, 처리 시작\"\nint 공정2처리수 += 1\nif 공정2처리수 > 5\n    공정2.status = \"유지보수필요\"\n    log \"[INFO] 공정2 5개 이상 처리, 유지보수 권장\"\ndelay 10\nlog \"공정2: 처리 완료\"\n공정2.status = \"품질확인\"\ndelay 1\n공정2 unload enable = true\nlog \"배출 대기 중...\"\n공정2.status = \"배출대기\"\nwait 배출 load enable = true\nlog \"배출 가능, 제품 이송\"\n배출 load enable = false\n공정2 unload enable = false\n공정2.status = \"이송중\"\ngo from R to 배출.L,3\n공정2 load enable = true\n배출 load enable = true\n공정2.status = \"가동대기\"\nlog \"공정2: 다음 제품 준비 완료\""
           }
         }
       ],
@@ -150,9 +143,7 @@
       ],
       "warnings": [],
       "totalProcessed": 0,
-      "status": null,
-      "backgroundColor": "#cfdff7",
-      "textColor": "#000000"
+      "status": null
     }
   ],
   "connections": [
