@@ -759,7 +759,7 @@ function getFullExecutionTooltip() {
   if (props.isSimulationEnded) {
     return '시뮬레이션이 종료되었습니다. 초기화 후 다시 실행할 수 있습니다'
   }
-  if (isFullExecutionRunning.value) {
+  if (props.isFullExecutionRunning) {
     return '실행 중인 연속 스텝을 일시 정지합니다'
   }
   if (!isExecutionAllowed.value) {
