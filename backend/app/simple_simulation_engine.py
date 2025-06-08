@@ -487,6 +487,37 @@ class SimpleSimulationEngine:
             # 최종 종료 조건 체크
             should_terminate, termination_reason = check_termination_conditions()
             
+            # 종료 조건이 만족되었더라도 시스템에 엔티티가 남아있으면 추가 실행
+            if should_terminate and target_entity_count:
+                # 시스템에 남은 엔티티 확인
+                total_in_system = self._get_total_entity_count()
+                if total_in_system > 0:
+                    logger.info(f"High speed mode: Target reached but {total_in_system} entities still in system, continuing...")
+                    
+                    # 남은 엔티티가 모두 처리될 때까지 계속 실행
+                    extra_iterations = 0
+                    max_extra_iterations = 10000
+                    
+                    while total_in_system > 0 and extra_iterations < max_extra_iterations:
+                        extra_iterations += 1
+                        
+                        # 다음 이벤트가 없으면 종료
+                        if self.env.peek() >= float('inf'):
+                            logger.info("High speed mode: No more events, stopping extra execution")
+                            break
+                        
+                        # 다음 이벤트 실행
+                        self.env.step()
+                        
+                        # 시스템에 남은 엔티티 재확인
+                        total_in_system = self._get_total_entity_count()
+                        
+                        # 주기적으로 상태 확인
+                        if extra_iterations % 100 == 0:
+                            logger.debug(f"Extra iterations: {extra_iterations}, entities in system: {total_in_system}")
+                    
+                    logger.info(f"High speed mode: Extra iterations completed: {extra_iterations}, final entities in system: {total_in_system}")
+            
             # 결과 수집
             result = self._collect_simulation_results()
             result['step_count'] = self.step_count
