@@ -36,7 +36,8 @@
       "Bash(true)",
       "Bash(npm install:*)",
       "Bash(node:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(git reset:*)"
     ],
     "deny": []
   }

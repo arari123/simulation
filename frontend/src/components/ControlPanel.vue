@@ -10,7 +10,7 @@
       <div class="execution-mode-selector">
         <label>실행 모드:</label>
         <select v-model="selectedExecutionMode" @change="changeExecutionMode" :disabled="isRunning">
-          <option value="default">기본 모드 (엔티티 이벤트)</option>
+          <option value="default">시간 진행 스텝 모드</option>
           <option value="time_step">시간 스텝 모드</option>
           <option value="high_speed">고속 진행 모드</option>
         </select>
