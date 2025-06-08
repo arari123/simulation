@@ -236,9 +236,10 @@ def update_settings_endpoint(settings: dict):
         raise HTTPException(status_code=500, detail=f"설정 업데이트 오류: {str(e)}")
 
 @router.post("/load-config")
-def load_config_file(file_path: str):
+def load_config_file(request: Dict[str, Any]):
     """지정된 설정 파일 로드"""
     try:
+        file_path = request.get("file_path", "")
         logger.info(f"📁 설정 파일 로드 시작: {file_path}")
         
         # 상대 경로를 절대 경로로 변환
