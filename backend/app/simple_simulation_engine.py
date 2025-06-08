@@ -70,6 +70,11 @@ class SimpleSimulationEngine:
     
     def setup_simulation(self, config: Dict[str, Any]):
         """시뮬레이션 설정"""
+        # 현재 실행 모드와 설정을 보존
+        preserved_mode = self.execution_mode
+        preserved_time_step_duration = self.time_step_duration
+        preserved_high_speed_config = self.high_speed_config.copy()
+        
         self.env = simpy.Environment()
         self.entity_queue = simpy.Store(self.env)
         
@@ -95,7 +100,12 @@ class SimpleSimulationEngine:
             process = block.create_block_process(self.env, self.entity_queue, self)
             self.env.process(process)
         
-        logger.info(f"Simulation setup completed with {len(self.blocks)} blocks")
+        # 실행 모드 복원
+        self.execution_mode = preserved_mode
+        self.time_step_duration = preserved_time_step_duration
+        self.high_speed_config = preserved_high_speed_config
+        
+        logger.info(f"Simulation setup completed with {len(self.blocks)} blocks, execution mode: {self.execution_mode}")
         # Debug manager status checked
     
     def set_execution_mode(self, mode: str, config: Dict[str, Any] = None):
@@ -377,7 +387,7 @@ class SimpleSimulationEngine:
         target_entity_count = config.get('target_entity_count', None)
         target_simulation_time = config.get('target_simulation_time', None)
         
-        logger.info(f"High speed mode execution: large_time_step={large_time_step}, target_entity_count={target_entity_count}, target_time={target_simulation_time}")
+        logger.info(f"High speed mode execution START: mode={self.execution_mode}, large_time_step={large_time_step}, target_entity_count={target_entity_count}, target_time={target_simulation_time}")
         
         try:
             # 시작 상태 저장
