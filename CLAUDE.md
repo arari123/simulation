@@ -321,3 +321,26 @@ The simulation supports two types of global variables:
   - z-index hierarchy fixed for proper layering
   - Responsive positioning to avoid control panel overlap
   - Initial states: Log panel minimized, Global signals hidden
+
+### 2025-06-08: Execution Mode System Improvements ✅
+- **High-Speed Mode Removal**: Simplified execution system
+  - Removed high-speed execution mode to reduce complexity
+  - Now only two modes: Default (entity movement) and Time Step
+  - Cleaner code and easier maintenance
+- **Time Step Mode Improvements**:
+  - Set upper limit of 10 seconds for stable UI updates
+  - Added validation to prevent values over 10 seconds
+  - Time step duration preserved across simulation setup
+- **Input UX Enhancements**:
+  - Changed from @input to @blur event for better user experience
+  - Users can now clear input fields without interference
+  - Empty value handling without forcing default values
+- **Mode Synchronization Fix**:
+  - Fixed bug where mode changes weren't properly applied
+  - Adapter now always applies its mode to the engine during setup
+  - Mode persistence works correctly across simulations
+- **Implementation Details**:
+  - Backend: Removed `step_simulation_high_speed` method entirely
+  - Frontend: Removed high-speed option from mode selector dropdown
+  - Added 10-second cap in `set_execution_mode` with warning log
+  - Fixed duplicate function declaration error in ControlPanel.vue
