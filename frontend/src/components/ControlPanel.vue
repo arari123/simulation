@@ -9,11 +9,12 @@
       <!-- 실행 모드 선택 -->
       <div class="execution-mode-selector">
         <label>실행 모드:</label>
-        <select v-model="selectedExecutionMode" @change="changeExecutionMode" :disabled="isRunning">
-          <option value="default">제품 이동 스텝 모드</option>
-          <option value="time_step">시간 스텝 모드</option>
-          <option value="high_speed">고속 진행 모드</option>
+        <select v-model="selectedExecutionMode" @change="changeExecutionMode" :disabled="isConfigurationDisabled" :title="getExecutionModeTooltip()">
+          <option value="default">📦 제품 이동 스텝 모드</option>
+          <option value="time_step">⏱️ 시간 스텝 모드</option>
+          <option value="high_speed">🚀 고속 진행 모드</option>
         </select>
+        <small class="mode-help-text">{{ getExecutionModeDescription() }}</small>
       </div>
       
       <!-- 시간 스텝 모드 설정 -->
@@ -28,9 +29,11 @@
             min="0.1" 
             max="3600"
             class="time-input"
+            :disabled="isConfigurationDisabled"
+            @input="validateTimeStepInput"
           /> 
           <span> 초</span>
-          <button @click="saveTimeStepConfig" :disabled="isRunning" class="save-config-btn">설정</button>
+          <button @click="saveTimeStepConfig" :disabled="isConfigurationDisabled" class="save-config-btn">설정</button>
         </div>
         <small class="help-text">스텝 실행 시 이 시간만큼 시뮬레이션이 진행됩니다</small>
       </div>
@@ -44,13 +47,13 @@
           
           <div class="condition-row">
             <label>
-              <input type="checkbox" v-model="highSpeedConfig.useEntityCount" />
+              <input type="checkbox" v-model="highSpeedConfig.useEntityCount" :disabled="isConfigurationDisabled" />
               목표 엔티티 처리 수:
             </label>
             <input 
               type="number" 
               v-model.number="highSpeedConfig.targetEntityCount" 
-              :disabled="!highSpeedConfig.useEntityCount"
+              :disabled="!highSpeedConfig.useEntityCount || isConfigurationDisabled"
               min="1" 
               placeholder="예: 100"
               class="condition-input"
@@ -60,13 +63,13 @@
           
           <div class="condition-row">
             <label>
-              <input type="checkbox" v-model="highSpeedConfig.useSimulationTime" />
+              <input type="checkbox" v-model="highSpeedConfig.useSimulationTime" :disabled="isConfigurationDisabled" />
               목표 시뮬레이션 시간:
             </label>
             <input 
               type="number" 
               v-model.number="highSpeedConfig.targetSimulationTime" 
-              :disabled="!highSpeedConfig.useSimulationTime"
+              :disabled="!highSpeedConfig.useSimulationTime || isConfigurationDisabled"
               min="1" 
               placeholder="예: 3600"
               class="condition-input"
@@ -75,7 +78,7 @@
           </div>
           
           <div class="config-row">
-            <button @click="saveHighSpeedConfig" :disabled="isRunning || !isHighSpeedConfigValid" class="save-config-btn">설정</button>
+            <button @click="saveHighSpeedConfig" :disabled="isConfigurationDisabled || !isHighSpeedConfigValid" class="save-config-btn">설정</button>
           </div>
         </div>
         
@@ -89,9 +92,11 @@
       <div>진행 시간: {{ currentProcessTime.toFixed(1) }} 초</div>
       <div>실행된 스텝 수: {{ currentStepCount }} 회</div>
       
-      <button @click="stepExecution" :disabled="isPaused" :title="isPaused ? '브레이크포인트에서 멈춤. 계속 실행을 눌러주세요.' : ''">스텝 실행</button>
-      <button @click="handleFullExecutionToggle">
-        {{ isFullExecutionRunning ? '일시 정지' : '전체 실행 시작' }}
+      <button @click="stepExecution" :disabled="isStepExecutionDisabled" :title="getStepExecutionTooltip()">
+        🔄 스텝 실행
+      </button>
+      <button @click="handleFullExecutionToggle" :disabled="isFullExecutionDisabled" :title="getFullExecutionTooltip()">
+        {{ isFullExecutionRunning ? '⏸️ 일시 정지' : '▶️ 스텝 연속 실행' }}
       </button>
       <button @click="previousExecution" disabled style="opacity: 0.5; cursor: not-allowed;" title="이전 단계로 되돌아가는 기능은 아직 구현되지 않았습니다.">이전 실행</button>
       <button @click="resetSimulationDisplayInternal" class="reset-button">시뮬레이션 초기화</button>
@@ -294,6 +299,20 @@ onMounted(() => {
 watch(() => props.initialSettings, (newSettings) => {
   editableSettings.value = { ...newSettings }
 }, { deep: true })
+
+// 시간 스텝 설정 변경 감시
+watch(timeStepDuration, (newValue) => {
+  if (newValue <= 0) {
+    console.warn('시간 스텝은 0보다 커야 합니다')
+  }
+}, { immediate: true })
+
+// 실행 모드 변경 감시
+watch(selectedExecutionMode, (newMode, oldMode) => {
+  if (newMode !== oldMode) {
+    console.log(`실행 모드 변경: ${oldMode} -> ${newMode}`)
+  }
+}, { immediate: false })
 
 function togglePanel() {
   isMinimized.value = !isMinimized.value
@@ -510,6 +529,18 @@ import SimulationApi from '../services/SimulationApi'
 
 async function changeExecutionMode() {
   try {
+    // 실행 중이면 모드 변경 방지
+    if (isRunning.value) {
+      alert('시뮬레이션이 실행 중일 때는 모드를 변경할 수 없습니다.')
+      return
+    }
+    
+    // 시뮬레이션이 종료된 상태면 모드 변경 방지
+    if (props.isSimulationEnded) {
+      alert('시뮬레이션이 종료된 상태입니다. 초기화 후 모드를 변경해주세요.')
+      return
+    }
+    
     let config = {}
     
     // 시간 스텝 모드인 경우 설정 포함
@@ -518,19 +549,59 @@ async function changeExecutionMode() {
     }
     // 고속 모드인 경우 기본 설정 포함
     else if (selectedExecutionMode.value === 'high_speed') {
+      if (!isHighSpeedConfigValid.value) {
+        alert('고속 모드를 사용하려면 적어도 하나의 종료 조건을 설정해야 합니다.')
+        return
+      }
       config = buildHighSpeedConfig()
     }
     
+    // 백엔드에 모드 변경 요청
+    const previousMode = selectedExecutionMode.value
     await SimulationApi.setExecutionMode(selectedExecutionMode.value, config)
+    
+    // 모드 변경 시 상태 초기화
+    initializeStateForMode(selectedExecutionMode.value)
+    
+    // 성공 메시지 표시
+    console.log(`실행 모드가 ${getExecutionModeDisplayName(selectedExecutionMode.value)}로 변경되었습니다.`)
+    
   } catch (error) {
-    alert(error.message)
-    // 실패 시 원래 모드로 복원
-    selectedExecutionMode.value = 'default'
+    console.error('모드 변경 실패:', error)
+    alert(`모드 변경 실패: ${error.message}`)
+    
+    // 실패 시 이전 모드로 복원
+    try {
+      const { mode } = await SimulationApi.getExecutionMode()
+      selectedExecutionMode.value = mode
+    } catch (restoreError) {
+      console.error('모드 복원 실패:', restoreError)
+      selectedExecutionMode.value = 'default'
+    }
+  }
+}
+
+// 시간 스텝 입력 검증
+function validateTimeStepInput(event) {
+  const value = parseFloat(event.target.value)
+  if (isNaN(value) || value <= 0) {
+    console.warn('시간 스텝은 0보다 큰 숫자여야 합니다')
+  } else if (value > 3600) {
+    console.warn('시간 스텝은 3600초를 초과할 수 없습니다')
   }
 }
 
 async function saveTimeStepConfig() {
   try {
+    if (timeStepDuration.value <= 0) {
+      alert('시간 스텝은 0초보다 커야 합니다.')
+      return
+    }
+    if (timeStepDuration.value > 3600) {
+      alert('시간 스텝은 3600초를 초과할 수 없습니다.')
+      return
+    }
+    
     const config = { step_duration: timeStepDuration.value }
     await SimulationApi.setExecutionMode('time_step', config)
     alert(`시간 스텝 모드가 ${timeStepDuration.value}초로 설정되었습니다.`)
@@ -583,6 +654,126 @@ async function saveHighSpeedConfig() {
   }
 }
 
+// 모드별 상태 초기화
+function initializeStateForMode(mode) {
+  switch(mode) {
+    case 'default':
+      // 기본 모드는 특별한 초기화 없음
+      break
+    case 'time_step':
+      // 시간 스텝 모드: 기본 시간 설정
+      if (!timeStepDuration.value || timeStepDuration.value <= 0) {
+        timeStepDuration.value = 1.0
+      }
+      break
+    case 'high_speed':
+      // 고속 모드: 기본 종료 조건 설정
+      if (!highSpeedConfig.value.useEntityCount && !highSpeedConfig.value.useSimulationTime) {
+        highSpeedConfig.value.useEntityCount = true
+        highSpeedConfig.value.targetEntityCount = 100
+      }
+      break
+  }
+}
+
+// 실행 허용 여부 계산
+const isExecutionAllowed = computed(() => {
+  if (selectedExecutionMode.value === 'high_speed') {
+    return isHighSpeedConfigValid.value
+  }
+  if (selectedExecutionMode.value === 'time_step') {
+    return timeStepDuration.value > 0
+  }
+  return true
+})
+
+// UI 요소 활성화/비활성화 상태 계산
+const isConfigurationDisabled = computed(() => {
+  return isRunning.value || props.isSimulationEnded
+})
+
+const isStepExecutionDisabled = computed(() => {
+  return isPaused.value || !isExecutionAllowed.value || props.isSimulationEnded
+})
+
+const isFullExecutionDisabled = computed(() => {
+  return !isExecutionAllowed.value || props.isSimulationEnded
+})
+
+// 실행 모드 표시명 반환
+function getExecutionModeDisplayName(mode) {
+  switch(mode) {
+    case 'default': return '제품 이동 스텝 모드'
+    case 'time_step': return '시간 스텝 모드'
+    case 'high_speed': return '고속 진행 모드'
+    default: return mode
+  }
+}
+
+// 툴팁 및 설명 함수들
+function getExecutionModeTooltip() {
+  if (isConfigurationDisabled.value) {
+    if (isRunning.value) {
+      return '실행 중에는 모드를 변경할 수 없습니다'
+    }
+    if (props.isSimulationEnded) {
+      return '시뮬레이션이 종료된 상태입니다. 초기화 후 변경 가능합니다'
+    }
+  }
+  return '시뮬레이션 실행 방식을 선택하세요'
+}
+
+function getExecutionModeDescription() {
+  switch(selectedExecutionMode.value) {
+    case 'default':
+      return '엔티티 이동/생성/배출 이벤트마다 1스텝씩 실행'
+    case 'time_step':
+      return '사용자가 지정한 시간 단위로 스텝 실행'
+    case 'high_speed':
+      return '종료 조건까지 빠르게 연속 실행'
+    default:
+      return ''
+  }
+}
+
+function getStepExecutionTooltip() {
+  if (props.isSimulationEnded) {
+    return '시뮬레이션이 종료되었습니다. 초기화 후 다시 실행할 수 있습니다'
+  }
+  if (isPaused.value) {
+    return '브레이크포인트에서 멈춤. 계속 실행을 눌러주세요.'
+  }
+  if (!isExecutionAllowed.value) {
+    if (selectedExecutionMode.value === 'time_step' && timeStepDuration.value <= 0) {
+      return '시간 스텝 모드: 올바른 시간을 설정해주세요 (0초 초과)'
+    }
+    if (selectedExecutionMode.value === 'high_speed' && !isHighSpeedConfigValid.value) {
+      return '고속 모드: 적어도 하나의 종료 조건을 설정해주세요'
+    }
+    return '실행하려면 먼저 모드 설정을 완료해주세요'
+  }
+  return `${getExecutionModeDisplayName(selectedExecutionMode.value)}로 한 스텝 진행합니다`
+}
+
+function getFullExecutionTooltip() {
+  if (props.isSimulationEnded) {
+    return '시뮬레이션이 종료되었습니다. 초기화 후 다시 실행할 수 있습니다'
+  }
+  if (isFullExecutionRunning.value) {
+    return '실행 중인 연속 스텝을 일시 정지합니다'
+  }
+  if (!isExecutionAllowed.value) {
+    if (selectedExecutionMode.value === 'time_step' && timeStepDuration.value <= 0) {
+      return '시간 스텝 모드: 올바른 시간을 설정해주세요'
+    }
+    if (selectedExecutionMode.value === 'high_speed' && !isHighSpeedConfigValid.value) {
+      return '고속 모드: 종료 조건을 설정해주세요'
+    }
+    return '설정을 완료해주세요'
+  }
+  return `${getExecutionModeDisplayName(selectedExecutionMode.value)}로 연속 실행합니다`
+}
+
 // 컴포넌트 마운트 시 현재 모드 조회
 onMounted(async () => {
   try {
@@ -607,6 +798,9 @@ onMounted(async () => {
         highSpeedConfig.value.targetSimulationTime = config.target_simulation_time
       }
     }
+    
+    // 모드에 맞는 상태 초기화
+    initializeStateForMode(mode)
   } catch (error) {
     console.error('Failed to get execution mode:', error)
   }
@@ -840,6 +1034,15 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
+.mode-help-text {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
+  line-height: 1.2;
+}
+
 /* 시간 스텝 모드 설정 스타일 */
 .time-step-config {
   margin-top: 10px;
@@ -1036,6 +1239,49 @@ onMounted(async () => {
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.control-panel button:hover:not(:disabled) {
+  background-color: #0056b3;
+  border-color: #0056b3;
+  transform: translateY(-1px);
+}
+
+.control-panel button:disabled {
+  background-color: #6c757d;
+  border-color: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.65;
+  transform: none;
+}
+
+/* 스텝 실행 버튼 - 초록색 */
+.control-panel button[title*="스텝"]:not(:disabled) {
+  background-color: #28a745;
+  border-color: #28a745;
+}
+
+.control-panel button[title*="스텝"]:not(:disabled):hover {
+  background-color: #218838;
+  border-color: #1e7e34;
+}
+
+/* 연속 실행 버튼 - 파란색/빨간색 */
+.control-panel button[title*="연속"]:not(:disabled),
+.control-panel button[title*="정지"]:not(:disabled) {
+  background-color: #007bff;
+  border-color: #007bff;
+}
+
+.control-panel button[title*="정지"]:not(:disabled) {
+  background-color: #dc3545;
+  border-color: #dc3545;
+}
+
+.control-panel button[title*="정지"]:not(:disabled):hover {
+  background-color: #c82333;
+  border-color: #bd2130;
 }
 
 
