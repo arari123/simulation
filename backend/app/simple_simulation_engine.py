@@ -616,23 +616,22 @@ class SimpleSimulationEngine:
         return total
     
     def _get_total_entities_processed(self) -> int:
-        """전체 엔티티 개수 반환 (시스템에 있는 모든 엔티티 + 처리된 엔티티)"""
-        total_in_system = 0
+        """실제 배출된 엔티티 수만 반환"""
         total_processed = 0
         
         for block_id, block in self.blocks.items():
-            status = block.get_status()
-            in_system = status.get('entities_count', 0)
-            processed = status.get('total_processed', 0)
-            total_in_system += in_system
-            total_processed += processed
-            # logger.debug(f"Block {block_id}: in_system={in_system}, processed={processed}")
+            # dispose entity 명령으로 실제 배출된 엔티티만 카운트
+            if hasattr(block, 'script_lines'):
+                has_dispose = any('dispose entity' in line.strip() for line in block.script_lines)
+                if has_dispose:
+                    status = block.get_status()
+                    processed = status.get('total_processed', 0)
+                    total_processed += processed
+                    # logger.debug(f"Block {block.name} (disposal block): processed={processed}")
         
-        total = total_in_system + total_processed
-        # logger.debug(f"Total entities: in_system={total_in_system}, processed={total_processed}, total={total}")
+        # logger.debug(f"Total entities disposed: {total_processed}")
         
-        # 전체 엔티티 수 = 현재 시스템에 있는 엔티티 + 처리된(배출된) 엔티티
-        return total
+        return total_processed
     
     def _capture_block_states(self) -> Dict[str, List[str]]:
         """각 블록의 엔티티 ID 목록을 캡처"""

@@ -132,7 +132,7 @@
           <div class="option-group">
             <label>
               <input type="radio" v-model="executionMode" value="quantity" />
-              투입 수량
+              배출 수량
             </label>
             <input 
               type="number" 
