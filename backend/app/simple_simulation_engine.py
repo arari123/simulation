@@ -416,7 +416,7 @@ class SimpleSimulationEngine:
                 self.debug_manager.just_resumed = False
             
             # 종료 조건이 만족될 때까지 실행
-            max_iterations = 1000  # 무한 루프 방지
+            max_iterations = 10000  # 무한 루프 방지 (더 큰 값으로 설정)
             iteration_count = 0
             
             while iteration_count < max_iterations:
@@ -456,6 +456,13 @@ class SimpleSimulationEngine:
                 
                 # 다음 이벤트 실행
                 self.env.step()
+                
+                # 매 100번의 반복마다 종료 조건 다시 확인
+                if iteration_count % 100 == 0:
+                    should_terminate, termination_reason = check_termination_conditions()
+                    if should_terminate:
+                        logger.info(f"High speed mode termination (periodic check): {termination_reason}")
+                        break
             
             self.step_count += 1
             
@@ -590,12 +597,17 @@ class SimpleSimulationEngine:
         return total
     
     def _get_total_entities_processed(self) -> int:
-        """전체 처리된 엔티티 개수 반환"""
-        total = 0
+        """전체 엔티티 개수 반환 (시스템에 있는 모든 엔티티 + 처리된 엔티티)"""
+        total_in_system = 0
+        total_processed = 0
+        
         for block in self.blocks.values():
             status = block.get_status()
-            total += status.get('total_processed', 0)
-        return total
+            total_in_system += status.get('entities_count', 0)
+            total_processed += status.get('total_processed', 0)
+        
+        # 전체 엔티티 수 = 현재 시스템에 있는 엔티티 + 처리된(배출된) 엔티티
+        return total_in_system + total_processed
     
     def _capture_block_states(self) -> Dict[str, List[str]]:
         """각 블록의 엔티티 ID 목록을 캡처"""
@@ -671,7 +683,7 @@ class SimpleSimulationEngine:
             'current_signals': signal_states,
             'globalSignals': global_signals,
             'total_entities_in_system': total_entities,
-            'total_entities_processed': total_processed,
+            'total_entities_processed': self._get_total_entities_processed(),
             'blocks_info': [block.get_status() for block in self.blocks.values()],
             'event_queue_size': len(self.env._queue) if hasattr(self.env, '_queue') else 0,
             'script_logs': script_logs,
