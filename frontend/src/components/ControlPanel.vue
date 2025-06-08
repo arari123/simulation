@@ -291,8 +291,33 @@ const showSettingsPopup = ref(false)
 const editableSettings = ref({ boxSize: 100, fontSize: 14, deadlockTimeout: 20 })
 
 // Prop으로 받은 initialSettings를 editableSettings의 초기값으로 설정
-onMounted(() => {
+onMounted(async () => {
   editableSettings.value = { ...props.initialSettings }
+  
+  // 백엔드에서 현재 실행 모드 가져오기
+  try {
+    const SimulationApi = (await import('../services/SimulationApi.js')).default
+    const modeInfo = await SimulationApi.getExecutionMode()
+    if (modeInfo && modeInfo.mode) {
+      selectedExecutionMode.value = modeInfo.mode
+      
+      // 모드별 설정 적용
+      if (modeInfo.mode === 'time_step' && modeInfo.config.step_duration) {
+        timeStepDuration.value = modeInfo.config.step_duration
+      } else if (modeInfo.mode === 'high_speed' && modeInfo.config) {
+        if (modeInfo.config.target_entity_count) {
+          highSpeedConfig.value.useEntityCount = true
+          highSpeedConfig.value.targetEntityCount = modeInfo.config.target_entity_count
+        }
+        if (modeInfo.config.target_simulation_time) {
+          highSpeedConfig.value.useSimulationTime = true
+          highSpeedConfig.value.targetSimulationTime = modeInfo.config.target_simulation_time
+        }
+      }
+    }
+  } catch (error) {
+    console.error('실행 모드 가져오기 실패:', error)
+  }
 })
 
 // Props가 외부에서 변경될 때 editableSettings도 동기화
@@ -308,9 +333,30 @@ watch(timeStepDuration, (newValue) => {
 }, { immediate: true })
 
 // 실행 모드 변경 감시
-watch(selectedExecutionMode, (newMode, oldMode) => {
+watch(selectedExecutionMode, async (newMode, oldMode) => {
   if (newMode !== oldMode) {
     console.log(`실행 모드 변경: ${oldMode} -> ${newMode}`)
+    
+    // 백엔드에 실행 모드 변경 요청
+    try {
+      const SimulationApi = (await import('../services/SimulationApi.js')).default
+      
+      let config = {}
+      if (newMode === 'time_step') {
+        config = { step_duration: timeStepDuration.value }
+      } else if (newMode === 'high_speed') {
+        config = {
+          target_entity_count: highSpeedConfig.value.useEntityCount ? highSpeedConfig.value.targetEntityCount : null,
+          target_simulation_time: highSpeedConfig.value.useSimulationTime ? highSpeedConfig.value.targetSimulationTime : null
+        }
+      }
+      
+      await SimulationApi.setExecutionMode(newMode, config)
+      console.log(`실행 모드가 ${newMode}로 설정되었습니다`)
+    } catch (error) {
+      console.error('실행 모드 설정 실패:', error)
+      alert(`실행 모드 설정 실패: ${error.message}`)
+    }
   }
 }, { immediate: false })
 
