@@ -612,15 +612,6 @@ const isFullExecutionDisabled = computed(() => {
   return !isExecutionAllowed.value || props.isSimulationEnded
 })
 
-// 실행 모드 표시명 반환
-function getExecutionModeDisplayName(mode) {
-  switch(mode) {
-    case 'default': return '제품 이동 스텝 모드'
-    case 'time_step': return '시간 스텝 모드'
-    case 'high_speed': return '고속 진행 모드'
-    default: return mode
-  }
-}
 
 // 툴팁 및 설명 함수들
 function getExecutionModeTooltip() {
