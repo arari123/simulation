@@ -116,7 +116,12 @@ class SimpleSimulationEngine:
         
         if config:
             if mode == "time_step" and "step_duration" in config:
-                self.time_step_duration = float(config["step_duration"])
+                step_duration = float(config["step_duration"])
+                # 상한선 적용
+                if step_duration > 10.0:
+                    logger.warning(f"Time step duration {step_duration}s exceeds maximum of 10s. Capping to 10s for stable updates.")
+                    step_duration = 10.0
+                self.time_step_duration = step_duration
                 logger.info(f"SimpleSimulationEngine: Time step duration set to: {self.time_step_duration}")
                 logger.info(f"Time step mode configured: {self.time_step_duration} seconds per step")
     

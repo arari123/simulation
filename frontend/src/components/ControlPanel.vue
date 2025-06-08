@@ -26,7 +26,7 @@
             v-model.number="timeStepDuration" 
             step="0.1" 
             min="0.1" 
-            max="3600"
+            max="10"
             class="time-input"
             :disabled="isConfigurationDisabled"
             @input="validateTimeStepInput"
@@ -34,7 +34,7 @@
           <span> 초</span>
           <button @click="saveTimeStepConfig" :disabled="isConfigurationDisabled" class="save-config-btn">설정</button>
         </div>
-        <small class="help-text">스텝 실행 시 이 시간만큼 시뮬레이션이 진행됩니다</small>
+        <small class="help-text">스텝 실행 시 이 시간만큼 시뮬레이션이 진행됩니다 (최대 10초)</small>
       </div>
       
       
@@ -550,8 +550,10 @@ function validateTimeStepInput(event) {
   const value = parseFloat(event.target.value)
   if (isNaN(value) || value <= 0) {
     console.warn('시간 스텝은 0보다 큰 숫자여야 합니다')
-  } else if (value > 3600) {
-    console.warn('시간 스텝은 3600초를 초과할 수 없습니다')
+    timeStepDuration.value = 0.1
+  } else if (value > 10) {
+    console.warn('안정적인 화면 업데이트를 위해 시간 스텝은 10초를 초과할 수 없습니다')
+    timeStepDuration.value = 10
   }
 }
 
@@ -561,8 +563,9 @@ async function saveTimeStepConfig() {
       alert('시간 스텝은 0초보다 커야 합니다.')
       return
     }
-    if (timeStepDuration.value > 3600) {
-      alert('시간 스텝은 3600초를 초과할 수 없습니다.')
+    if (timeStepDuration.value > 10) {
+      alert('안정적인 화면 업데이트를 위해 시간 스텝은 10초를 초과할 수 없습니다.')
+      timeStepDuration.value = 10
       return
     }
     
