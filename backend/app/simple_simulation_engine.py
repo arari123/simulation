@@ -52,6 +52,7 @@ class SimpleSimulationEngine:
         # 실행 모드 관련
         self.execution_mode = "default"
         self.time_step_duration = 1.0  # 시간 스텝 모드에서 1스텝당 시간(초)
+        self.high_speed_config = {}  # 고속 모드 설정
     
     def reset(self):
         """시뮬레이션 초기화"""
@@ -109,6 +110,10 @@ class SimpleSimulationEngine:
             if mode == "time_step" and "step_duration" in config:
                 self.time_step_duration = float(config["step_duration"])
                 logger.info(f"Time step mode configured: {self.time_step_duration} seconds per step")
+            elif mode == "high_speed":
+                # 고속 모드 설정
+                self.high_speed_config = config
+                logger.info(f"High speed mode configured: {config}")
     
     def get_execution_mode(self) -> str:
         """현재 실행 모드 반환"""
@@ -118,6 +123,8 @@ class SimpleSimulationEngine:
         """현재 모드 설정 반환"""
         if self.execution_mode == "time_step":
             return {"step_duration": self.time_step_duration}
+        elif self.execution_mode == "high_speed":
+            return self.high_speed_config
         return {}
     
     def _create_block(self, block_config: Dict[str, Any]):
@@ -352,11 +359,142 @@ class SimpleSimulationEngine:
                 'execution_mode': 'time_step'
             }
     
+    def step_simulation_high_speed(self) -> Dict[str, Any]:
+        """고속 모드 시뮬레이션 실행 - 큰 시간 스텝으로 종료 조건까지 실행"""
+        if not self.env:
+            return {'error': 'Simulation not initialized'}
+        
+        # 블록이 없으면 초기화되지 않은 것으로 간주
+        if not self.blocks:
+            logger.warning("No blocks found - simulation not properly initialized")
+            return {'error': 'Simulation not initialized - no blocks found'}
+        
+        # 고속 모드 설정 가져오기
+        config = self.high_speed_config
+        large_time_step = config.get('large_time_step', 9000000)  # 기본 9백만초 (매우 큰 값)
+        target_entity_count = config.get('target_entity_count', None)
+        target_simulation_time = config.get('target_simulation_time', None)
+        
+        logger.info(f"High speed mode execution: large_time_step={large_time_step}, target_entity_count={target_entity_count}, target_time={target_simulation_time}")
+        
+        try:
+            # 시작 상태 저장
+            start_time = self.env.now
+            start_entities_processed = self._get_total_entities_processed()
+            
+            # 종료 조건 체크 함수
+            def check_termination_conditions():
+                current_entities_processed = self._get_total_entities_processed()
+                
+                # 1. 목표 엔티티 개수 달성
+                if target_entity_count and current_entities_processed >= target_entity_count:
+                    return True, f"Target entity count reached: {current_entities_processed}/{target_entity_count}"
+                
+                # 2. 목표 시뮬레이션 시간 달성
+                if target_simulation_time and self.env.now >= target_simulation_time:
+                    return True, f"Target simulation time reached: {self.env.now:.1f}/{target_simulation_time}"
+                
+                return False, None
+            
+            # 첫 번째 종료 조건 체크
+            should_terminate, termination_reason = check_termination_conditions()
+            if should_terminate:
+                logger.info(f"High speed mode - already at termination condition: {termination_reason}")
+                result = self._collect_simulation_results()
+                result['execution_mode'] = 'high_speed'
+                result['termination_reason'] = termination_reason
+                result['time_advanced'] = 0
+                return result
+            
+            # 큰 시간 스텝으로 실행
+            target_time = start_time + large_time_step
+            
+            # 디버그 매니저가 방금 재개되었는지 확인
+            if self.debug_manager and getattr(self.debug_manager, 'just_resumed', False):
+                self.debug_manager.just_resumed = False
+            
+            # 종료 조건이 만족될 때까지 실행
+            max_iterations = 1000  # 무한 루프 방지
+            iteration_count = 0
+            
+            while iteration_count < max_iterations:
+                iteration_count += 1
+                
+                # 종료 조건 체크
+                should_terminate, termination_reason = check_termination_conditions()
+                if should_terminate:
+                    logger.info(f"High speed mode termination: {termination_reason}")
+                    break
+                
+                # 디버그 매니저가 일시정지 상태인지 확인
+                if self.debug_manager and self.debug_manager.debug_state.is_paused:
+                    logger.info(f"High speed mode paused at breakpoint at time {self.env.now}")
+                    break
+                
+                # 다음 이벤트가 없으면 목표 시간까지 진행
+                if self.env.peek() >= float('inf'):
+                    # 이벤트가 없으면 목표 시간까지 즉시 진행
+                    if target_simulation_time and self.env.now < target_simulation_time:
+                        self.env.run(until=target_simulation_time)
+                    else:
+                        self.env.run(until=target_time)
+                    break
+                
+                # 다음 이벤트가 목표 시간을 초과하면 목표 시간까지만 진행
+                next_event_time = self.env.peek()
+                
+                # 종료 조건에 따른 실행 제한
+                effective_target_time = target_time
+                if target_simulation_time and target_simulation_time < effective_target_time:
+                    effective_target_time = target_simulation_time
+                
+                if next_event_time > effective_target_time:
+                    self.env.run(until=effective_target_time)
+                    break
+                
+                # 다음 이벤트 실행
+                self.env.step()
+            
+            self.step_count += 1
+            
+            # 최종 종료 조건 체크
+            should_terminate, termination_reason = check_termination_conditions()
+            
+            # 결과 수집
+            result = self._collect_simulation_results()
+            result['step_count'] = self.step_count
+            result['simulation_time'] = round(self.env.now, 1)
+            result['time_advanced'] = round(self.env.now - start_time, 1)
+            result['execution_mode'] = 'high_speed'
+            result['large_time_step'] = large_time_step
+            result['entities_processed_this_step'] = self._get_total_entities_processed() - start_entities_processed
+            
+            # 종료 조건 정보 추가
+            if should_terminate:
+                result['termination_condition_met'] = True
+                result['termination_reason'] = termination_reason
+            else:
+                result['termination_condition_met'] = False
+                result['termination_reason'] = "Max iterations reached or other stop condition"
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"High speed execution error: {e}")
+            return {
+                'error': str(e),
+                'step_count': self.step_count,
+                'simulation_time': round(self.env.now, 1),
+                'execution_mode': 'high_speed'
+            }
+    
     def step_simulation(self) -> Dict[str, Any]:
         """시뮬레이션 1스텝 실행 - 실행 모드에 따라 적절한 방법 선택"""
         # 실행 모드에 따라 다른 실행 방법 사용
         if self.execution_mode == "time_step":
             return self.step_simulation_time_based()
+        elif self.execution_mode == "high_speed":
+            return self.step_simulation_high_speed()
         else:
             # 기본 모드 (엔티티 이동 기반)
             return self._step_simulation_default()
@@ -442,6 +580,14 @@ class SimpleSimulationEngine:
         total = 0
         for block in self.blocks.values():
             total += len(block.entities_in_block)
+        return total
+    
+    def _get_total_entities_processed(self) -> int:
+        """전체 처리된 엔티티 개수 반환"""
+        total = 0
+        for block in self.blocks.values():
+            status = block.get_status()
+            total += status.get('total_processed', 0)
         return total
     
     def _capture_block_states(self) -> Dict[str, List[str]]:

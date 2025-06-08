@@ -12,7 +12,7 @@
         <select v-model="selectedExecutionMode" @change="changeExecutionMode" :disabled="isRunning">
           <option value="default">기본 모드 (엔티티 이벤트)</option>
           <option value="time_step">시간 스텝 모드</option>
-          <option value="high_speed" disabled>고속 진행 모드 (준비중)</option>
+          <option value="high_speed">고속 진행 모드</option>
         </select>
       </div>
       
@@ -33,6 +33,56 @@
           <button @click="saveTimeStepConfig" :disabled="isRunning" class="save-config-btn">설정</button>
         </div>
         <small class="help-text">스텝 실행 시 이 시간만큼 시뮬레이션이 진행됩니다</small>
+      </div>
+      
+      <!-- 고속 진행 모드 설정 -->
+      <div v-if="selectedExecutionMode === 'high_speed'" class="high-speed-config">
+        <h5>고속 진행 모드 설정</h5>
+        
+        <div class="termination-conditions">
+          <h6>종료 조건 (하나 이상 선택):</h6>
+          
+          <div class="condition-row">
+            <label>
+              <input type="checkbox" v-model="highSpeedConfig.useEntityCount" />
+              목표 엔티티 처리 수:
+            </label>
+            <input 
+              type="number" 
+              v-model.number="highSpeedConfig.targetEntityCount" 
+              :disabled="!highSpeedConfig.useEntityCount"
+              min="1" 
+              placeholder="예: 100"
+              class="condition-input"
+            />
+            <span>개</span>
+          </div>
+          
+          <div class="condition-row">
+            <label>
+              <input type="checkbox" v-model="highSpeedConfig.useSimulationTime" />
+              목표 시뮬레이션 시간:
+            </label>
+            <input 
+              type="number" 
+              v-model.number="highSpeedConfig.targetSimulationTime" 
+              :disabled="!highSpeedConfig.useSimulationTime"
+              min="1" 
+              placeholder="예: 3600"
+              class="condition-input"
+            />
+            <span>초</span>
+          </div>
+          
+          <div class="config-row">
+            <button @click="saveHighSpeedConfig" :disabled="isRunning || !isHighSpeedConfigValid" class="save-config-btn">설정</button>
+          </div>
+        </div>
+        
+        <small class="help-text">
+          고속 모드는 매우 큰 시간 스텝으로 실행하여 종료 조건에 도달할 때까지 빠르게 진행합니다.
+          <br>적어도 하나의 종료 조건을 설정해야 합니다.
+        </small>
       </div>
       
       <div>배출된 제품: {{ currentDispatchedProducts }} 개</div>
@@ -203,6 +253,20 @@ const isRunning = computed(() => props.isFullExecutionRunning)
 
 // 시간 스텝 모드 관련
 const timeStepDuration = ref(1.0)  // 기본값 1초
+
+// 고속 진행 모드 관련
+const highSpeedConfig = ref({
+  useEntityCount: false,
+  targetEntityCount: 100,
+  useSimulationTime: false,
+  targetSimulationTime: 3600,
+  largeTimeStep: 9000000  // 기본 9백만초
+})
+
+// 고속 모드 설정 유효성 검사
+const isHighSpeedConfigValid = computed(() => {
+  return highSpeedConfig.value.useEntityCount || highSpeedConfig.value.useSimulationTime
+})
 
 // 브레이크포인트가 있는지 확인하는 computed
 const hasBreakpoints = computed(() => {
@@ -452,6 +516,10 @@ async function changeExecutionMode() {
     if (selectedExecutionMode.value === 'time_step') {
       config = { step_duration: timeStepDuration.value }
     }
+    // 고속 모드인 경우 기본 설정 포함
+    else if (selectedExecutionMode.value === 'high_speed') {
+      config = buildHighSpeedConfig()
+    }
     
     await SimulationApi.setExecutionMode(selectedExecutionMode.value, config)
   } catch (error) {
@@ -471,6 +539,50 @@ async function saveTimeStepConfig() {
   }
 }
 
+// 고속 모드 설정 빌드
+function buildHighSpeedConfig() {
+  const config = {
+    large_time_step: highSpeedConfig.value.largeTimeStep
+  }
+  
+  if (highSpeedConfig.value.useEntityCount) {
+    config.target_entity_count = highSpeedConfig.value.targetEntityCount
+  }
+  
+  if (highSpeedConfig.value.useSimulationTime) {
+    config.target_simulation_time = highSpeedConfig.value.targetSimulationTime
+  }
+  
+  return config
+}
+
+async function saveHighSpeedConfig() {
+  try {
+    if (!isHighSpeedConfigValid.value) {
+      alert('적어도 하나의 종료 조건을 설정해야 합니다.')
+      return
+    }
+    
+    const config = buildHighSpeedConfig()
+    await SimulationApi.setExecutionMode('high_speed', config)
+    
+    let message = '고속 진행 모드가 설정되었습니다.\n종료 조건: '
+    const conditions = []
+    
+    if (config.target_entity_count) {
+      conditions.push(`엔티티 ${config.target_entity_count}개 처리`)
+    }
+    if (config.target_simulation_time) {
+      conditions.push(`시간 ${config.target_simulation_time}초 경과`)
+    }
+    
+    message += conditions.join(' 또는 ')
+    alert(message)
+  } catch (error) {
+    alert(`설정 저장 실패: ${error.message}`)
+  }
+}
+
 // 컴포넌트 마운트 시 현재 모드 조회
 onMounted(async () => {
   try {
@@ -480,6 +592,20 @@ onMounted(async () => {
     // 시간 스텝 모드인 경우 설정도 로드
     if (mode === 'time_step' && config && config.step_duration) {
       timeStepDuration.value = config.step_duration
+    }
+    // 고속 모드인 경우 설정도 로드
+    else if (mode === 'high_speed' && config) {
+      if (config.large_time_step) {
+        highSpeedConfig.value.largeTimeStep = config.large_time_step
+      }
+      if (config.target_entity_count) {
+        highSpeedConfig.value.useEntityCount = true
+        highSpeedConfig.value.targetEntityCount = config.target_entity_count
+      }
+      if (config.target_simulation_time) {
+        highSpeedConfig.value.useSimulationTime = true
+        highSpeedConfig.value.targetSimulationTime = config.target_simulation_time
+      }
     }
   } catch (error) {
     console.error('Failed to get execution mode:', error)
@@ -770,6 +896,67 @@ onMounted(async () => {
 .save-config-btn:disabled {
   background-color: #6c757d;
   cursor: not-allowed;
+}
+
+/* 고속 진행 모드 스타일 */
+.high-speed-config {
+  background-color: #fff5e6;
+  border: 1px solid #ffc107;
+  border-radius: 5px;
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.high-speed-config h5 {
+  margin: 0 0 8px 0;
+  color: #ff6600;
+  font-size: 14px;
+}
+
+.high-speed-config h6 {
+  margin: 8px 0 5px 0;
+  color: #495057;
+  font-size: 13px;
+}
+
+.termination-conditions {
+  margin-top: 8px;
+}
+
+.condition-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.condition-row label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: auto;
+  font-size: 13px;
+  color: #495057;
+}
+
+.condition-input {
+  width: 80px;
+  padding: 3px 5px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.condition-input:disabled {
+  background-color: #f8f9fa;
+  color: #6c757d;
+}
+
+.high-speed-config .help-text {
+  color: #6c757d;
+  font-size: 11px;
+  line-height: 1.3;
+  margin-top: 8px;
 }
 
 .popup-overlay {
