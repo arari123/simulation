@@ -495,7 +495,6 @@ class SimpleSimulationEngine:
             result['simulation_time'] = round(self.env.now, 1)
             result['time_advanced'] = round(self.env.now - start_time, 1)
             result['execution_mode'] = 'high_speed'
-            result['large_time_step'] = large_time_step
             result['entities_processed_this_step'] = self._get_total_entities_processed() - start_entities_processed
             result['iterations_executed'] = iteration_count
             
