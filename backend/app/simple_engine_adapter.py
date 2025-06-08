@@ -126,10 +126,9 @@ class SimpleEngineAdapter:
         self.engine.set_debug_manager(self.global_debug_manager)
         # Debug manager connected to engine
         
-        # 실행 모드 설정 적용
-        if self.execution_mode != "default" or self.mode_config:
-            self.engine.set_execution_mode(self.execution_mode, self.mode_config)
-            logger.info(f"Applied execution mode {self.execution_mode} to new simulation")
+        # 실행 모드 설정 적용 - 항상 어댑터의 모드를 엔진에 적용
+        self.engine.set_execution_mode(self.execution_mode, self.mode_config)
+        logger.info(f"Applied execution mode {self.execution_mode} to new simulation")
         
         self.step_counter = 0
     
