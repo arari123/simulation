@@ -543,8 +543,12 @@ async function changeExecutionMode() {
     
     let config = {}
     
+    // 제품 이동 스텝 모드 (기본 모드)인 경우
+    if (selectedExecutionMode.value === 'default') {
+      config = {}  // 특별한 설정 불필요
+    }
     // 시간 스텝 모드인 경우 설정 포함
-    if (selectedExecutionMode.value === 'time_step') {
+    else if (selectedExecutionMode.value === 'time_step') {
       config = { step_duration: timeStepDuration.value }
     }
     // 고속 모드인 경우 기본 설정 포함
@@ -557,7 +561,6 @@ async function changeExecutionMode() {
     }
     
     // 백엔드에 모드 변경 요청
-    const previousMode = selectedExecutionMode.value
     await SimulationApi.setExecutionMode(selectedExecutionMode.value, config)
     
     // 모드 변경 시 상태 초기화

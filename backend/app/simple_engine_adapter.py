@@ -135,6 +135,7 @@ class SimpleEngineAdapter:
     
     def step_simulation(self) -> SimulationStepResult:
         """단일 스텝 실행"""
+        logger.info(f"Executing step simulation with mode: {self.execution_mode}")
         result = self.engine.step_simulation()
         self.step_counter += 1
         
@@ -249,11 +250,12 @@ class SimpleEngineAdapter:
         """실행 모드 설정"""
         self.execution_mode = mode
         self.mode_config = config or {}
+        logger.info(f"SimpleEngineAdapter: Setting execution mode to: {mode} with config: {self.mode_config}")
         
         # 엔진이 있으면 모드 설정 적용
         if self.has_engine():
             self.engine.set_execution_mode(mode, self.mode_config)
-            logger.info(f"Execution mode set to: {mode} with config: {self.mode_config}")
+            logger.info(f"SimpleEngineAdapter: Applied mode {mode} to existing engine")
     
     def get_execution_mode(self) -> str:
         """현재 실행 모드 반환"""

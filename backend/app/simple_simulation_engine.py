@@ -105,10 +105,12 @@ class SimpleSimulationEngine:
             raise ValueError(f"Invalid execution mode: {mode}. Valid modes: {valid_modes}")
         
         self.execution_mode = mode
+        logger.info(f"SimpleSimulationEngine: Execution mode set to: {mode}")
         
         if config:
             if mode == "time_step" and "step_duration" in config:
                 self.time_step_duration = float(config["step_duration"])
+                logger.info(f"SimpleSimulationEngine: Time step duration set to: {self.time_step_duration}")
                 logger.info(f"Time step mode configured: {self.time_step_duration} seconds per step")
             elif mode == "high_speed":
                 # 고속 모드 설정
@@ -490,13 +492,18 @@ class SimpleSimulationEngine:
     
     def step_simulation(self) -> Dict[str, Any]:
         """시뮬레이션 1스텝 실행 - 실행 모드에 따라 적절한 방법 선택"""
+        logger.info(f"SimpleSimulationEngine: step_simulation called with mode: {self.execution_mode}")
+        
         # 실행 모드에 따라 다른 실행 방법 사용
         if self.execution_mode == "time_step":
+            logger.info("SimpleSimulationEngine: Using time-based step execution")
             return self.step_simulation_time_based()
         elif self.execution_mode == "high_speed":
+            logger.info("SimpleSimulationEngine: Using high-speed step execution")
             return self.step_simulation_high_speed()
         else:
             # 기본 모드 (엔티티 이동 기반)
+            logger.info("SimpleSimulationEngine: Using default (entity event) step execution")
             return self._step_simulation_default()
     
     def _step_simulation_default(self) -> Dict[str, Any]:
