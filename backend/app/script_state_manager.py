@@ -30,7 +30,7 @@ class ScriptStateManager:
         """블록의 현재 실행 상태를 가져옵니다."""
         if block_id not in self.block_states:
             self.block_states[block_id] = ScriptExecutionState()
-            logger.debug(f"Created new script state for block {block_id}")
+            # Created new script state
         return self.block_states[block_id]
     
     def update_state(self, block_id: str, **kwargs):
@@ -39,7 +39,7 @@ class ScriptStateManager:
         for key, value in kwargs.items():
             if hasattr(state, key):
                 setattr(state, key, value)
-                logger.debug(f"Updated block {block_id} state: {key}={value}")
+                # Updated block state
     
     def start_execution(self, block_id: str, entity_id: Optional[str] = None, entity_ref: Optional[Any] = None):
         """블록의 스크립트 실행을 시작합니다."""
@@ -56,19 +56,19 @@ class ScriptStateManager:
         """현재 실행 중인 라인을 설정합니다."""
         state = self.get_state(block_id)
         state.current_line = line
-        logger.debug(f"Block {block_id} current line: {line}")
+        # Current line updated
     
     def set_waiting(self, block_id: str, condition: str):
         """대기 상태를 설정합니다."""
         state = self.get_state(block_id)
         state.waiting_for = condition
-        logger.debug(f"Block {block_id} waiting for: {condition}")
+        # Waiting for condition
     
     def clear_waiting(self, block_id: str):
         """대기 상태를 해제합니다."""
         state = self.get_state(block_id)
         state.waiting_for = None
-        logger.debug(f"Block {block_id} waiting cleared")
+        # Waiting cleared
     
     def end_execution(self, block_id: str):
         """블록의 스크립트 실행을 종료합니다."""

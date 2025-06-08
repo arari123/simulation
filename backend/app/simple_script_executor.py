@@ -750,17 +750,15 @@ class SimpleScriptExecutor:
             
             # 디버그 브레이크포인트 체크
             if self.debug_manager and block:
-                logger.debug(f"[SCRIPT DEBUG] Checking breakpoint for block {block.id}, line {line_index + 1}")
+                # Checking breakpoint
                 yield from self.debug_manager.check_breakpoint(
                     block.id, 
                     line_index + 1,  # 1-based line number
                     env
                 )
             else:
-                if not self.debug_manager:
-                    logger.debug(f"[SCRIPT DEBUG] No debug manager available")
-                if not block:
-                    logger.debug(f"[SCRIPT DEBUG] No block provided")
+                # No debug manager or block
+                pass
             
             # 들여쓰기 확인으로 if 블록 탈출 감지
             current_indent = len(line) - len(line.lstrip())

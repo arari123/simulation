@@ -60,9 +60,9 @@ class StepModeWrapper:
             script_state_manager.set_current_line(block_id, current_line)
             
             # 스크립트 라인 실행
-            logger.debug(f"[{block.name}] Executing line {current_line}: {line}, entity: {entity}")
+            # Executing line
             result = yield from block.script_executor.execute_script_line(env, line, entity, block.name, block)
-            logger.debug(f"[{block.name}] Result: {result}")
+            # Result processed
             
             # 결과 처리
             if isinstance(result, tuple) and result[0] == 'created_entity':

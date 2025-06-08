@@ -13,7 +13,7 @@ from .core.unified_variable_accessor import UnifiedVariableAccessor
 from .core.debug_manager import DebugManager
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 class SimpleSimulationEngine:
     """단순화된 시뮬레이션 엔진"""
@@ -21,14 +21,14 @@ class SimpleSimulationEngine:
     def set_debug_manager(self, debug_manager):
         """디버그 매니저 설정"""
         self.debug_manager = debug_manager
-        logger.info(f"[BREAKPOINT] Debug manager set on engine: {debug_manager}")
+        # Debug manager set
         
         # 이미 설정된 블록들의 스크립트 실행기에도 디버그 매니저 설정
         if hasattr(self, 'blocks'):
             for block in self.blocks.values():
                 if hasattr(block, 'script_executor') and block.script_executor:
                     block.script_executor.debug_manager = debug_manager
-                    logger.info(f"[BREAKPOINT] Debug manager set for block: {block.name}")
+                    # Debug manager set for block
     
     def __init__(self):
         self.env: Optional[simpy.Environment] = None
@@ -91,7 +91,7 @@ class SimpleSimulationEngine:
             self.env.process(process)
         
         logger.info(f"Simulation setup completed with {len(self.blocks)} blocks")
-        logger.info(f"[BREAKPOINT] Debug manager status after setup: {self.debug_manager}")
+        # Debug manager status checked
     
     def _create_block(self, block_config: Dict[str, Any]):
         """블록 생성"""
@@ -162,7 +162,7 @@ class SimpleSimulationEngine:
         # 블록 타입 설정 제거 - 모든 블록이 동일하게 동작
         
         self.blocks[block_id] = block
-        logger.info(f"[BREAKPOINT] Created block: {block_name}({block_id}) with debug_manager: {self.debug_manager}")
+        # Block created
     
     def _convert_actions_to_script(self, actions: List[Any]) -> List[str]:
         """기존 actions를 스크립트로 변환"""
@@ -226,7 +226,7 @@ class SimpleSimulationEngine:
         
         if from_block_id in self.blocks:
             self.blocks[from_block_id].add_output_connection(from_connector, to_block_id)
-            logger.debug(f"Connection: {from_block_id}.{from_connector} -> {to_block_id}")
+            # Connection established
         else:
             logger.warning(f"Block {from_block_id} not found for connection")
     
@@ -249,7 +249,7 @@ class SimpleSimulationEngine:
         if target_block_id in self.blocks:
             target_block = self.blocks[target_block_id]
             if target_block.add_entity(entity):
-                logger.debug(f"Entity {entity.id} moved to block {target_block.name}")
+                # Entity moved
                 yield env.timeout(0)
             else:
                 logger.warning(f"Block {target_block.name} is full, entity {entity.id} discarded")
@@ -280,7 +280,7 @@ class SimpleSimulationEngine:
             
             # 디버그 매니저가 방금 재개되었는지 확인
             if self.debug_manager and getattr(self.debug_manager, 'just_resumed', False):
-                logger.info("[ENGINE] Detected just_resumed flag, continuing from breakpoint")
+                # Continuing from breakpoint
                 self.debug_manager.just_resumed = False  # 플래그 리셋
                 # 브레이크포인트에서 재개된 경우 바로 실행 계속
             

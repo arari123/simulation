@@ -52,18 +52,18 @@ async def manage_breakpoints(request: BreakpointRequest):
                 raise HTTPException(status_code=400, detail="block_id and line_number required for set action")
             
             debug_manager.set_breakpoint(request.block_id, request.line_number)
-            logger.info(f"Breakpoint set: {request.block_id}:{request.line_number}")
+            # Breakpoint set
             
         elif request.action == "clear":
             if not request.block_id or request.line_number is None:
                 raise HTTPException(status_code=400, detail="block_id and line_number required for clear action")
             
             debug_manager.clear_breakpoint(request.block_id, request.line_number)
-            logger.info(f"Breakpoint cleared: {request.block_id}:{request.line_number}")
+            # Breakpoint cleared
             
         elif request.action == "clear_all":
             debug_manager.clear_all_breakpoints(request.block_id)
-            logger.info(f"All breakpoints cleared for block: {request.block_id or 'all'}")
+            # All breakpoints cleared
             
         else:
             raise HTTPException(status_code=400, detail=f"Unknown action: {request.action}")
@@ -88,23 +88,23 @@ async def debug_control(request: DebugControlRequest):
         
         if request.action == "start_debug":
             debug_manager.start_debugging()
-            logger.info("Debug mode started")
+            # Debug mode started
             
         elif request.action == "stop_debug":
             debug_manager.stop_debugging()
-            logger.info("Debug mode stopped")
+            # Debug mode stopped
             
         elif request.action == "continue":
             success = debug_manager.continue_execution()
             if not success:
                 raise HTTPException(status_code=400, detail="Not in paused state")
-            logger.info("Execution continued")
+            # Execution continued
             
         elif request.action == "step":
             success = debug_manager.step_execution()
             if not success:
                 raise HTTPException(status_code=400, detail="Not in paused state")
-            logger.info("Step execution")
+            # Step execution
             
         else:
             raise HTTPException(status_code=400, detail=f"Unknown action: {request.action}")
@@ -150,7 +150,7 @@ async def set_breakpoints_batch(breakpoints: Dict[str, List[int]]):
             for line_number in line_numbers:
                 debug_manager.set_breakpoint(block_id, line_number)
         
-        logger.info(f"Batch breakpoints set: {breakpoints}")
+        # Batch breakpoints set
         
         return {
             "success": True,
@@ -175,10 +175,10 @@ async def set_breakpoint_frontend(data: BreakpointData):
         
         if data.enabled:
             debug_manager.set_breakpoint(data.block_id, data.line_number)
-            logger.info(f"Breakpoint set: {data.block_id}:{data.line_number}")
+            # Breakpoint set
         else:
             debug_manager.clear_breakpoint(data.block_id, data.line_number)
-            logger.info(f"Breakpoint cleared: {data.block_id}:{data.line_number}")
+            # Breakpoint cleared
         
         # 현재 브레이크포인트 상태 로그
         all_breakpoints = debug_manager.get_breakpoints()

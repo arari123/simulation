@@ -122,7 +122,7 @@ class IndependentBlock:
         if entity in self.entities_in_block:
             self.remove_entity(entity)
             self.total_processed += 1
-            logger.debug(f"Block {self.name} disposed entity {entity.id}")
+            # Entity disposed
         yield env.timeout(0)
     
     def process_entity(self, env: simpy.Environment, entity: SimpleEntity) -> Generator:
@@ -307,9 +307,9 @@ class IndependentBlock:
                     if not self.entities_in_block:
                         # 블록이 비어있을 때만 스크립트 실행
                         logger.info(f"Block {self.name} starting force execution (no entities in block)")
-                        logger.debug(f"Block {self.name} executing script without entity (force execution)")
+                        # Executing script without entity (force execution)
                         yield from self.process_entity(env, None)
-                        logger.debug(f"Block {self.name} finished force execution, entities in block: {len(self.entities_in_block)}")
+                        # Finished force execution
                     else:
                         # 엔티티가 있으면 이동 처리만
                         entity = self.entities_in_block[0]
@@ -434,7 +434,7 @@ class IndependentBlock:
                             else:
                                 # 이동할 수 없으면 소스 블록에 남겨둠, 경고 추가
                                 self.add_capacity_warning(env, target_block.name, entity.id)
-                                logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in source block {self.name}")
+                                # Target block is full, entity stays in source block
                         else:
                             # 대상 블록을 찾을 수 없으면 엔티티 제거
                             # logger.warning(f"Target block not found, removing entity {entity.id}")
@@ -479,7 +479,7 @@ class IndependentBlock:
                 else:
                     # 용량 초과로 이동 실패, 경고 추가
                     self.add_capacity_warning(env, target_block.name, entity.id)
-                    logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
+                    # Target block is full, entity stays in block
                 
                 # 스크립트는 이미 끝까지 실행되었으므로 추가 실행 불필요
                 pass

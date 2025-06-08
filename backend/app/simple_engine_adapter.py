@@ -121,8 +121,7 @@ class SimpleEngineAdapter:
         
         # 디버그 매니저를 엔진에 연결
         self.engine.set_debug_manager(self.global_debug_manager)
-        logger.info("[BREAKPOINT] Debug manager connected to engine during setup")
-        logger.info(f"[BREAKPOINT] Current breakpoints: {self.global_debug_manager.get_breakpoints()}")
+        # Debug manager connected to engine
         
         self.step_counter = 0
     
