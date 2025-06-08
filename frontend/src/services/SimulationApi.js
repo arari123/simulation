@@ -319,6 +319,30 @@ export class SimulationApi {
       throw error
     }
   }
+
+  /**
+   * 특정 설정 파일 로드
+   */
+  static async loadConfigFile(filePath) {
+    try {
+      const response = await fetch(`${API_BASE}/simulation/load-config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ file_path: filePath })
+      })
+
+      if (!response.ok) {
+        throw new Error(`설정 파일 로드 실패: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('[SimulationApi] 설정 파일 로드 실패:', error)
+      throw error
+    }
+  }
 }
 
 export default SimulationApi 

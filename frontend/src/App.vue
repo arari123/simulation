@@ -303,7 +303,9 @@ const {
 // 초기 시나리오 설정
 async function setupInitialScenario() {
   try {
-    const baseConfig = await SimulationApi.loadBaseConfig()
+    // simulation-config.json을 기본 설정으로 로드
+    const configFile = await SimulationApi.loadConfigFile('simulation-config.json')
+    const baseConfig = configFile.config
     
     // 설정 적용
     if (baseConfig.settings) {
@@ -315,6 +317,11 @@ async function setupInitialScenario() {
     
     // 신호 설정 적용
     setupInitialSignals(baseConfig)
+    
+    // 정보 텍스트 적용
+    if (baseConfig.infoText) {
+      infoText.value = baseConfig.infoText
+    }
     
     // 초기 로드 후 자동 연결 새로고침 (모든 연결을 자동 생성으로 다시 생성)
     setTimeout(() => {
