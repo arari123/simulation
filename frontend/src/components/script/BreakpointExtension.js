@@ -106,15 +106,21 @@ export const breakpointGutter = gutter({
     return marker;
   },
   domEventHandlers: {
-    click(view, line, event) {
+    mousedown(view, line, event) {
+      // 이벤트 전파 완전 차단
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      
       // line 매개변수가 실제로는 BlockInfo 객체입니다
       const lineInfo = line;
       const doc = view.state.doc;
       const lineNumber = doc.lineAt(lineInfo.from).number;
       
-      
       const breakpoints = view.state.field(breakpointState);
       const isOn = breakpoints.has(lineNumber);
+      
+      // 상태 업데이트
       view.dispatch({
         effects: toggleBreakpoint.of({ line: lineInfo.from, on: !isOn })
       });
@@ -129,6 +135,13 @@ export const breakpointGutter = gutter({
       }
       
       return true;
+    },
+    click(view, line, event) {
+      // click 이벤트도 차단
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      return true;
     }
   }
 });
@@ -141,10 +154,14 @@ export const breakpointTheme = EditorView.theme({
   '.cm-breakpoint-gutter': {
     width: '20px !important',
     cursor: 'pointer',
-    backgroundColor: '#f5f5f5'
+    backgroundColor: '#f5f5f5',
+    position: 'relative',
+    zIndex: '10'
   },
   '.cm-gutter': {
-    minWidth: '20px !important'
+    minWidth: '20px !important',
+    position: 'relative',
+    zIndex: '10'
   },
   '.cm-breakpoint': {
     color: '#999',

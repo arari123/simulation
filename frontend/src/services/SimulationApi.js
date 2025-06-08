@@ -276,6 +276,49 @@ export class SimulationApi {
       throw error
     }
   }
+
+  /**
+   * 실행 모드 설정
+   */
+  static async setExecutionMode(mode, config = {}) {
+    try {
+      const response = await fetch(`${API_BASE}/simulation/execution-mode`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ mode, config })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || `Failed to set execution mode`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('[SimulationApi] 실행 모드 설정 실패:', error)
+      throw error
+    }
+  }
+
+  /**
+   * 현재 실행 모드 조회
+   */
+  static async getExecutionMode() {
+    try {
+      const response = await fetch(`${API_BASE}/simulation/execution-mode`)
+
+      if (!response.ok) {
+        throw new Error(`실행 모드 조회 실패: ${response.status}`)
+      }
+
+      return await response.json()
+    } catch (error) {
+      console.error('[SimulationApi] 실행 모드 조회 실패:', error)
+      throw error
+    }
+  }
 }
 
 export default SimulationApi 

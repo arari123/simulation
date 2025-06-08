@@ -1,6 +1,6 @@
 <template>
-  <div v-if="show" class="script-editor-overlay" @click="closeEditor">
-    <div class="script-editor" @click.stop>
+  <div v-if="show" class="script-editor-overlay" @mousedown.self="closeEditor">
+    <div class="script-editor" @mousedown.stop @click.stop>
       <div class="script-editor-header">
         <h3>📝 스크립트 편집기 V2</h3>
         <!-- 디버깅 정보 -->
@@ -109,7 +109,6 @@ function applyScript() {
 
 // 브레이크포인트 변경 핸들러
 function handleBreakpointChange(lineNumber, isOn) {
-  
   if (!props.currentBlock?.id) {
     console.error('No block ID available for breakpoint!')
     return
@@ -117,6 +116,7 @@ function handleBreakpointChange(lineNumber, isOn) {
   
   emit('breakpointChange', props.currentBlock.id, lineNumber, isOn)
 }
+
 
 function createEditor() {
   if (!editorWrapper.value) return

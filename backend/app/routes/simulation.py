@@ -9,7 +9,7 @@ import logging
 
 from ..models import (
     SimulationSetup, SimulationRunResult, SimulationStepResult, 
-    BatchStepRequest, BatchStepResult, EntityState
+    BatchStepRequest, BatchStepResult, EntityState, ExecutionModeRequest
 )
 # 새로운 단순 엔진 어댑터 사용
 from ..simple_engine_adapter import engine_adapter
@@ -276,3 +276,44 @@ def load_config_file(file_path: str):
     except Exception as e:
         logger.error(f"❌ 설정 파일 로드 오류: {e}")
         raise HTTPException(status_code=500, detail=f"설정 파일 로드 오류: {str(e)}")
+
+# 실행 모드 관련 API
+@router.post("/execution-mode")
+async def set_execution_mode(request: ExecutionModeRequest):
+    """실행 모드 설정"""
+    try:
+        # 유효한 모드인지 확인
+        valid_modes = ["default", "time_step", "high_speed"]
+        if request.mode not in valid_modes:
+            raise HTTPException(status_code=400, detail=f"Invalid execution mode: {request.mode}")
+        
+        # 현재는 default만 허용
+        if request.mode != "default":
+            raise HTTPException(status_code=501, detail=f"Mode '{request.mode}' is not implemented yet")
+        
+        # 엔진 어댑터에 모드 설정
+        engine_adapter.set_execution_mode(request.mode, request.config)
+        
+        logger.info(f"✅ 실행 모드 설정: {request.mode}")
+        return {"success": True, "mode": request.mode}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ 실행 모드 설정 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"실행 모드 설정 오류: {str(e)}")
+
+@router.get("/execution-mode")
+async def get_execution_mode():
+    """현재 실행 모드 조회"""
+    try:
+        mode = engine_adapter.get_execution_mode()
+        config = engine_adapter.get_mode_config()
+        
+        return {
+            "mode": mode,
+            "config": config
+        }
+    except Exception as e:
+        logger.error(f"❌ 실행 모드 조회 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"실행 모드 조회 오류: {str(e)}")

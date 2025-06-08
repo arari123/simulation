@@ -5,6 +5,17 @@
     </button>
     <div v-show="!isMinimized" class="panel-content">
       <h3>제어판</h3>
+      
+      <!-- 실행 모드 선택 -->
+      <div class="execution-mode-selector">
+        <label>실행 모드:</label>
+        <select v-model="selectedExecutionMode" @change="changeExecutionMode" :disabled="isRunning">
+          <option value="default">기본 모드 (엔티티 이벤트)</option>
+          <option value="time_step" disabled>시간 스텝 모드 (준비중)</option>
+          <option value="high_speed" disabled>고속 진행 모드 (준비중)</option>
+        </select>
+      </div>
+      
       <div>배출된 제품: {{ currentDispatchedProducts }} 개</div>
       <div>진행 시간: {{ currentProcessTime.toFixed(1) }} 초</div>
       <div>실행된 스텝 수: {{ currentStepCount }} 회</div>
@@ -166,6 +177,10 @@ const executionMode = ref("quantity") // 실행 모드 선택 (quantity 또는 t
 
 const isMinimized = ref(false)
 const panelWidth = computed(() => (isMinimized.value ? '50px' : '300px'))
+
+// 실행 모드 관련
+const selectedExecutionMode = ref('default')
+const isRunning = computed(() => props.isFullExecutionRunning)
 
 // 브레이크포인트가 있는지 확인하는 computed
 const hasBreakpoints = computed(() => {
@@ -404,6 +419,29 @@ function toggleGlobalSignalPanel() {
     emit('toggle-global-signal-panel');
 }
 
+// 실행 모드 관련 함수들
+import SimulationApi from '../services/SimulationApi'
+
+async function changeExecutionMode() {
+  try {
+    await SimulationApi.setExecutionMode(selectedExecutionMode.value)
+  } catch (error) {
+    alert(error.message)
+    // 실패 시 원래 모드로 복원
+    selectedExecutionMode.value = 'default'
+  }
+}
+
+// 컴포넌트 마운트 시 현재 모드 조회
+onMounted(async () => {
+  try {
+    const { mode } = await SimulationApi.getExecutionMode()
+    selectedExecutionMode.value = mode
+  } catch (error) {
+    console.error('Failed to get execution mode:', error)
+  }
+})
+
 </script>
 
 <style scoped>
@@ -602,6 +640,34 @@ function toggleGlobalSignalPanel() {
 .option-input:disabled {
   background-color: #f5f5f5;
   color: #999;
+}
+
+/* 실행 모드 선택 스타일 */
+.execution-mode-selector {
+  margin-bottom: 15px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+}
+
+.execution-mode-selector label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.execution-mode-selector select {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  font-size: 14px;
+}
+
+.execution-mode-selector select:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
 }
 
 .popup-overlay {

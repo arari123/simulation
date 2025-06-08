@@ -114,11 +114,8 @@
         <h4>액션 목록</h4>
         <div class="header-buttons">
           <button 
-            @click="openScriptEditor" 
             @click.stop="openScriptEditor"
-            @mousedown="openScriptEditor"
             class="script-editor-btn"
-            style="position: relative; z-index: 100;"
           >
             📝 스크립트 편집기
           </button>
@@ -459,12 +456,16 @@ function openScriptEditor() {
   const scriptAction = editableActions.value.find(action => action.type === 'script')
   if (scriptAction && scriptAction.parameters?.script) {
     scriptContent.value = scriptAction.parameters.script
-    // 브레이크포인트 정보도 복원
-    currentBreakpoints.value = scriptAction.parameters?.breakpoints || []
+    // 브레이크포인트 정보도 복원 - 이미 저장된 브레이크포인트가 있으면 그것을 사용
+    if (currentBreakpoints.value.length > 0) {
+      // 이미 브레이크포인트가 설정되어 있으면 유지
+    } else {
+      currentBreakpoints.value = scriptAction.parameters?.breakpoints || []
+    }
   } else {
     // 현재 액션들을 스크립트로 변환하여 편집기에 표시
     scriptContent.value = generatedScript.value
-    currentBreakpoints.value = []
+    // 브레이크포인트는 이미 설정된 것이 있으면 유지
   }
   
   // DOM 업데이트 후 스크립트 편집기 열기
@@ -475,7 +476,8 @@ function openScriptEditor() {
 
 function closeScriptEditor() {
   showScriptEditor.value = false
-  scriptContent.value = ''
+  // scriptContent는 유지하고 showScriptEditor만 false로 설정
+  // 브레이크포인트 정보도 유지됨
 }
 
 function handleScriptApply(parsedActions, scriptText, breakpoints) {
@@ -501,7 +503,22 @@ function handleScriptApply(parsedActions, scriptText, breakpoints) {
 
 // 브레이크포인트 변경 핸들러
 function handleBreakpointChange(blockId, lineNumber, isOn) {
-  emit('breakpointChange', blockId, lineNumber, isOn)
+  // 현재 브레이크포인트 상태 업데이트
+  if (isOn) {
+    if (!currentBreakpoints.value.includes(lineNumber)) {
+      currentBreakpoints.value.push(lineNumber)
+    }
+  } else {
+    const index = currentBreakpoints.value.indexOf(lineNumber)
+    if (index > -1) {
+      currentBreakpoints.value.splice(index, 1)
+    }
+  }
+  
+  // 이벤트 전파를 막기 위해 nextTick 사용
+  nextTick(() => {
+    emit('breakpointChange', blockId, lineNumber, isOn)
+  })
 }
 
 // 커넥터 관리 함수들

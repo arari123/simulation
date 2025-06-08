@@ -80,7 +80,7 @@
         <!-- 블록 설정 팝업 -->
         <template v-if="showBlockSettingsPopup && selectedBlockData">
           <BlockSettingsPopup 
-            :key="`block-${selectedBlockData.id}-${blockBreakpointsForSelectedBlock.length}`"
+            :key="`block-${selectedBlockData.id}`"
             :block-data="selectedBlockData" 
             :all-signals="getAllSignalNamesFromBlocks(blocks)"
             :all-blocks="blocks"

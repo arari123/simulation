@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
 # Models are currently defined in main.py for simplicity.
@@ -93,6 +93,10 @@ class BatchStepResult(BaseModel): # 배치 스텝 결과 모델
     current_time: float
     active_entities: List[EntityState] = []
     total_entities_processed: int
+
+class ExecutionModeRequest(BaseModel):
+    mode: str = Field(default="default", description="실행 모드: default, time_step, high_speed")
+    config: dict = Field(default_factory=dict, description="모드별 설정")
 
 # Example: If Action, ProcessBlockConfig, etc., were moved here:
 # class Action(BaseModel):

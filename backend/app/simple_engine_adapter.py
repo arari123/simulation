@@ -21,6 +21,9 @@ class SimpleEngineAdapter:
         self.step_counter = 0
         # 글로벌 디버그 매니저 생성
         self.global_debug_manager = DebugManager()
+        # 실행 모드 관련 속성
+        self.execution_mode = "default"
+        self.mode_config = {}
     
     def has_engine(self) -> bool:
         """엔진이 초기화되었는지 확인"""
@@ -236,6 +239,24 @@ class SimpleEngineAdapter:
     def get_simulation_status(self) -> Dict[str, Any]:
         """시뮬레이션 상태 조회"""
         return self.engine.get_simulation_status()
+    
+    def set_execution_mode(self, mode: str, config: dict = None):
+        """실행 모드 설정"""
+        self.execution_mode = mode
+        self.mode_config = config or {}
+        
+        # 엔진이 있으면 모드 설정 적용
+        if self.has_engine():
+            # 향후 엔진에 모드 적용 로직 추가
+            pass
+    
+    def get_execution_mode(self) -> str:
+        """현재 실행 모드 반환"""
+        return self.execution_mode
+    
+    def get_mode_config(self) -> dict:
+        """현재 모드 설정 반환"""
+        return self.mode_config
 
 # 전역 어댑터 인스턴스
 engine_adapter = SimpleEngineAdapter()
