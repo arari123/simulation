@@ -372,7 +372,7 @@ class SimpleSimulationEngine:
             }
     
     def step_simulation_high_speed(self) -> Dict[str, Any]:
-        """고속 모드 시뮬레이션 실행 - 큰 시간 스텝으로 종료 조건까지 실행"""
+        """고속 모드 시뮬레이션 실행 - 종료 조건까지 실행"""
         if not self.env:
             return {'error': 'Simulation not initialized'}
         
@@ -383,11 +383,10 @@ class SimpleSimulationEngine:
         
         # 고속 모드 설정 가져오기
         config = self.high_speed_config
-        large_time_step = config.get('large_time_step', 9000000)  # 기본 9백만초 (매우 큰 값)
         target_entity_count = config.get('target_entity_count', None)
         target_simulation_time = config.get('target_simulation_time', None)
         
-        logger.info(f"High speed mode execution START: mode={self.execution_mode}, large_time_step={large_time_step}, target_entity_count={target_entity_count}, target_time={target_simulation_time}")
+        logger.info(f"High speed mode execution START: mode={self.execution_mode}, target_entity_count={target_entity_count}, target_time={target_simulation_time}")
         
         try:
             # 시작 상태 저장
@@ -419,26 +418,53 @@ class SimpleSimulationEngine:
                 result['time_advanced'] = 0
                 return result
             
-            # 큰 시간 스텝으로 실행
-            target_time = start_time + large_time_step
-            
             # 디버그 매니저가 방금 재개되었는지 확인
             if self.debug_manager and getattr(self.debug_manager, 'just_resumed', False):
                 self.debug_manager.just_resumed = False
             
             # 종료 조건이 만족될 때까지 실행
-            max_iterations = 10000  # 무한 루프 방지 (더 큰 값으로 설정)
+            max_iterations = 50000  # 무한 루프 방지
             iteration_count = 0
             
-            logger.info(f"High speed mode: Starting loop. Initial entities={start_entities_processed}, iterations={max_iterations}")
+            logger.info(f"High speed mode: Starting execution until target is reached")
             
             while iteration_count < max_iterations:
                 iteration_count += 1
                 
-                # 종료 조건 체크
+                # 종료 조건 체크 (매 스텝마다)
                 should_terminate, termination_reason = check_termination_conditions()
                 if should_terminate:
                     logger.info(f"High speed mode termination: {termination_reason}")
+                    
+                    # 목표 달성 시 시스템에 남은 엔티티들만 처리
+                    if target_entity_count:
+                        # 시스템의 현재 상태 확인
+                        total_in_system = self._get_total_entity_count()
+                        logger.info(f"Target reached. Entities still in system: {total_in_system}")
+                        
+                        # 남은 엔티티들이 모두 배출될 때까지 계속 실행
+                        extra_iterations = 0
+                        while total_in_system > 0 and extra_iterations < 5000:
+                            extra_iterations += 1
+                            
+                            # 다음 이벤트가 없으면 종료
+                            if self.env.peek() >= float('inf'):
+                                logger.info("No more events, stopping")
+                                break
+                            
+                            # 한 이벤트씩 실행
+                            self.env.step()
+                            
+                            # 시스템에 남은 엔티티 재확인
+                            total_in_system = self._get_total_entity_count()
+                            
+                            # 목표를 초과하지 않도록 확인
+                            current_processed = self._get_total_entities_processed()
+                            if current_processed > target_entity_count:
+                                logger.warning(f"Processed count ({current_processed}) exceeded target ({target_entity_count})")
+                                break
+                        
+                        logger.info(f"Cleanup completed. Extra iterations: {extra_iterations}, final entities in system: {total_in_system}")
                     break
                 
                 # 디버그 매니저가 일시정지 상태인지 확인
@@ -446,38 +472,13 @@ class SimpleSimulationEngine:
                     logger.info(f"High speed mode paused at breakpoint at time {self.env.now}")
                     break
                 
-                # 다음 이벤트가 없으면 목표 시간까지 진행
+                # 다음 이벤트가 없으면 종료
                 if self.env.peek() >= float('inf'):
-                    logger.info(f"High speed mode: No more events. Current time={self.env.now:.1f}")
-                    # 이벤트가 없으면 목표 시간까지 즉시 진행
-                    if target_simulation_time and self.env.now < target_simulation_time:
-                        self.env.run(until=target_simulation_time)
-                    else:
-                        self.env.run(until=target_time)
-                    logger.info(f"High speed mode: No events - breaking loop at time {self.env.now:.1f}")
-                    break
-                
-                # 다음 이벤트가 목표 시간을 초과하면 목표 시간까지만 진행
-                next_event_time = self.env.peek()
-                
-                # 종료 조건에 따른 실행 제한
-                effective_target_time = target_time
-                if target_simulation_time and target_simulation_time < effective_target_time:
-                    effective_target_time = target_simulation_time
-                
-                if next_event_time > effective_target_time:
-                    self.env.run(until=effective_target_time)
+                    logger.info(f"High speed mode: No more events at time {self.env.now:.1f}")
                     break
                 
                 # 다음 이벤트 실행
                 self.env.step()
-                
-                # 매 100번의 반복마다 종료 조건 다시 확인
-                if iteration_count % 100 == 0:
-                    should_terminate, termination_reason = check_termination_conditions()
-                    if should_terminate:
-                        logger.info(f"High speed mode termination (periodic check): {termination_reason}")
-                        break
             
             self.step_count += 1
             
@@ -487,36 +488,6 @@ class SimpleSimulationEngine:
             # 최종 종료 조건 체크
             should_terminate, termination_reason = check_termination_conditions()
             
-            # 종료 조건이 만족되었더라도 시스템에 엔티티가 남아있으면 추가 실행
-            if should_terminate and target_entity_count:
-                # 시스템에 남은 엔티티 확인
-                total_in_system = self._get_total_entity_count()
-                if total_in_system > 0:
-                    logger.info(f"High speed mode: Target reached but {total_in_system} entities still in system, continuing...")
-                    
-                    # 남은 엔티티가 모두 처리될 때까지 계속 실행
-                    extra_iterations = 0
-                    max_extra_iterations = 10000
-                    
-                    while total_in_system > 0 and extra_iterations < max_extra_iterations:
-                        extra_iterations += 1
-                        
-                        # 다음 이벤트가 없으면 종료
-                        if self.env.peek() >= float('inf'):
-                            logger.info("High speed mode: No more events, stopping extra execution")
-                            break
-                        
-                        # 다음 이벤트 실행
-                        self.env.step()
-                        
-                        # 시스템에 남은 엔티티 재확인
-                        total_in_system = self._get_total_entity_count()
-                        
-                        # 주기적으로 상태 확인
-                        if extra_iterations % 100 == 0:
-                            logger.debug(f"Extra iterations: {extra_iterations}, entities in system: {total_in_system}")
-                    
-                    logger.info(f"High speed mode: Extra iterations completed: {extra_iterations}, final entities in system: {total_in_system}")
             
             # 결과 수집
             result = self._collect_simulation_results()
