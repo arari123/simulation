@@ -129,7 +129,7 @@ export function useSimulation() {
   /**
    * 배치 스텝 실행
    */
-  async function executeBatchSteps(setupData, stepCount = 10) {
+  async function executeBatchSteps(stepCount = 5, updateBlockWarnings, updateLogs) {
     try {
       // 현재 상태를 히스토리에 저장
       if (!isFirstStep.value) {
@@ -139,14 +139,25 @@ export function useSimulation() {
       // 🚀 성능 모니터링과 함께 API 호출
       const result = await performanceMonitor.measureApiCall(
         `batchStepSimulation-${stepCount}`,
-        SimulationApi.batchStepSimulation,
-        setupData,
-        stepCount
+        () => SimulationApi.batchStepSimulation(stepCount)
       )
       
-      // 결과 처리 - 백엔드에서는 BatchStepResult 모델을 반환하므로 success 편드가 없음
+      // 결과 처리 - 백엔드에서는 BatchStepResult 모델을 반환하므로 success 필드가 없음
       if (result && typeof result === 'object') {
-        updateSimulationState(result)
+        // 중간 상태들이 있으면 순차적으로 업데이트
+        if (result.step_results && result.step_results.length > 0) {
+          for (const stepResult of result.step_results) {
+            // 각 스텝의 상태를 업데이트
+            updateSimulationState(stepResult, updateBlockWarnings, updateLogs)
+            
+            // UI 업데이트를 위한 대기
+            await new Promise(resolve => requestAnimationFrame(resolve))
+          }
+        } else {
+          // 최종 상태만 업데이트
+          updateSimulationState(result, updateBlockWarnings, updateLogs)
+        }
+        
         isFirstStep.value = false
         return { success: true, result }
       } else {
@@ -214,62 +225,85 @@ export function useSimulation() {
   }
 
   /**
-   * 스텝 기반 전체 실행 시작
+   * 스텝 기반 전체 실행 시작 (배치 실행 사용)
    */
   async function startStepBasedExecution(setupData, onStepComplete, options = {}, updateBlockWarnings, updateLogs) {
     isFullExecutionRunning.value = true
     shouldStopFullExecution.value = false
     
     try {
-      let currentSetupData = setupData // 첫 번째 스텝에만 setupData 사용
+      let isFirstBatch = true // 첫 번째 배치에만 setupData 사용
       let initialDispatchedProducts = dispatchedProductsFromSim.value // 시작 시점의 배출 제품 수
       
+      // 배치 크기 결정 (실행 모드에 따라)
+      const batchSize = options.mode === 'time_step' ? 10 : 5
+      
       while (!isSimulationEnded.value && !shouldStopFullExecution.value) {
-        const result = await executeStep(currentSetupData, updateBlockWarnings, updateLogs)
-        
-        if (!result.success) {
-          console.error('[useSimulation] 스텝 실행 실패, 전체 실행 중단:', result.error)
-          break
-        }
-        
-        // 첫 번째 스텝 이후에는 null 사용
-        currentSetupData = null
-        
-        // 브레이크포인트에서 멈췄는지 확인
-        if (result.result && result.result.debug_info && result.result.debug_info.is_paused) {
-          // 브레이크포인트에서 멈춤 감지, 전체 실행 일시정지
-          shouldStopFullExecution.value = true
-          // 일시정지 상태를 유지하되 전체 실행 상태는 true로 유지
-          isFullExecutionRunning.value = false
+        // 첫 번째 배치면 단일 스텝 실행 (setup 포함)
+        if (isFirstBatch && setupData) {
+          const result = await executeStep(setupData, updateBlockWarnings, updateLogs)
           
-          // 브레이크포인트에서 멈춘 경우에도 콜백 호출하여 디버그 상태 업데이트
+          if (!result.success) {
+            console.error('[useSimulation] 첫 스텝 실행 실패, 전체 실행 중단:', result.error)
+            break
+          }
+          
+          isFirstBatch = false
+          
+          // 브레이크포인트 확인
+          if (result.result && result.result.debug_info && result.result.debug_info.is_paused) {
+            shouldStopFullExecution.value = true
+            isFullExecutionRunning.value = false
+            if (onStepComplete) {
+              onStepComplete(result.result)
+            }
+            break
+          }
+          
+          // 콜백 호출
           if (onStepComplete) {
             onStepComplete(result.result)
           }
+        } else {
+          // 배치 스텝 실행
+          const result = await executeBatchSteps(batchSize, updateBlockWarnings, updateLogs)
           
-          break
-        }
-        
-        // 스텝 완료 콜백 호출
-        if (onStepComplete) {
-          onStepComplete(result.result)
-        }
-        
-        // 투입 수량 기반 정지 조건 확인
-        if (options.mode === 'quantity' && options.value) {
-          const processedCount = dispatchedProductsFromSim.value - initialDispatchedProducts
-          if (processedCount >= options.value) {
-            shouldStopFullExecution.value = true
+          if (!result.success) {
+            console.error('[useSimulation] 배치 스텝 실행 실패, 전체 실행 중단:', result.error)
             break
+          }
+          
+          // 배치 결과의 각 스텝에 대해 콜백 호출
+          if (result.result && result.result.step_results) {
+            for (const stepResult of result.result.step_results) {
+              // 브레이크포인트 확인
+              if (stepResult.debug_info && stepResult.debug_info.is_paused) {
+                shouldStopFullExecution.value = true
+                isFullExecutionRunning.value = false
+                if (onStepComplete) {
+                  onStepComplete(stepResult)
+                }
+                return // 배치 실행 중 브레이크포인트 발견 시 즉시 종료
+              }
+              
+              // 콜백 호출
+              if (onStepComplete) {
+                onStepComplete(stepResult)
+              }
+              
+              // 정지 조건 확인
+              if (options.mode === 'quantity' && options.value) {
+                const processedCount = dispatchedProductsFromSim.value - initialDispatchedProducts
+                if (processedCount >= options.value) {
+                  shouldStopFullExecution.value = true
+                  return
+                }
+              }
+            }
           }
         }
         
-        // 시간 기반 정지 조건 확인 (향후 구현)
-        if (options.mode === 'time' && options.value) {
-          // TODO: 시간 기반 정지 로직 구현
-        }
-        
-        // UI 업데이트를 위한 최소 대기 (60fps)
+        // UI 업데이트를 위한 최소 대기
         await new Promise(resolve => requestAnimationFrame(resolve))
       }
     } catch (error) {

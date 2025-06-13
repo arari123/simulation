@@ -68,6 +68,10 @@ const zoomFactor = 1.1;
 
 const entityTextGroup = ref(null);
 
+// RAF 최적화를 위한 변수
+let drawScheduled = false;
+let gridDrawScheduled = false;
+
 // 전역 엔티티 ID -> 번호 매핑
 const globalEntityIdToNumber = new Map();
 let globalNextEntityNumber = 1;
@@ -158,10 +162,18 @@ function initKonva() {
 // 성능 최적화: 부분 렌더링을 위한 상태 관리
 const blockNodes = ref(new Map())
 const connectionNodes = ref(new Map())
+const entityNodes = ref(new Map())
 const dirtyFlags = ref({
-  blocks: true,
-  connections: true,
-  entities: true
+  blocks: new Set(), // 변경된 블록 ID들
+  connections: new Set(), // 변경된 연결 ID들
+  entities: new Set(), // 변경된 엔티티 ID들
+  all: false // 전체 다시 그리기 필요 여부
+})
+
+// 이전 상태 저장 (변경 감지용)
+const previousStates = ref({
+  blocks: new Map(),
+  entities: new Map()
 })
 
 // 드래그 중인 커넥터의 임시 위치 저장
@@ -180,30 +192,155 @@ function drawCanvasContent() {
     entityTextGroup.value.moveToTop();
   }
 
-  // 블록이 변경된 경우 또는 엔티티가 변경된 경우 업데이트
-  if (dirtyFlags.value.blocks || dirtyFlags.value.entities) {
+  // 전체 다시 그리기가 필요한 경우
+  if (dirtyFlags.value.all) {
     updateBlocks();
-    // 엔티티 업데이트 추가
     updateEntities();
-    dirtyFlags.value.blocks = false;
-    dirtyFlags.value.entities = false;
-  }
-  
-  // 연결이 변경된 경우만 업데이트
-  if (dirtyFlags.value.connections) {
     updateConnections();
-    dirtyFlags.value.connections = false;
+    dirtyFlags.value.all = false;
+    dirtyFlags.value.blocks.clear();
+    dirtyFlags.value.entities.clear();
+    dirtyFlags.value.connections.clear();
+  } else {
+    // 변경된 블록만 업데이트
+    if (dirtyFlags.value.blocks.size > 0) {
+      dirtyFlags.value.blocks.forEach(blockId => {
+        const blockData = props.blocks.find(b => String(b.id) === String(blockId));
+        if (blockData) {
+          updateSingleBlock(blockData);
+        }
+      });
+      dirtyFlags.value.blocks.clear();
+    }
+    
+    // 변경된 엔티티만 업데이트
+    if (dirtyFlags.value.entities.size > 0) {
+      updateEntities(); // TODO: 개별 엔티티 업데이트로 최적화
+      dirtyFlags.value.entities.clear();
+    }
+    
+    // 변경된 연결만 업데이트
+    if (dirtyFlags.value.connections.size > 0) {
+      updateConnections(); // TODO: 개별 연결 업데이트로 최적화
+      dirtyFlags.value.connections.clear();
+    }
   }
   
   if (props.blocks.length === 0) {
-    layer.draw();
+    scheduleLayerDraw();
     return;
   }
   
   // 레이어 순서 재정렬: 연결선 -> 블록 -> 엔티티
   ensureLayerOrder();
   
-  layer.draw();
+  // RAF를 사용한 배치 드로우
+  scheduleLayerDraw();
+}
+
+// RequestAnimationFrame을 사용한 레이어 드로우 스케줄링
+function scheduleLayerDraw() {
+  if (!drawScheduled && layer) {
+    drawScheduled = true;
+    requestAnimationFrame(() => {
+      if (layer) {
+        layer.draw();
+      }
+      drawScheduled = false;
+    });
+  }
+}
+
+// RequestAnimationFrame을 사용한 그리드 드로우 스케줄링
+function scheduleGridDraw() {
+  if (!gridDrawScheduled && gridLayer) {
+    gridDrawScheduled = true;
+    requestAnimationFrame(() => {
+      if (gridLayer) {
+        gridLayer.draw();
+      }
+      gridDrawScheduled = false;
+    });
+  }
+}
+
+// 변경 감지 및 더티 플래그 설정
+function detectChanges() {
+  // 블록 변경 감지
+  props.blocks.forEach(block => {
+    const blockId = String(block.id);
+    const prevBlock = previousStates.value.blocks.get(blockId);
+    
+    if (!prevBlock || hasBlockChanged(prevBlock, block)) {
+      dirtyFlags.value.blocks.add(blockId);
+      // 블록 상태 저장
+      previousStates.value.blocks.set(blockId, {
+        ...block,
+        status: block.status,
+        totalProcessed: block.totalProcessed,
+        backgroundColor: block.backgroundColor,
+        textColor: block.textColor,
+        warnings: block.warnings ? [...block.warnings] : []
+      });
+    }
+  });
+  
+  // 제거된 블록 찾기
+  previousStates.value.blocks.forEach((prevBlock, blockId) => {
+    if (!props.blocks.find(b => String(b.id) === blockId)) {
+      dirtyFlags.value.blocks.add(blockId);
+      previousStates.value.blocks.delete(blockId);
+    }
+  });
+  
+  // 엔티티 변경 감지
+  const currentEntityMap = new Map();
+  props.activeEntityStates.forEach(entity => {
+    currentEntityMap.set(entity.id, entity);
+  });
+  
+  // 새로운 또는 변경된 엔티티
+  currentEntityMap.forEach((entity, entityId) => {
+    const prevEntity = previousStates.value.entities.get(entityId);
+    if (!prevEntity || hasEntityChanged(prevEntity, entity)) {
+      dirtyFlags.value.entities.add(entityId);
+      // 관련 블록도 더티로 표시
+      if (prevEntity && prevEntity.current_block_id !== entity.current_block_id) {
+        dirtyFlags.value.blocks.add(String(prevEntity.current_block_id));
+        dirtyFlags.value.blocks.add(String(entity.current_block_id));
+      }
+    }
+  });
+  
+  // 제거된 엔티티
+  previousStates.value.entities.forEach((prevEntity, entityId) => {
+    if (!currentEntityMap.has(entityId)) {
+      dirtyFlags.value.entities.add(entityId);
+      dirtyFlags.value.blocks.add(String(prevEntity.current_block_id));
+    }
+  });
+  
+  // 현재 상태 저장
+  previousStates.value.entities = currentEntityMap;
+}
+
+// 블록 변경 감지 헬퍼
+function hasBlockChanged(oldBlock, newBlock) {
+  return oldBlock.x !== newBlock.x ||
+         oldBlock.y !== newBlock.y ||
+         oldBlock.status !== newBlock.status ||
+         oldBlock.totalProcessed !== newBlock.totalProcessed ||
+         oldBlock.backgroundColor !== newBlock.backgroundColor ||
+         oldBlock.textColor !== newBlock.textColor ||
+         JSON.stringify(oldBlock.warnings) !== JSON.stringify(newBlock.warnings);
+}
+
+// 엔티티 변경 감지 헬퍼
+function hasEntityChanged(oldEntity, newEntity) {
+  return oldEntity.current_block_id !== newEntity.current_block_id ||
+         oldEntity.state !== newEntity.state ||
+         oldEntity.color !== newEntity.color ||
+         JSON.stringify(oldEntity.custom_attributes) !== JSON.stringify(newEntity.custom_attributes);
 }
 
 // 레이어 순서를 보장하는 함수
@@ -628,7 +765,7 @@ function addBlockContent(blockGroup, blockData) {
               
               // 연결선 실시간 업데이트
               updateConnectionsForBlock(blockData.id);
-              layer.batchDraw();
+              scheduleLayerDraw();
             }
           }
         };
@@ -786,7 +923,7 @@ function addBlockContent(blockGroup, blockData) {
           updateConnectionsForBlock(blockData.id);
           
           // 강제로 다시 그리기
-          layer.batchDraw();
+          scheduleLayerDraw();
           
           // props 업데이트 후 임시 위치 정리
           setTimeout(() => {
@@ -880,7 +1017,7 @@ function addBlockContent(blockGroup, blockData) {
           connectorCircle.perfectDrawEnabled(false); // 성능 향상
           
           // 레이어 다시 그리기 강제 실행
-          layer.batchDraw();
+          scheduleLayerDraw();
         }
       } else {
         // 선택되지 않은 커넥터는 그룹에 추가
@@ -1061,7 +1198,7 @@ function addBlockEventListeners(blockGroup, blockData) {
       if (!blockGroup._dragMoveThrottle) {
         blockGroup._dragMoveThrottle = setTimeout(() => {
           updateConnections();
-          layer.draw();
+          scheduleLayerDraw();
           blockGroup._dragMoveThrottle = null;
         }, 16); // 60fps
       }
@@ -1080,7 +1217,7 @@ function addBlockEventListeners(blockGroup, blockData) {
     // 드래그 종료 후 연결선 업데이트
     setTimeout(() => {
       updateConnections();
-      layer.draw();
+      scheduleLayerDraw();
     }, 10);
     
     // 드래그 상태 즉시 리셋 (setTimeout 제거)
@@ -1146,7 +1283,7 @@ function addBlockEventListeners(blockGroup, blockData) {
       
       blockGroup.add(tooltip);
       errorTooltip = tooltip;
-      layer.draw();
+      scheduleLayerDraw();
     }
   });
   
@@ -1154,7 +1291,7 @@ function addBlockEventListeners(blockGroup, blockData) {
     if (errorTooltip) {
       errorTooltip.destroy();
       errorTooltip = null;
-      layer.draw();
+      scheduleLayerDraw();
     }
   });
 }
@@ -1237,7 +1374,7 @@ function updateConnectionsForBlock(blockId) {
     }
   });
   
-  layer.batchDraw();
+  scheduleLayerDraw();
 }
 
 function updateConnections() {
@@ -1638,7 +1775,7 @@ function updateEntities() {
   }
   
   // Force redraw after updating entities
-  layer.draw();
+  scheduleLayerDraw();
 }
 
 function drawGrid() {
@@ -1670,7 +1807,7 @@ function drawGrid() {
     });
     gridLayer.add(line);
   }
-  gridLayer.batchDraw();
+  scheduleGridDraw();
 }
 
 function zoom(scaleMultiplier) {
@@ -1879,30 +2016,35 @@ watch(() => props.currentSettings.fontSize, () => {
 // 성능 최적화된 watch - 분리된 감시
 watch(() => props.blocks, (newBlocks, oldBlocks) => {
   
-  // 블록 위치가 변경되었는지 확인
-  let positionChanged = false;
-  if (oldBlocks && newBlocks.length === oldBlocks.length) {
-    for (let i = 0; i < newBlocks.length; i++) {
-      const newBlock = newBlocks[i];
-      const oldBlock = oldBlocks.find(b => b.id === newBlock.id);
-      if (oldBlock && (oldBlock.x !== newBlock.x || oldBlock.y !== newBlock.y)) {
-        positionChanged = true;
-        break;
+  if (stage) {
+    // 최초 로드 또는 블록이 없다가 생긴 경우
+    const isInitialLoad = !oldBlocks || oldBlocks.length === 0;
+    
+    if (isInitialLoad) {
+      // 초기 로드 시 전체 다시 그리기
+      dirtyFlags.value.all = true;
+    } else {
+      // 변경 감지 실행
+      detectChanges();
+      
+      // 위치 변경이 있으면 연결선도 업데이트 필요
+      let positionChanged = false;
+      dirtyFlags.value.blocks.forEach(blockId => {
+        const newBlock = newBlocks.find(b => String(b.id) === blockId);
+        const oldBlock = oldBlocks?.find(b => String(b.id) === blockId);
+        if (oldBlock && newBlock && (oldBlock.x !== newBlock.x || oldBlock.y !== newBlock.y)) {
+          positionChanged = true;
+        }
+      });
+      
+      if (positionChanged) {
+        dirtyFlags.value.connections.add('all'); // 모든 연결 업데이트
       }
     }
-  }
-  
-  dirtyFlags.value.blocks = true;
-  if (positionChanged) {
-    dirtyFlags.value.connections = true;
-  }
-  
-  if (stage) {
-    drawCanvasContent();
-    drawGrid();
     
-    // 최초 로드 시에만 뷰 조정 (블록 개수가 증가한 경우)
-    const isInitialLoad = !oldBlocks || oldBlocks.length === 0;
+    drawCanvasContent();
+    
+    // 최초 로드 시에만 뷰 조정
     if (isInitialLoad && props.blocks.length > 0) {
       setTimeout(() => {
         centerViewOnBlocks();
@@ -1912,17 +2054,17 @@ watch(() => props.blocks, (newBlocks, oldBlocks) => {
 }, { deep: true, flush: 'post' });
 
 watch(() => props.connections, () => {
-  dirtyFlags.value.connections = true;
   if (stage) {
+    // 모든 연결 업데이트 필요
+    dirtyFlags.value.connections.add('all');
     drawCanvasContent();
-    drawGrid();
   }
 }, { deep: true, flush: 'post' });
 
 watch(() => props.currentSettings, () => {
-  dirtyFlags.value.blocks = true;
-  dirtyFlags.value.connections = true;
   if (stage) {
+    // 설정 변경 시 전체 다시 그리기
+    dirtyFlags.value.all = true;
     drawCanvasContent();
     drawGrid();
   }
@@ -1936,8 +2078,9 @@ watch(() => props.activeEntityStates, () => {
     globalNextEntityNumber = 1;
   }
   
-  dirtyFlags.value.entities = true;
   if (stage && layer) {
+    // 변경 감지 실행
+    detectChanges();
     drawCanvasContent();
   }
 }, { deep: true });
@@ -1959,7 +2102,7 @@ function cleanupSelectedConnectors() {
     }
   });
   
-  layer.batchDraw();
+  scheduleLayerDraw();
 }
 
 // 선택 상태 변경 시 즉시 화면 업데이트 - 더 빠른 반응을 위해 sync 플러시 사용
@@ -1973,8 +2116,8 @@ watch(() => [props.selectedBlockId, props.selectedConnectorInfo], ([newBlockId, 
       document.body.style.cursor = 'default';
     }
     
-    // 선택 상태만 변경되었으므로 블록 부분만 업데이트
-    dirtyFlags.value.blocks = true;
+    // 선택 상태만 변경되었으므로 모든 블록 업데이트
+    dirtyFlags.value.all = true;
     drawCanvasContent();
     
     // 커넥터가 선택된 경우 해당 블록 강제 업데이트
@@ -2023,6 +2166,11 @@ onMounted(() => {
       gridLayer.moveToBottom();
       drawGrid();
 
+      // 초기 블록이 있으면 전체 다시 그리기
+      if (props.blocks.length > 0) {
+        dirtyFlags.value.all = true;
+      }
+      
       drawCanvasContent();
       
       // 이벤트 리스너 추가

@@ -151,9 +151,10 @@ class SimpleEngineAdapter:
         return SimulationStepResult(**converted)
     
     def batch_step_simulation(self, steps: int) -> BatchStepResult:
-        """배치 스텝 실행"""
+        """배치 스텝 실행 - 중간 상태 포함"""
         logs = []
         final_result = None
+        step_results = []  # 각 스텝의 전체 결과 저장
         
         for i in range(steps):
             result = self.engine.step_simulation()
@@ -161,6 +162,10 @@ class SimpleEngineAdapter:
                 break
                 
             final_result = result
+            # 각 스텝의 전체 상태를 저장
+            converted = self.convert_simple_result_to_api_format(result)
+            step_results.append(converted)
+            
             logs.append({
                 'time': round(result.get('simulation_time', 0), 1),
                 'event': f"Batch step {i+1}: {result.get('total_entities_in_system', 0)} entities"
@@ -174,7 +179,8 @@ class SimpleEngineAdapter:
                 log=[],
                 current_time=0,
                 active_entities=[],
-                total_entities_processed=0
+                total_entities_processed=0,
+                step_results=[]  # 빈 결과
             )
         
         converted = self.convert_simple_result_to_api_format(final_result)
@@ -186,7 +192,8 @@ class SimpleEngineAdapter:
             log=logs,
             current_time=converted['time'],
             active_entities=converted['active_entities'],
-            total_entities_processed=converted['entities_processed_total']
+            total_entities_processed=converted['entities_processed_total'],
+            step_results=step_results  # 모든 중간 상태 포함
         )
     
     def run_simulation(self, max_steps: int = 100) -> SimulationRunResult:

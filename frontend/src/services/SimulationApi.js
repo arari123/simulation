@@ -186,7 +186,7 @@ export class SimulationApi {
   /**
    * 시뮬레이션 배치 스텝 실행
    */
-  static async batchStepSimulation(setupData, stepCount = 10) {
+  static async batchStepSimulation(steps = 5) {
     try {
       const response = await fetch(`${API_BASE}/simulation/batch-step`, {
         method: 'POST',
@@ -194,8 +194,7 @@ export class SimulationApi {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          ...setupData,
-          step_count: stepCount
+          steps: steps
         })
       })
 

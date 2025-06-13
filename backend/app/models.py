@@ -93,6 +93,7 @@ class BatchStepResult(BaseModel): # 배치 스텝 결과 모델
     current_time: float
     active_entities: List[EntityState] = []
     total_entities_processed: int
+    step_results: Optional[List[Dict[str, Any]]] = []  # 각 스텝의 전체 결과
 
 class ExecutionModeRequest(BaseModel):
     mode: str = Field(default="default", description="실행 모드: default, time_step, high_speed")
