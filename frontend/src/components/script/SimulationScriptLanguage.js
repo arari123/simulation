@@ -8,8 +8,8 @@ import { tags as t } from '@lezer/highlight'
 
 // 시뮬레이션 스크립트 키워드 정의
 const simulationKeywords = [
-  'delay', 'wait', 'if', 'go', 'to', 'from', 'jump', 'log', 'product', 'type',
-  'and', 'or', 'true', 'false', 'create', 'entity', 'dispose', 'force', 'execution', 'int', 'status'
+  'delay', 'wait', 'if', 'elif', 'else', 'go', 'to', 'jump', 'log', 'product', 'type',
+  'and', 'or', 'true', 'false', 'create', 'dispose', 'force', 'execution', 'int', 'status', 'execute'
 ]
 
 // 연산자 정의
@@ -41,6 +41,11 @@ const simulationScriptParser = {
       return 'number'
     }
     
+    // product type(index) 패턴 처리
+    if (stream.match(/^product\s+type\s*\(\s*\d+\s*\)/)) {
+      return 'property'
+    }
+    
     // 연산자 처리
     for (const op of simulationOperators) {
       if (stream.match(op)) {
@@ -56,7 +61,7 @@ const simulationScriptParser = {
       // 키워드 확인
       if (simulationKeywords.includes(wordStr)) {
         // 특별한 키워드들에 대한 추가 분류
-        if (['delay', 'wait', 'if', 'go', 'jump', 'log', 'create', 'dispose', 'force', 'int'].includes(wordStr)) {
+        if (['delay', 'wait', 'if', 'elif', 'else', 'go', 'jump', 'log', 'create', 'dispose', 'force', 'int', 'execute'].includes(wordStr)) {
           return 'keyword'
         }
         if (['and', 'or'].includes(wordStr)) {
@@ -65,7 +70,7 @@ const simulationScriptParser = {
         if (['true', 'false'].includes(wordStr)) {
           return 'atom'
         }
-        if (['product', 'type', 'entity', 'execution', 'status'].includes(wordStr)) {
+        if (['product', 'type', 'execution', 'status'].includes(wordStr)) {
           return 'property'
         }
         return 'keyword'

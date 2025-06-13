@@ -1,0 +1,164 @@
+{
+  "blocks": [
+    {
+      "id": 1,
+      "name": "투입",
+      "x": 150,
+      "y": 410,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-1",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "force execution\ncreate product\nwait 공정1 load enable = true\n공정1 load enable = false\ngo R to 공정1.L(0,3)\nexecute 공정1",
+            "breakpoints": []
+          }
+        }
+      ],
+      "backgroundColor": "#cfdff7",
+      "textColor": "#000000",
+      "connectionPoints": [
+        {
+          "id": "1-conn-left",
+          "name": "L",
+          "x": 0,
+          "y": 50,
+          "position": "left",
+          "actions": []
+        },
+        {
+          "id": "1-conn-right",
+          "name": "R",
+          "x": 100,
+          "y": 50,
+          "position": "right",
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "공정1",
+      "x": 337,
+      "y": 411,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-2",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "delay 10-15\ngo R to 배출.L(0,3)\nlog \"엔티티가 배출로 이동 완료\"\n공정1 load enable = true",
+            "breakpoints": []
+          }
+        }
+      ],
+      "backgroundColor": "#cfdff7",
+      "textColor": "#000000",
+      "connectionPoints": [
+        {
+          "id": "2-conn-left",
+          "name": "L",
+          "x": 0,
+          "y": 50,
+          "position": "left",
+          "actions": []
+        },
+        {
+          "id": "2-conn-right",
+          "name": "R",
+          "x": 100,
+          "y": 50,
+          "position": "right",
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "배출",
+      "x": 523,
+      "y": 409,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-3",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "dispose product",
+            "breakpoints": []
+          }
+        }
+      ],
+      "backgroundColor": "#cfdff7",
+      "textColor": "#000000",
+      "connectionPoints": [
+        {
+          "id": "3-conn-left",
+          "name": "L",
+          "x": 0,
+          "y": 50,
+          "position": "left",
+          "actions": []
+        },
+        {
+          "id": "3-conn-right",
+          "name": "R",
+          "x": 100,
+          "y": 50,
+          "position": "right",
+          "actions": []
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from_block_id": "1",
+      "from_connector_id": "1-conn-right",
+      "to_block_id": "2",
+      "to_connector_id": "2-conn-left"
+    },
+    {
+      "from_block_id": "2",
+      "from_connector_id": "2-conn-right",
+      "to_block_id": "3",
+      "to_connector_id": "3-conn-left"
+    }
+  ],
+  "globalSignals": [
+    {
+      "id": "signal-1",
+      "name": "공정1 load enable",
+      "type": "boolean",
+      "value": true,
+      "initialValue": true
+    }
+  ],
+  "settings": {
+    "boxSize": 100,
+    "fontSize": 14,
+    "deadlockTimeout": 20,
+    "showEntityNames": true,
+    "showSignalNames": true,
+    "showSignalValues": true
+  },
+  "infoText": {
+    "content": "<h2>Go 명령 동기적 처리 테스트</h2><p>go 명령이 이동 완료까지 기다린 후 다음 명령을 실행하는지 테스트합니다.</p><p>공정1 스크립트에 log 명령을 추가하여 엔티티가 실제로 배출로 이동한 후 load enable이 설정되는지 확인합니다.</p>",
+    "style": {
+      "fontSize": 16,
+      "color": "#000000",
+      "fontWeight": "normal"
+    },
+    "isExpanded": true
+  }
+}

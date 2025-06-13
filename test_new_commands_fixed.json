@@ -1,0 +1,269 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "name": "투입",
+      "x": 100,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 2,
+      "script": "force execution\ncreate product\ncreate product\nproduct type(0) = red(red)\nproduct type(1) = blue(blue)\nlog \"첫 번째 엔티티: red, 두 번째 엔티티: blue\"\nready = true\ngo OUT to 분배.IN(1,2)\ngo OUT to 분배.IN(0,2)",
+      "actions": [
+        {
+          "id": "script-1",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "force execution\ncreate product\ncreate product\nproduct type(0) = red(red)\nproduct type(1) = blue(blue)\nlog \"첫 번째 엔티티: red, 두 번째 엔티티: blue\"\nready = true\ngo OUT to 분배.IN(1,2)\ngo OUT to 분배.IN(0,2)"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "1-out",
+          "name": "OUT",
+          "x": 100,
+          "y": 50,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "2",
+      "name": "분배",
+      "x": 300,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 2,
+      "script": "wait ready = true\nint count += 1\nlog \"분배 블록에 엔티티 {count}개 도착\"\nif product type(1) = blue\n    log \"blue 엔티티(인덱스 1)를 먼저 이동\"\n    go BLUE to Blue처리.IN(1,3)\ndelay 2\nif product type(0) = red\n    log \"red 엔티티(인덱스 0)를 이동\"\n    go RED to Red처리.IN(0,3)",
+      "actions": [
+        {
+          "id": "script-2",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "wait ready = true\nint count += 1\nlog \"분배 블록에 엔티티 {count}개 도착\"\nif product type(1) = blue\n    log \"blue 엔티티(인덱스 1)를 먼저 이동\"\n    go BLUE to Blue처리.IN(1,3)\ndelay 2\nif product type(0) = red\n    log \"red 엔티티(인덱스 0)를 이동\"\n    go RED to Red처리.IN(0,3)"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "2-in",
+          "name": "IN",
+          "x": 0,
+          "y": 50,
+          "actions": []
+        },
+        {
+          "id": "2-red",
+          "name": "RED",
+          "x": 100,
+          "y": 25,
+          "actions": []
+        },
+        {
+          "id": "2-blue",
+          "name": "BLUE",
+          "x": 100,
+          "y": 75,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "3",
+      "name": "Red처리",
+      "x": 500,
+      "y": 150,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "script": "log \"Red 엔티티 처리 중\"\ndelay 3\nlog \"Red 엔티티 처리 완료\"\ngo OUT to 배출.RED(0,1)",
+      "actions": [
+        {
+          "id": "script-3",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"Red 엔티티 처리 중\"\ndelay 3\nlog \"Red 엔티티 처리 완료\"\ngo OUT to 배출.RED(0,1)"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "3-in",
+          "name": "IN",
+          "x": 0,
+          "y": 50,
+          "actions": []
+        },
+        {
+          "id": "3-out",
+          "name": "OUT",
+          "x": 100,
+          "y": 50,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "4",
+      "name": "Blue처리",
+      "x": 500,
+      "y": 250,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "script": "log \"Blue 엔티티 처리 중\"\ndelay 3\nlog \"Blue 엔티티 처리 완료\"\ngo OUT to 배출.BLUE(0,1)",
+      "actions": [
+        {
+          "id": "script-4",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "log \"Blue 엔티티 처리 중\"\ndelay 3\nlog \"Blue 엔티티 처리 완료\"\ngo OUT to 배출.BLUE(0,1)"
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "4-in",
+          "name": "IN",
+          "x": 0,
+          "y": 50,
+          "actions": []
+        },
+        {
+          "id": "4-out",
+          "name": "OUT",
+          "x": 100,
+          "y": 50,
+          "actions": []
+        }
+      ]
+    },
+    {
+      "id": "5",
+      "name": "배출",
+      "x": 700,
+      "y": 200,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 10,
+      "script": "if product type = red\n    log \"Red 엔티티 배출 처리\"\nif product type = blue\n    log \"Blue 엔티티 배출 처리\"\ndispose product\nint disposed += 1\nlog \"총 배출: {disposed}개\"",
+      "actions": [
+        {
+          "id": "script-5",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "if product type = red\n    log \"Red 엔티티 배출 처리\"\nif product type = blue\n    log \"Blue 엔티티 배출 처리\"\ndispose product\nint disposed += 1\nlog \"총 배출: {disposed}개\""
+          }
+        }
+      ],
+      "connectionPoints": [
+        {
+          "id": "5-red",
+          "name": "RED",
+          "x": 0,
+          "y": 25,
+          "actions": []
+        },
+        {
+          "id": "5-blue",
+          "name": "BLUE",
+          "x": 0,
+          "y": 75,
+          "actions": []
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": 1000,
+      "from_block_id": "1",
+      "from_connector_id": "1-out",
+      "to_block_id": "2",
+      "to_connector_id": "2-in"
+    },
+    {
+      "id": 1001,
+      "from": {
+        "blockId": "1",
+        "connectionPointId": "1-out"
+      },
+      "to": {
+        "blockId": "2",
+        "connectionPointId": "2-in"
+      }
+    },
+    {
+      "id": 1002,
+      "from": {
+        "blockId": "2",
+        "connectionPointId": "2-red"
+      },
+      "to": {
+        "blockId": "3",
+        "connectionPointId": "3-in"
+      }
+    },
+    {
+      "id": 1003,
+      "from": {
+        "blockId": "2",
+        "connectionPointId": "2-blue"
+      },
+      "to": {
+        "blockId": "4",
+        "connectionPointId": "4-in"
+      }
+    },
+    {
+      "id": 1004,
+      "from": {
+        "blockId": "3",
+        "connectionPointId": "3-out"
+      },
+      "to": {
+        "blockId": "5",
+        "connectionPointId": "5-red"
+      }
+    },
+    {
+      "id": 1005,
+      "from": {
+        "blockId": "4",
+        "connectionPointId": "4-out"
+      },
+      "to": {
+        "blockId": "5",
+        "connectionPointId": "5-blue"
+      }
+    }
+  ],
+  "globalSignals": [
+    {
+      "name": "ready",
+      "type": "boolean",
+      "value": false
+    },
+    {
+      "name": "count",
+      "type": "integer", 
+      "value": 0
+    },
+    {
+      "name": "disposed",
+      "type": "integer",
+      "value": 0
+    }
+  ],
+  "settings": {
+    "simulationTime": 60,
+    "mode": "default"
+  }
+}

@@ -257,6 +257,11 @@ function updateSingleBlock(blockData) {
   const blockId = blockData.id.toString();
   let blockGroup = blockNodes.value.get(blockId);
   
+  // 디버그: totalProcessed 값 확인
+  if (blockData.totalProcessed !== undefined) {
+    // totalProcessed 값이 설정됨
+  }
+  
   if (!blockGroup) {
     // 새 블록 생성
     blockGroup = createBlockGroup(blockData);
@@ -425,20 +430,38 @@ function addBlockContent(blockGroup, blockData) {
     blockGroup.add(statusText);
   }
   
-  // 처리된 엔티티 수 표시 (disposed 포함) - 블록 밖 하단에 표시
+  // 처리된 엔티티 수 표시 - 블록 내부 하단에 표시하도록 변경
   if (blockData.totalProcessed !== undefined && blockData.totalProcessed > 0) {
+    // Block has totalProcessed value
     const blockHeight = blockData.height || props.currentSettings.boxSize;
+    const blockWidth = blockData.width || props.currentSettings.boxSize;
+    
+    // 배경 사각형 - 블록 내부 하단에 표시
+    const bgRect = new Konva.Rect({
+      x: 5,
+      y: blockHeight - 30,
+      width: blockWidth - 10,
+      height: 25,
+      fill: '#E8F5E9',
+      stroke: '#2E7D32',
+      strokeWidth: 1,
+      cornerRadius: 3
+    });
+    blockGroup.add(bgRect);
+    
     const processedText = new Konva.Text({
       text: `처리: ${blockData.totalProcessed}`,
-      fontSize: props.currentSettings.fontSize * 0.8, // 0.5에서 0.8로 증가
-      fill: '#2E7D32', // 녹색
+      fontSize: props.currentSettings.fontSize * 0.9,
+      fill: '#1B5E20', // 진한 녹색
       align: 'center',
-      width: blockData.width || props.currentSettings.boxSize,
-      x: 0,
-      y: blockHeight + 10, // 블록 하단 밖으로 이동
+      width: blockWidth - 10,
+      x: 5,
+      y: blockHeight - 25,
       fontStyle: 'bold'
     });
     blockGroup.add(processedText);
+    
+    // Added processed text display
   }
 
   // 경고 메시지 표시 (용량 초과 등)

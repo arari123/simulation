@@ -425,6 +425,12 @@ class SimpleSimulationEngine:
                 current_block_states = self._capture_block_states()
                 if self._check_entity_movement_between_states(initial_block_states, current_block_states):
                     movement_detected = True
+                    # 이동 감지 후 조금 더 실행하여 force execution 블록이 재시작할 기회를 줌
+                    for _ in range(10):
+                        if self.env.peek() < float('inf'):
+                            self.env.step()
+                        else:
+                            break
                     break
             
             # 이동이 없었다면 최소한 시간은 진행되었음을 보장
@@ -468,16 +474,19 @@ class SimpleSimulationEngine:
         total_processed = 0
         
         for block_id, block in self.blocks.items():
-            # dispose entity 명령으로 실제 배출된 엔티티만 카운트
+            # dispose entity 또는 dispose product 명령으로 실제 배출된 엔티티만 카운트
             if hasattr(block, 'script_lines'):
-                has_dispose = any('dispose entity' in line.strip() for line in block.script_lines)
+                has_dispose = any(
+                    'dispose entity' in line.strip() or 'dispose product' in line.strip() 
+                    for line in block.script_lines
+                )
                 if has_dispose:
                     status = block.get_status()
                     processed = status.get('total_processed', 0)
                     total_processed += processed
-                    # logger.debug(f"Block {block.name} (disposal block): processed={processed}")
+                    logger.debug(f"Block {block.name} (disposal block): processed={processed}")
         
-        # logger.debug(f"Total entities disposed: {total_processed}")
+        logger.debug(f"Total entities disposed: {total_processed}")
         
         return total_processed
     
@@ -550,12 +559,16 @@ class SimpleSimulationEngine:
         # 스크립트 로그 수집
         script_logs = self.collect_script_logs()
         
+        # 실제 dispose된 엔티티 수 계산
+        total_disposed = self._get_total_entities_processed()
+        logger.info(f"[_collect_simulation_results] Total disposed entities: {total_disposed}")
+        
         return {
             'block_states': block_states,
             'current_signals': signal_states,
             'globalSignals': global_signals,
             'total_entities_in_system': total_entities,
-            'total_entities_processed': self._get_total_entities_processed(),
+            'total_entities_processed': total_disposed,
             'blocks_info': [block.get_status() for block in self.blocks.values()],
             'event_queue_size': len(self.env._queue) if hasattr(self.env, '_queue') else 0,
             'script_logs': script_logs,

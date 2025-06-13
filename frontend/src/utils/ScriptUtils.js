@@ -69,7 +69,7 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
     }
     
     // 주석 제거 후 검증
-    const line = removeComment(originalLine)
+    const line = removeComment(originalLine).trim()  // trim 추가
     const lowerLine = line.toLowerCase()
     
     // 주석 제거 후 빈 줄이면 건너뛰기
@@ -118,6 +118,9 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
         }
       }
     }
+    else if (line.match(/^product\s+type\(\d+\)\s*=\s*.+$/)) {
+      // product type(index) = value 형식은 유효함
+    }
     else if (line.includes('.status = ')) {
       // 블록 상태 명령 (블록이름.status = "값")
       const parts = line.split('.status = ')
@@ -144,7 +147,7 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
         }
       }
     }
-    else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !lowerLine.startsWith('int ')) {
+    else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('elif ') && !lowerLine.startsWith('wait ') && !lowerLine.startsWith('int ')) {
       const parts = line.split(' = ')
       if (parts.length !== 2) {
         errors.push(`라인 ${lineNum}: 잘못된 신호 설정 형식 (예: 신호명 = true)`)
@@ -187,16 +190,18 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
         validateSingleWaitCondition(waitPart, lineNum, errors, allSignals)
       }
     }
-    else if (lowerLine.startsWith('go from ')) {
-      // 새로운 "go from 커넥터명 to 블록명.커넥터명" 형식
-      const goFromPattern = /^go\s+from\s+([^\s]+)\s+to\s+(.+)$/i
-      const match = line.match(goFromPattern)
+    else if (lowerLine.startsWith('go ') && !lowerLine.startsWith('go to ')) {
+      // 새로운 "go R to 공정1.L(0,3)" 형식
+      const goPattern = /^go\s+([^\s]+)\s+to\s+([^(]+)(?:\((\d+)(?:,\s*(\d+(?:\.\d+)?))?\))?$/i
+      const match = line.match(goPattern)
       
       if (!match) {
-        errors.push(`라인 ${lineNum}: 잘못된 go from 형식 (예: go from R to 블록명.L)`)
+        errors.push(`라인 ${lineNum}: 잘못된 go 형식 (예: go R to 공정1.L(0,3))`)
       } else {
         const fromConnector = match[1].trim()
         const toTarget = match[2].trim()
+        const entityIndex = match[3]  // 엔티티 인덱스 (옵션)
+        const delay = match[4]  // 딜레이 (옵션)
         
         // 출발 커넥터 유효성 검사
         if (currentBlock && currentBlock.connectionPoints) {
@@ -207,24 +212,9 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
           }
         }
         
-        // 도착 대상 파싱 및 검사
-        let targetPath = toTarget
-        let delay = null
-        
-        if (toTarget.includes(',')) {
-          const parts = toTarget.split(',')
-          targetPath = parts[0].trim()
-          delay = parts[1].trim()
-          
-          // 딜레이 형식 검사
-          if (delay && !/^(\d+(\.\d+)?|\d+-\d+)$/.test(delay)) {
-            errors.push(`라인 ${lineNum}: 잘못된 딜레이 형식 "${delay}" (예: 3, 2-5)`)
-          }
-        }
-        
         // 도착 대상 검사
-        if (targetPath.includes('.')) {
-          const [blockName, connectorName] = targetPath.split('.')
+        if (toTarget.includes('.')) {
+          const [blockName, connectorName] = toTarget.split('.')
           const targetBlock = allBlocks.find(b => b.name.toLowerCase() === blockName.trim().toLowerCase())
           
           if (!targetBlock) {
@@ -239,95 +229,28 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
             }
           }
         } else {
-          errors.push(`라인 ${lineNum}: go from 명령의 도착지는 "블록명.커넥터명" 형식이어야 합니다`)
+          errors.push(`라인 ${lineNum}: go 명령의 도착지는 "블록명.커넥터명" 형식이어야 합니다`)
+        }
+        
+        // 딜레이 형식 검사
+        if (delay && !/^(\d+(\.\d+)?|\d+-\d+)$/.test(delay)) {
+          errors.push(`라인 ${lineNum}: 잘못된 딜레이 형식 "${delay}" (예: 3, 2-5)`)
         }
       }
     }
     else if (lowerLine.startsWith('go to ')) {
-      const target = line.replace(/go to /i, '').trim()
-      if (!target) {
-        errors.push(`라인 ${lineNum}: go to 대상이 지정되지 않았습니다`)
-      } else {
-        let targetPath = target
-        let delay = null
-        
-        if (target.includes(',')) {
-          const parts = target.split(',')
-          targetPath = parts[0].trim()
-          delay = parts[1].trim()
-          
-          // 딜레이 형식 검사 강화
-          if (delay && !/^(\d+(\.\d+)?|\d+-\d+)$/.test(delay)) {
-            errors.push(`라인 ${lineNum}: 잘못된 딜레이 형식 "${delay}" (예: 3, 2-5)`)
-          }
-        }
-        
-        // 엔티티 타입에 따른 다른 검증 로직 적용
-        if (targetPath.startsWith('self.')) {
-          const selfTarget = targetPath.replace('self.', '').trim()
-          
-          if (entityType === 'connector') {
-            // 커넥터에서는 self.블록명, self.커넥터명 모두 허용
-            if (currentBlock) {
-              // self.블록명 체크 (블록 이름만 허용, 블록 ID는 허용하지 않음)
-              const isBlockTarget = (selfTarget === currentBlock.name)
-              
-              // self.커넥터명 체크
-              const isConnectorTarget = currentBlock.connectionPoints?.some(cp => 
-                cp.name === selfTarget
-              )
-              
-              if (!isBlockTarget && !isConnectorTarget) {
-                const availableTargets = [
-                  currentBlock.name,
-                  ...(currentBlock.connectionPoints?.map(cp => cp.name).filter(name => name) || [])
-                ]
-                errors.push(`라인 ${lineNum}: 현재 블록에 "${selfTarget}"로 이동할 수 없습니다 (사용 가능: ${availableTargets.join(', ')})`)
-              }
-              
-              // 블록 ID가 사용된 경우 경고 추가
-              if (selfTarget === currentBlock.id.toString()) {
-                errors.push(`라인 ${lineNum}: 블록 ID "${selfTarget}" 대신 블록 이름 "${currentBlock.name}"을 사용해주세요`)
-              }
-            }
-          } else if (entityType === 'block') {
-            // 블록에서는 self.커넥터명만 허용
-            if (currentBlock && currentBlock.connectionPoints) {
-              const connector = currentBlock.connectionPoints.find(cp => 
-                cp.name === selfTarget
-              )
-              if (!connector) {
-                const availableConnectors = currentBlock.connectionPoints.map(cp => cp.name).filter(name => name).join(', ')
-                errors.push(`라인 ${lineNum}: 현재 블록에 "${selfTarget}" 커넥터가 없습니다 (사용 가능: ${availableConnectors || '없음'})`)
-              }
-            }
-          }
-        }
-        // 다른 블록으로 이동
-        else if (targetPath.includes('.')) {
-          const [blockName, connectorName] = targetPath.split('.')
-          const targetBlock = allBlocks.find(b => b.name.toLowerCase() === blockName.trim().toLowerCase())
-          
-          if (!targetBlock) {
-            errors.push(`라인 ${lineNum}: 존재하지 않는 블록: ${blockName}`)
-          } else {
-            const targetConnector = targetBlock.connectionPoints?.find(cp => 
-              cp.name.toLowerCase() === connectorName.trim().toLowerCase()
-            )
-            
-            if (!targetConnector) {
-              errors.push(`라인 ${lineNum}: 블록 "${blockName}"에 "${connectorName}" 커넥터가 없습니다`)
-            }
-          }
-        }
-      }
+      errors.push(`라인 ${lineNum}: "go to" 명령은 더 이상 지원되지 않습니다. "go" 명령을 사용해주세요 (예: go R to 블록명.L(0,3))`)
     }
-    else if (lowerLine.startsWith('if ')) {
+    else if (lowerLine.startsWith('if ') || lowerLine === 'if') {
       // 조건부 실행의 신호 이름도 검사
       const condition = line.replace(/if /i, '').trim()
       
+      // 조건이 없으면 오류
+      if (!condition) {
+        errors.push(`라인 ${lineNum}: if 문에 조건이 없습니다`)
+      }
       // product type 조건은 유효함
-      if (condition.includes('product type =')) {
+      else if (condition.includes('product type =')) {
         // product type 조건은 항상 유효함
       }
       // AND 조건 처리
@@ -349,6 +272,40 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
         validateSingleWaitCondition(condition, lineNum, errors, allSignals)
       }
     }
+    else if (lowerLine.startsWith('elif ') || lowerLine === 'elif') {
+      // elif도 if와 동일하게 처리
+      const condition = line.replace(/elif /i, '').trim()
+      
+      // 조건이 없으면 오류
+      if (!condition) {
+        errors.push(`라인 ${lineNum}: elif 문에 조건이 없습니다`)
+      }
+      // product type 조건은 유효함
+      else if (condition.includes('product type =')) {
+        // product type 조건은 항상 유효함
+      }
+      // AND 조건 처리
+      else if (condition.toLowerCase().includes(' and ')) {
+        const conditions = condition.split(/\s+and\s+/i)
+        for (const cond of conditions) {
+          validateSingleWaitCondition(cond.trim(), lineNum, errors, allSignals)
+        }
+      }
+      // OR 조건 처리
+      else if (condition.toLowerCase().includes(' or ')) {
+        const conditions = condition.split(/\s+or\s+/i)
+        for (const cond of conditions) {
+          validateSingleWaitCondition(cond.trim(), lineNum, errors, allSignals)
+        }
+      }
+      // 단일 조건
+      else {
+        validateSingleWaitCondition(condition, lineNum, errors, allSignals)
+      }
+    }
+    else if (lowerLine === 'else') {
+      // else는 조건이 없으므로 별도 검증 없음
+    }
     else if (lowerLine.startsWith('log ')) {
       const logMessage = line.replace(/log /i, '').trim()
       if (!logMessage) {
@@ -356,19 +313,33 @@ export function validateScript(script, allSignals, allBlocks, currentBlock, enti
       }
       // 따옴표 검사는 선택사항이므로 에러로 처리하지 않음
     }
-    else if (line.includes('product type +=') || line.includes('product type -=')) {
-      // product type 명령은 항상 유효함
+    else if (line.includes('product type +=') || line.includes('product type -=') || line.match(/^product\s+type\s*=\s*.+$/)) {
+      // product type 명령은 항상 유효함 (=, +=, -= 모두 포함)
     }
-    else if (lowerLine === 'create entity') {
-      // create entity 명령은 항상 유효함
+    else if (lowerLine === 'create product') {
+      // create product 명령은 항상 유효함
     }
-    else if (lowerLine === 'dispose entity') {
-      // dispose entity 명령은 항상 유효함
+    else if (lowerLine === 'dispose product') {
+      // dispose product 명령은 항상 유효함
     }
     else if (lowerLine === 'force execution') {
       // force execution 명령은 첫 번째 줄에만 유효함
       if (lineNum !== 1) {
         errors.push(`라인 ${lineNum}: "force execution"은 첫 번째 줄에만 사용할 수 있습니다`)
+      }
+    }
+    else if (lowerLine.startsWith('execute ')) {
+      // execute 명령어 검증
+      const targetBlock = line.replace(/execute /i, '').trim()
+      
+      if (!targetBlock) {
+        errors.push(`라인 ${lineNum}: execute 명령에 대상 블록이 지정되지 않았습니다`)
+      } else if (allBlocks && allBlocks.length > 0) {
+        // 블록 이름 검증
+        const blockExists = allBlocks.some(block => block.name === targetBlock)
+        if (!blockExists) {
+          errors.push(`라인 ${lineNum}: 존재하지 않는 블록 "${targetBlock}"`)
+        }
       }
     }
     else {
@@ -392,11 +363,14 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
   // This happens when editing an existing conditional_branch action
   const firstLine = lines[0]?.trim().toLowerCase() || ''
   const hasComplexWait = firstLine.startsWith('wait ') && (firstLine.includes(' or ') || firstLine.includes(' and '))
-  const hasIfStatement = lines.some(line => line.trim().toLowerCase().startsWith('if '))
+  const hasIfStatement = lines.some(line => {
+    const trimmed = line.trim().toLowerCase()
+    return trimmed.startsWith('if ') || trimmed.startsWith('elif ') || trimmed === 'else'
+  })
   const hasProductType = lines.some(line => line.includes('product type +=') || line.includes('product type -='))
   const hasLog = lines.some(line => line.trim().toLowerCase().startsWith('log '))
-  const hasCreateEntity = lines.some(line => line.trim().toLowerCase() === 'create entity')
-  const hasDisposeEntity = lines.some(line => line.trim().toLowerCase() === 'dispose entity')
+  const hasCreateEntity = lines.some(line => line.trim().toLowerCase() === 'create product')
+  const hasDisposeEntity = lines.some(line => line.trim().toLowerCase() === 'dispose product')
   const hasForceExecution = lines.some(line => line.trim().toLowerCase() === 'force execution')
   const hasIntCommand = lines.some(line => line.trim().toLowerCase().startsWith('int '))
   
@@ -469,7 +443,7 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
         })
       }
     }
-    else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !lowerLine.startsWith('int ')) {
+    else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('elif ') && !lowerLine.startsWith('wait ') && !lowerLine.startsWith('int ')) {
       const [signalName, value] = line.split(' = ').map(s => s.trim())
       actions.push({
         id: `script-action-${actionCounter++}`,
@@ -509,133 +483,17 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
         })
       }
     }
-    else if (lowerLine.startsWith('go from ')) {
-      // 새로운 "go from 커넥터명 to 블록명.커넥터명" 형식 파싱
-      const goFromPattern = /^go\s+from\s+([^\s]+)\s+to\s+(.+)$/i
-      const match = line.match(goFromPattern)
-      
-      if (!match) {
-        actions.push({
-          id: `script-action-${actionCounter++}`,
-          name: `❌ 오류: ${line}`,
-          type: 'script_error',
-          parameters: { 
-            originalLine: line,
-            lineNumber: lineNumber,
-            error: `잘못된 go from 형식`
-          }
-        })
-        continue
-      }
-      
-      const fromConnector = match[1].trim()
-      const toTarget = match[2].trim()
-      
-      // 출발 커넥터 유효성 검사
-      let fromConnectorId = null
-      if (currentBlock && currentBlock.connectionPoints) {
-        const foundConnector = currentBlock.connectionPoints.find(cp => cp.name === fromConnector)
-        if (foundConnector) {
-          fromConnectorId = foundConnector.id
-        } else {
-          actions.push({
-            id: `script-action-${actionCounter++}`,
-            name: `❌ 오류: ${line}`,
-            type: 'script_error',
-            parameters: { 
-              originalLine: line,
-              lineNumber: lineNumber,
-              error: `존재하지 않는 출발 커넥터: ${fromConnector}`
-            }
-          })
-          continue
+    else if (lowerLine.startsWith('go ') && !lowerLine.startsWith('go to ')) {
+      // 새로운 "go 커넥터명 to 블록명.커넥터명(인덱스,딜레이)" 형식
+      // 백엔드로 전체 스크립트를 전달
+      actions.push({
+        id: `script-action-${actionCounter++}`,
+        name: `go 명령 실행`,
+        type: 'script',
+        parameters: { 
+          script: line
         }
-      }
-      
-      // 도착 대상 파싱
-      let targetPath = toTarget
-      let delay = '0'
-      
-      if (toTarget.includes(',')) {
-        const parts = toTarget.split(',')
-        targetPath = parts[0].trim()
-        const delayPart = parts[1].trim()
-        
-        if (/^(\d+(\.\d+)?|\d+-\d+)$/.test(delayPart)) {
-          delay = delayPart
-        } else {
-          actions.push({
-            id: `script-action-${actionCounter++}`,
-            name: `❌ 오류: ${line}`,
-            type: 'script_error',
-            parameters: { 
-              originalLine: line,
-              lineNumber: lineNumber,
-              error: `잘못된 딜레이 형식: ${delayPart}`
-            }
-          })
-          continue
-        }
-      }
-      
-      // 도착 대상 처리 (반드시 "블록명.커넥터명" 형식)
-      if (targetPath.includes('.')) {
-        const [blockName, connectorName] = targetPath.split('.')
-        const targetBlock = allBlocks.find(b => b.name.toLowerCase() === blockName.trim().toLowerCase())
-        
-        if (!targetBlock) {
-          actions.push({
-            id: `script-action-${actionCounter++}`,
-            name: `❌ 오류: ${line}`,
-            type: 'script_error',
-            parameters: { 
-              originalLine: line,
-              lineNumber: lineNumber,
-              error: `존재하지 않는 블록: ${blockName}`
-            }
-          })
-          continue
-        }
-        
-        const targetConnector = targetBlock.connectionPoints?.find(cp => 
-          cp.name.toLowerCase() === connectorName.trim().toLowerCase()
-        )
-        
-        if (!targetConnector) {
-          actions.push({
-            id: `script-action-${actionCounter++}`,
-            name: `❌ 오류: ${line}`,
-            type: 'script_error',
-            parameters: { 
-              originalLine: line,
-              lineNumber: lineNumber,
-              error: `블록 "${blockName}"에 "${connectorName}" 커넥터가 없습니다`
-            }
-          })
-          continue
-        }
-        
-        // go from 명령은 항상 conditional_branch로 처리 (스크립트 형태로 백엔드에 전달)
-        actions.push({
-          id: `script-action-${actionCounter++}`,
-          name: `${fromConnector}에서 ${blockName}.${connectorName}로 이동`,
-          type: 'conditional_branch',
-          parameters: { 
-            script: line  // 전체 go from 명령을 스크립트로 저장
-          }
-        })
-      } else {
-        actions.push({
-          id: `script-action-${actionCounter++}`,
-          name: `❌ 오류: ${line}`,
-          type: 'script_error',
-          parameters: { 
-            originalLine: line,
-            lineNumber: lineNumber,
-            error: `go from 명령의 도착지는 "블록명.커넥터명" 형식이어야 합니다`
-          }
-        })
-      }
+      })
     }
     else if (lowerLine.startsWith('go to ')) {
       const target = line.replace(/go to /i, '').trim()
@@ -860,6 +718,27 @@ export function parseScriptToActions(script, allBlocks, currentBlock, entityType
       actions.push({
         id: `script-action-${actionCounter++}`,
         name: `제품 타입 ${operation}: ${params}`,
+        type: 'script',
+        parameters: { 
+          script: line
+        }
+      })
+    }
+    else if (lowerLine === 'create product' || lowerLine === 'dispose product' || lowerLine === 'force execution') {
+      actions.push({
+        id: `script-action-${actionCounter++}`,
+        name: line,
+        type: 'script',
+        parameters: { 
+          script: line
+        }
+      })
+    }
+    else if (lowerLine.startsWith('execute ')) {
+      const targetBlock = line.replace(/execute /i, '').trim()
+      actions.push({
+        id: `script-action-${actionCounter++}`,
+        name: `블록 "${targetBlock}" 실행`,
         type: 'script',
         parameters: { 
           script: line

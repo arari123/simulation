@@ -3,18 +3,18 @@
     {
       "id": 1,
       "name": "투입",
-      "x": 150.26817397012667,
-      "y": 409.98843917208194,
+      "x": -134.73182602987333,
+      "y": 351.98843917208194,
       "width": 100,
       "height": 100,
       "maxCapacity": 1,
       "actions": [
         {
-          "id": "script-1749560669953",
+          "id": "script-1749721811300",
           "name": "스크립트",
           "type": "script",
           "parameters": {
-            "script": "force execution\ncreate product\nproduct type(0) = red(red)\nlog \"{entity.color}\"\nlog \"{entity.attributes}\"\nwait 공정1 load enable = true\n공정1 load enable = false\ngo R to 공정1.L(0,3)\nexecute 공정1",
+            "script": "force execution\nlog \"1\"\nif count = 0\n  log \"2\"\n  create product\n  log \"3\"\n  product type(0) = red(red)\n  log \"4\"\n  log \"{entity.color}\"\n  log \"5\"\n  log \"{entity.attributes}\"\n  log \"6\"\n  int count += 1\n  log \"7\"\nif count = 1 and product type(0) != red\n  create product\n  product type(0) = blue(blue)\n  log \"{entity(0).color}\"\n  log \"{entity(0).attributes}\"\n  int count = 0\nwait 공정1 load enable = true or 공정2 load enable = true\nif 공정1 load enable = true and product type(0) = red\n  공정1 load enable = false\n  go R to 공정1.L(0,3)\n  execute 공정1\nif 공정2 load enable = true and product type(0) = blue\n  공정2 load enable = false\n  go R to 공정2.L(0,3)\n  execute 공정2",
             "breakpoints": []
           }
         }
@@ -46,18 +46,18 @@
     {
       "id": 2,
       "name": "공정1",
-      "x": 336.9045013104194,
-      "y": 410.6434172570897,
+      "x": 214.9045013104194,
+      "y": 187.64341725708977,
       "width": 100,
       "height": 100,
       "maxCapacity": 1,
       "actions": [
         {
-          "id": "script-1749560309274",
+          "id": "script-1749721780404",
           "name": "스크립트",
           "type": "script",
           "parameters": {
-            "script": "delay 10\nlog \"이동 시작\"\ngo R to 배출.L(0,3)\n공정1 load enable = true\nexecute 배출",
+            "script": "delay 10\ngo R to 배출.L(0,3)\n공정1 load enable = true\nexecute 배출",
             "breakpoints": []
           }
         }
@@ -89,8 +89,8 @@
     {
       "id": 3,
       "name": "배출",
-      "x": 522.5548276927632,
-      "y": 409.22507018566375,
+      "x": 527.5548276927632,
+      "y": 377.22507018566375,
       "width": 100,
       "height": 100,
       "maxCapacity": 1,
@@ -128,6 +128,49 @@
       "warnings": [],
       "totalProcessed": 0,
       "status": null
+    },
+    {
+      "id": 4,
+      "name": "공정2",
+      "x": 209.93631299284,
+      "y": 534.0733146765683,
+      "width": 100,
+      "height": 100,
+      "maxCapacity": 1,
+      "actions": [
+        {
+          "id": "script-1749721783523",
+          "name": "스크립트",
+          "type": "script",
+          "parameters": {
+            "script": "delay 10\ngo R to 배출.L(0,3)\n공정2 load enable = true\nexecute 배출",
+            "breakpoints": []
+          }
+        }
+      ],
+      "backgroundColor": "#cfdff7",
+      "textColor": "#000000",
+      "connectionPoints": [
+        {
+          "id": "4-conn-left",
+          "name": "L",
+          "x": 0,
+          "y": 50,
+          "position": "left",
+          "actions": []
+        },
+        {
+          "id": "4-conn-right",
+          "name": "R",
+          "x": 100,
+          "y": 50,
+          "position": "right",
+          "actions": []
+        }
+      ],
+      "warnings": [],
+      "totalProcessed": 0,
+      "status": null
     }
   ],
   "connections": [
@@ -140,8 +183,24 @@
       "auto_generated": true
     },
     {
+      "from_block_id": "1",
+      "from_connector_id": "1-conn-right",
+      "to_block_id": "4",
+      "to_connector_id": "4-conn-left",
+      "from_conditional_script": true,
+      "auto_generated": true
+    },
+    {
       "from_block_id": "2",
       "from_connector_id": "2-conn-right",
+      "to_block_id": "3",
+      "to_connector_id": "3-conn-left",
+      "from_conditional_script": true,
+      "auto_generated": true
+    },
+    {
+      "from_block_id": "4",
+      "from_connector_id": "4-conn-right",
       "to_block_id": "3",
       "to_connector_id": "3-conn-left",
       "from_conditional_script": true,
@@ -153,15 +212,22 @@
       "id": "signal-1749550164192",
       "name": "공정1 load enable",
       "type": "boolean",
-      "value": true,
+      "value": false,
       "initialValue": true
     },
     {
-      "id": "signal_product type(0)",
-      "name": "product type(0)",
+      "id": "signal-1749721011400",
+      "name": "공정2 load enable",
       "type": "boolean",
       "value": false,
       "initialValue": false
+    },
+    {
+      "id": "signal-1749721424995",
+      "name": "count",
+      "type": "integer",
+      "value": 1,
+      "initialValue": 0
     }
   ],
   "settings": {

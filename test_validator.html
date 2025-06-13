@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Validator Test</title>
+</head>
+<body>
+    <h1>Execute Command Test</h1>
+    <script>
+        // 테스트 코드
+        const line = "execute 블록이름";
+        const lowerLine = line.toLowerCase();
+        
+        console.log("Original line:", line);
+        console.log("Lower line:", lowerLine);
+        console.log("Starts with 'execute ':", lowerLine.startsWith('execute '));
+        
+        // 한글이 포함된 경우
+        const line2 = "execute 공정1";
+        const lowerLine2 = line2.toLowerCase();
+        
+        console.log("\nOriginal line2:", line2);
+        console.log("Lower line2:", lowerLine2);
+        console.log("Starts with 'execute ':", lowerLine2.startsWith('execute '));
+    </script>
+</body>
+</html>

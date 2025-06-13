@@ -51,6 +51,12 @@ class DebugManager:
             self.breakpoints.clear()
             # All breakpoints cleared
             
+    def has_breakpoints(self, block_id: Optional[str] = None) -> bool:
+        """브레이크포인트 존재 여부 확인"""
+        if block_id:
+            return block_id in self.breakpoints and len(self.breakpoints[block_id]) > 0
+        return len(self.breakpoints) > 0
+            
     def get_breakpoints(self, block_id: Optional[str] = None) -> Dict[str, Set[int]]:
         """브레이크포인트 목록 조회"""
         if block_id:

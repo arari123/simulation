@@ -14,6 +14,8 @@ class SimpleEntity:
         self.target_block = None
         self.target_connector = None
         self.movement_requested = False
+        self.movement_completed = False  # 이동 완료 플래그
+        self.movement_failed = False  # 이동 실패 플래그 (용량 초과 등)
         self.created_at = None
         self.processed_at = None
         self.properties = {}  # 추가 속성 저장용
@@ -22,12 +24,17 @@ class SimpleEntity:
         self.state: str = "normal"  # "normal" | "transit"
         self.custom_attributes: Set[str] = set()  # 커스텀 속성들 (예: {"flip", "1c"})
         self.color: Optional[str] = None  # "gray", "blue", "green", "red", "black", "white"
+        
+        # 스크립트 처리 추적
+        self.processed_by_blocks: Set[str] = set()  # 이미 스크립트를 실행한 블록들의 ID
     
     def reset_movement(self):
         """이동 관련 상태 초기화"""
         self.target_block = None
         self.target_connector = None
         self.movement_requested = False
+        self.movement_completed = False
+        self.movement_failed = False
     
     def set_location(self, block_name: str, connector_name: str = None):
         """현재 위치 설정"""

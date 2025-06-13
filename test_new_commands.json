@@ -1,0 +1,113 @@
+{
+  "name": "새로운 명령어 테스트",
+  "description": "엔티티 인덱스 기능 및 변경된 명령어 테스트",
+  "blocks": [
+    {
+      "id": 1,
+      "name": "투입",
+      "type": "source",
+      "position": { "x": 100, "y": 200 },
+      "capacity": 2,
+      "entityType": "connector",
+      "connectionPoints": [
+        { "id": 101, "name": "OUT", "type": "output", "position": { "x": 150, "y": 200 } }
+      ],
+      "script": "force execution\ncreate product\ncreate product\nwait count = 2\nproduct type(0) = red(red)\nproduct type(1) = blue(blue)\nlog \"첫 번째 엔티티: red, 두 번째 엔티티: blue\"\nready = true"
+    },
+    {
+      "id": 2,
+      "name": "분배",
+      "type": "process",
+      "position": { "x": 300, "y": 200 },
+      "capacity": 2,
+      "entityType": "block",
+      "connectionPoints": [
+        { "id": 201, "name": "IN", "type": "input", "position": { "x": 250, "y": 200 } },
+        { "id": 202, "name": "RED", "type": "output", "position": { "x": 350, "y": 150 } },
+        { "id": 203, "name": "BLUE", "type": "output", "position": { "x": 350, "y": 250 } }
+      ],
+      "script": "wait ready = true\nint count += 1\nlog \"분배 블록에 엔티티 {count}개 도착\"\nif product type(1) = blue\n    log \"blue 엔티티(인덱스 1)를 먼저 이동\"\n    go BLUE to Blue처리.IN(1)\ndelay 2\nif product type(0) = red\n    log \"red 엔티티(인덱스 0)를 이동\"\n    go RED to Red처리.IN(0)"
+    },
+    {
+      "id": 3,
+      "name": "Red처리",
+      "type": "process",
+      "position": { "x": 500, "y": 150 },
+      "capacity": 1,
+      "entityType": "block",
+      "connectionPoints": [
+        { "id": 301, "name": "IN", "type": "input", "position": { "x": 450, "y": 150 } },
+        { "id": 302, "name": "OUT", "type": "output", "position": { "x": 550, "y": 150 } }
+      ],
+      "script": "log \"Red 엔티티 처리 중\"\ndelay 3\nlog \"Red 엔티티 처리 완료\"\ngo OUT to 배출.RED"
+    },
+    {
+      "id": 4,
+      "name": "Blue처리",
+      "type": "process",
+      "position": { "x": 500, "y": 250 },
+      "capacity": 1,
+      "entityType": "block",
+      "connectionPoints": [
+        { "id": 401, "name": "IN", "type": "input", "position": { "x": 450, "y": 250 } },
+        { "id": 402, "name": "OUT", "type": "output", "position": { "x": 550, "y": 250 } }
+      ],
+      "script": "log \"Blue 엔티티 처리 중\"\ndelay 3\nlog \"Blue 엔티티 처리 완료\"\ngo OUT to 배출.BLUE"
+    },
+    {
+      "id": 5,
+      "name": "배출",
+      "type": "sink",
+      "position": { "x": 700, "y": 200 },
+      "capacity": 10,
+      "entityType": "block",
+      "connectionPoints": [
+        { "id": 501, "name": "RED", "type": "input", "position": { "x": 650, "y": 150 } },
+        { "id": 502, "name": "BLUE", "type": "input", "position": { "x": 650, "y": 250 } }
+      ],
+      "script": "if product type = red\n    log \"Red 엔티티 배출 처리\"\nif product type = blue\n    log \"Blue 엔티티 배출 처리\"\ndispose product\nint disposed += 1\nlog \"총 배출: {disposed}개\""
+    }
+  ],
+  "connections": [
+    {
+      "id": 1001,
+      "from": { "blockId": 1, "connectionPointId": 101 },
+      "to": { "blockId": 2, "connectionPointId": 201 }
+    },
+    {
+      "id": 1002,
+      "from": { "blockId": 2, "connectionPointId": 202 },
+      "to": { "blockId": 3, "connectionPointId": 301 }
+    },
+    {
+      "id": 1003,
+      "from": { "blockId": 2, "connectionPointId": 203 },
+      "to": { "blockId": 4, "connectionPointId": 401 }
+    },
+    {
+      "id": 1004,
+      "from": { "blockId": 3, "connectionPointId": 302 },
+      "to": { "blockId": 5, "connectionPointId": 501 }
+    },
+    {
+      "id": 1005,
+      "from": { "blockId": 4, "connectionPointId": 402 },
+      "to": { "blockId": 5, "connectionPointId": 502 }
+    }
+  ],
+  "globalSignals": [
+    { "name": "ready", "value": false, "type": "boolean" }
+  ],
+  "globalVariables": [
+    { "name": "count", "value": 0, "type": "integer" },
+    { "name": "disposed", "value": 0, "type": "integer" }
+  ],
+  "simulationSettings": {
+    "simulationTime": 60,
+    "entitySpeed": 1,
+    "logging": {
+      "level": "INFO",
+      "destination": "console"
+    }
+  }
+}

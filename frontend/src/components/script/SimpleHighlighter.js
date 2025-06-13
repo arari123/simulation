@@ -18,7 +18,7 @@ const tokenPatterns = [
   { regex: /\b\d+(\.\d+)?\b/g, class: 'cm-number' },
   
   // 키워드 (명령어)
-  { regex: /\b(delay|wait|if|go|jump|log|create|dispose|force|execution|entity|product|type|int)\b/g, class: 'cm-keyword' },
+  { regex: /\b(delay|wait|if|elif|else|go|jump|log|create|dispose|force|execution|execute|entity|product|type|int|status)\b/g, class: 'cm-keyword' },
   
   // 연산자와 논리 연산자
   { regex: /\b(and|or)\b/g, class: 'cm-operator' },
@@ -102,8 +102,10 @@ function detectIfBlockLines(doc) {
     const lineStart = offset
     const lineEnd = offset + line.length
     
-    // if 문 감지
-    if (trimmed.toLowerCase().startsWith('if ')) {
+    // if/elif/else 문 감지
+    if (trimmed.toLowerCase().startsWith('if ') || 
+        trimmed.toLowerCase().startsWith('elif ') || 
+        trimmed.toLowerCase() === 'else') {
       ifBlocks.push({
         from: lineStart,
         to: lineEnd,

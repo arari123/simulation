@@ -1,0 +1,183 @@
+{
+  "blocks": [
+    {
+      "id": "투입",
+      "name": "투입",
+      "position": {
+        "x": 100,
+        "y": 100
+      },
+      "connectionPoints": [
+        {
+          "id": "투입-OUT",
+          "name": "OUT",
+          "type": "output"
+        }
+      ],
+      "actions": [],
+      "script": "force execution\ncreate product\ngo OUT to 공정1.IN\nexecute 공정1"
+    },
+    {
+      "id": "공정1",
+      "name": "공정1",
+      "position": {
+        "x": 300,
+        "y": 100
+      },
+      "connectionPoints": [
+        {
+          "id": "공정1-IN",
+          "name": "IN",
+          "type": "input"
+        },
+        {
+          "id": "공정1-OUT",
+          "name": "OUT",
+          "type": "output"
+        }
+      ],
+      "actions": [],
+      "script": "log \"공정1 실행 시작\"\ndelay 3\nlog \"공정1 실행 완료\"\ngo OUT to 공정2.IN\nexecute 공정2"
+    },
+    {
+      "id": "공정2",
+      "name": "공정2",
+      "position": {
+        "x": 500,
+        "y": 100
+      },
+      "connectionPoints": [
+        {
+          "id": "공정2-IN",
+          "name": "IN",
+          "type": "input"
+        },
+        {
+          "id": "공정2-OUT",
+          "name": "OUT",
+          "type": "output"
+        }
+      ],
+      "actions": [],
+      "script": "log \"공정2 실행 시작\"\ndelay 2\nlog \"공정2 실행 완료\"\nif 품질검사 = true\n    go OUT to 완료.IN\n    execute 완료\nif 품질검사 = false\n    go OUT to 재작업.IN\n    execute 재작업"
+    },
+    {
+      "id": "완료",
+      "name": "완료",
+      "position": {
+        "x": 700,
+        "y": 50
+      },
+      "connectionPoints": [
+        {
+          "id": "완료-IN",
+          "name": "IN",
+          "type": "input"
+        }
+      ],
+      "actions": [],
+      "script": "log \"제품 완료: 품질 검사 통과\"\ndispose product"
+    },
+    {
+      "id": "재작업",
+      "name": "재작업",
+      "position": {
+        "x": 700,
+        "y": 150
+      },
+      "connectionPoints": [
+        {
+          "id": "재작업-IN",
+          "name": "IN",
+          "type": "input"
+        },
+        {
+          "id": "재작업-OUT",
+          "name": "OUT",
+          "type": "output"
+        }
+      ],
+      "actions": [],
+      "script": "log \"재작업 필요: 품질 검사 실패\"\ndelay 5\nlog \"재작업 완료\"\n품질검사 = true\ngo OUT to 공정2.IN\nexecute 공정2"
+    }
+  ],
+  "connectors": [
+    {
+      "id": "투입-공정1",
+      "name": "투입-공정1",
+      "from": {
+        "blockId": "투입",
+        "connectionPoint": "투입-OUT"
+      },
+      "to": {
+        "blockId": "공정1",
+        "connectionPoint": "공정1-IN"
+      },
+      "actions": []
+    },
+    {
+      "id": "공정1-공정2",
+      "name": "공정1-공정2",
+      "from": {
+        "blockId": "공정1",
+        "connectionPoint": "공정1-OUT"
+      },
+      "to": {
+        "blockId": "공정2",
+        "connectionPoint": "공정2-IN"
+      },
+      "actions": []
+    },
+    {
+      "id": "공정2-완료",
+      "name": "공정2-완료",
+      "from": {
+        "blockId": "공정2",
+        "connectionPoint": "공정2-OUT"
+      },
+      "to": {
+        "blockId": "완료",
+        "connectionPoint": "완료-IN"
+      },
+      "actions": []
+    },
+    {
+      "id": "공정2-재작업",
+      "name": "공정2-재작업",
+      "from": {
+        "blockId": "공정2",
+        "connectionPoint": "공정2-OUT"
+      },
+      "to": {
+        "blockId": "재작업",
+        "connectionPoint": "재작업-IN"
+      },
+      "actions": []
+    },
+    {
+      "id": "재작업-공정2",
+      "name": "재작업-공정2",
+      "from": {
+        "blockId": "재작업",
+        "connectionPoint": "재작업-OUT"
+      },
+      "to": {
+        "blockId": "공정2",
+        "connectionPoint": "공정2-IN"
+      },
+      "actions": []
+    }
+  ],
+  "signals": [
+    {
+      "name": "품질검사",
+      "value": false,
+      "type": "boolean"
+    }
+  ],
+  "infoText": "execute 명령어 테스트\n\n이 시뮬레이션은 execute 명령어를 사용하여 블록의 스크립트를 명시적으로 실행합니다.\n\n동작 방식:\n1. 투입 블록은 force execution으로 자동 실행\n2. 각 블록은 작업 완료 후 다음 블록을 execute 명령으로 실행\n3. 엔티티 도착만으로는 스크립트가 실행되지 않음\n4. 블록이 Running 상태일 때는 execute 명령이 무시됨",
+  "settings": {
+    "stepDuration": 1,
+    "executionMode": "timeStep"
+  }
+}

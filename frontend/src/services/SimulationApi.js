@@ -3,7 +3,15 @@
  * 백엔드와의 모든 API 통신을 담당합니다.
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// 환경에 따른 API URL 설정
+// 개발 환경에서는 프록시를 사용하므로 상대 경로 사용
+const API_BASE = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000')
+
+// 디버그 정보 출력 (개발 모드에서만)
+if (import.meta.env.MODE === 'development' || import.meta.env.VITE_MODE === 'local') {
+  console.log('[SimulationApi] 현재 모드:', import.meta.env.VITE_MODE || import.meta.env.MODE)
+  console.log('[SimulationApi] API URL:', API_BASE)
+}
 
 export class SimulationApi {
   /**

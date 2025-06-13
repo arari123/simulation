@@ -1,0 +1,72 @@
+{
+  "blocks": [
+    {
+      "id": 1,
+      "name": "투입",
+      "position": {"x": 100, "y": 100},
+      "capacity": 1,
+      "script": "force execution\nlog \"투입 스크립트 실행\"\nif count = 0\n  create product\n  log \"red 엔티티 생성\"\n  product type(0) = red(red)\n  int count += 1\nelif count = 1\n  create product\n  log \"blue 엔티티 생성\"\n  product type(0) = blue(blue)\n  int count += 1\nelif count = 2\n  create product\n  log \"green 엔티티 생성\"\n  product type(0) = green(green)\n  int count += 1\nelse\n  log \"최대 생성 수 도달: {count}\"\n  int count = 0\nwait 공정1 ready = true or 공정2 ready = true\nif 공정1 ready = true and product type(0) = red\n  log \"공정1로 red 엔티티 전송\"\n  공정1 ready = false\n  go OUT to 공정1.IN\n  execute 공정1\nelif 공정2 ready = true\n  log \"공정2로 엔티티 전송\"\n  공정2 ready = false\n  go OUT to 공정2.IN\n  execute 공정2",
+      "connectionPoints": [
+        {"name": "OUT", "position": {"x": 200, "y": 100}, "type": "out"}
+      ]
+    },
+    {
+      "id": 2,
+      "name": "공정1",
+      "position": {"x": 400, "y": 50},
+      "capacity": 1,
+      "script": "log \"공정1 처리 시작: {entity.attributes}\"\ndelay 5\nlog \"공정1 처리 완료\"\n공정1 ready = true\ngo OUT to 배출.IN\nexecute 배출",
+      "connectionPoints": [
+        {"name": "IN", "position": {"x": 300, "y": 50}, "type": "in"},
+        {"name": "OUT", "position": {"x": 500, "y": 50}, "type": "out"}
+      ]
+    },
+    {
+      "id": 3,
+      "name": "공정2",
+      "position": {"x": 400, "y": 150},
+      "capacity": 1,
+      "script": "log \"공정2 처리 시작: {entity.attributes}\"\ndelay 3\nlog \"공정2 처리 완료\"\n공정2 ready = true\ngo OUT to 배출.IN\nexecute 배출",
+      "connectionPoints": [
+        {"name": "IN", "position": {"x": 300, "y": 150}, "type": "in"},
+        {"name": "OUT", "position": {"x": 500, "y": 150}, "type": "out"}
+      ]
+    },
+    {
+      "id": 4,
+      "name": "배출",
+      "position": {"x": 700, "y": 100},
+      "capacity": 1,
+      "script": "log \"배출: {entity.attributes} ({entity.color})\"\ndispose product",
+      "connectionPoints": [
+        {"name": "IN", "position": {"x": 600, "y": 100}, "type": "in"}
+      ]
+    }
+  ],
+  "connectors": [
+    {
+      "from": "1.OUT",
+      "to": "2.IN"
+    },
+    {
+      "from": "1.OUT",
+      "to": "3.IN"
+    },
+    {
+      "from": "2.OUT",
+      "to": "4.IN"
+    },
+    {
+      "from": "3.OUT",
+      "to": "4.IN"
+    }
+  ],
+  "global_signals": [
+    {"name": "공정1 ready", "type": "boolean", "value": true},
+    {"name": "공정2 ready", "type": "boolean", "value": true},
+    {"name": "count", "type": "integer", "value": 0}
+  ],
+  "simulation_options": {
+    "engine_mode": "simple"
+  }
+}

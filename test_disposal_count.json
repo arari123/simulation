@@ -1,0 +1,44 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "name": "투입",
+      "x": 100,
+      "y": 100,
+      "capacity": 10,
+      "script": "execute 공정"
+    },
+    {
+      "id": "2", 
+      "name": "공정",
+      "x": 300,
+      "y": 100,
+      "capacity": 5,
+      "script": "delay 1\ngo L to 배출.L"
+    },
+    {
+      "id": "3",
+      "name": "배출",
+      "x": 500,
+      "y": 100,
+      "capacity": 10,
+      "script": "dispose entity"
+    }
+  ],
+  "connections": [
+    {
+      "fromBlockId": "1",
+      "fromConnectorId": "R",
+      "toBlockId": "2",
+      "toConnectorId": "L"
+    },
+    {
+      "fromBlockId": "2",
+      "fromConnectorId": "R",
+      "toBlockId": "3",
+      "toConnectorId": "L"
+    }
+  ],
+  "initialEntityCount": 0,
+  "globalSignals": []
+}

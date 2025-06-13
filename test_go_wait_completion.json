@@ -1,0 +1,62 @@
+{
+  "name": "Go 명령 이동 완료 대기 테스트",
+  "description": "go 명령이 실제 이동 완료까지 기다리는지 테스트",
+  "info_text": "go 명령 실행 후 다음 명령이 이동 완료 후에 실행되는지 확인\n1. 소스에서 공정1로 이동 (3초 딜레이)\n2. 이동 완료 후 로그 출력\n3. 공정1에서 공정2로 이동\n4. 이동 완료 후 로그 출력",
+  "blocks": {
+    "source": {
+      "name": "소스",
+      "position": { "x": 100, "y": 200 },
+      "capacity": 1,
+      "script": [
+        "log \"소스: 엔티티 생성됨\"",
+        "go R to 공정1.L(0,3)",
+        "log \"소스: 이동 명령 완료 (엔티티가 공정1에 도착)\""
+      ],
+      "outputs": [
+        { "id": "R", "target": "process1", "targetConnector": "L" }
+      ]
+    },
+    "process1": {
+      "name": "공정1",
+      "position": { "x": 300, "y": 200 },
+      "capacity": 2,
+      "script": [
+        "log \"공정1: 엔티티 도착\"",
+        "delay 2",
+        "log \"공정1: 처리 중...\"",
+        "go R to 공정2.L(0,2)",
+        "log \"공정1: 이동 명령 완료 (엔티티가 공정2에 도착)\""
+      ],
+      "outputs": [
+        { "id": "R", "target": "process2", "targetConnector": "L" }
+      ]
+    },
+    "process2": {
+      "name": "공정2",
+      "position": { "x": 500, "y": 200 },
+      "capacity": 1,
+      "script": [
+        "log \"공정2: 엔티티 도착\"",
+        "delay 1",
+        "log \"공정2: 처리 완료\"",
+        "go R to 싱크.L",
+        "log \"공정2: 이동 명령 완료 (엔티티가 싱크에 도착)\""
+      ],
+      "outputs": [
+        { "id": "R", "target": "sink", "targetConnector": "L" }
+      ]
+    },
+    "sink": {
+      "name": "싱크",
+      "position": { "x": 700, "y": 200 },
+      "capacity": -1,
+      "script": [
+        "log \"싱크: 엔티티 도착 및 제거\"",
+        "dispose product"
+      ]
+    }
+  },
+  "global_signals": {
+    "test_signal": { "type": "boolean", "initial_value": false }
+  }
+}

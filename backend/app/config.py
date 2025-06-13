@@ -39,7 +39,8 @@ class Settings(BaseSettings):
     health_check_path: str = Field(default="/health", env="HEALTH_CHECK_PATH")
     
     class Config:
-        env_file = ".env"
+        # 환경에 따라 다른 .env 파일 로드
+        env_file = ".env.production" if os.getenv("ENVIRONMENT") == "production" else ".env.development"
         case_sensitive = False
         
     def __init__(self, **kwargs):

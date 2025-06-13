@@ -41,21 +41,38 @@ class IndependentBlock:
         
         # 엔진 참조 (블록 상태 명령어 처리용)
         self.engine_ref = None
+        
+        # 실행 상태 관리
+        self.execution_state = "idle"  # "idle" or "running"
+        self.is_executing_script = False
+        self.execute_requested = False  # execute 명령으로 실행 요청됨
+        
+        # 반복 로그 제한
+        self.last_capacity_warning_time = {}  # entity_id -> last_warning_time
+        self.capacity_warning_interval = 1.0  # 같은 엔티티에 대해 1초마다만 경고
     
     def add_output_connection(self, connector_name: str, target_block_id: str):
         """출력 연결 추가"""
         self.output_connections[connector_name] = target_block_id
     
     def add_capacity_warning(self, env, target_block_name: str, entity_id: str):
-        """용량 초과로 인한 이동 실패 경고 추가"""
-        warning = {
-            'type': 'capacity_full',
-            'message': f"'{target_block_name}' 블록 용량 초과로 엔티티 {entity_id} 이동 실패",
-            'timestamp': round(env.now, 1),
-            'target_block': target_block_name
-        }
-        self.warnings.append(warning)
-        logger.warning(f"[{self.name}] {warning['message']}")
+        """용량 초과로 인한 이동 실패 경고 추가 (반복 로그 제한)"""
+        current_time = env.now
+        
+        # 이 엔티티에 대한 마지막 경고 시간 확인
+        last_warning_time = self.last_capacity_warning_time.get(entity_id, 0)
+        
+        # 지정된 간격이 지났을 때만 경고 출력
+        if current_time - last_warning_time >= self.capacity_warning_interval:
+            warning = {
+                'type': 'capacity_full',
+                'message': f"'{target_block_name}' 블록 용량 초과로 엔티티 {entity_id} 이동 실패",
+                'timestamp': round(env.now, 1),
+                'target_block': target_block_name
+            }
+            self.warnings.append(warning)
+            logger.warning(f"[{self.name}] {warning['message']}")
+            self.last_capacity_warning_time[entity_id] = current_time
     
     def has_force_execution(self) -> bool:
         """첫 번째 줄이 force execution인지 확인"""
@@ -69,6 +86,11 @@ class IndependentBlock:
         if self.has_force_execution():
             return self.script_lines[1:]  # 첫 번째 줄 제외
         return self.script_lines
+    
+    def should_execute_script_for_entity(self) -> bool:
+        """엔티티 도착 시 스크립트를 실행해야 하는지 확인"""
+        # 모든 블록은 엔티티가 도착하면 스크립트 실행
+        return True
     
     def clear_old_warnings(self, env, max_age: float = 5.0):
         """오래된 경고 메시지 제거 (5초 후)"""
@@ -122,25 +144,64 @@ class IndependentBlock:
         if entity in self.entities_in_block:
             self.remove_entity(entity)
             self.total_processed += 1
-            # Entity disposed
+            logger.info(f"[{self.name}] Disposed entity {entity.id}, total_processed now: {self.total_processed}")
         yield env.timeout(0)
     
     def process_entity(self, env: simpy.Environment, entity: SimpleEntity) -> Generator:
         """엔티티 도착 시 스크립트를 실행 (디버그 지원 포함)"""
-        # 전체 스크립트를 문자열로 변환
-        script_text = '\n'.join(self.script_lines)
+        # 스크립트 실행 상태 관리
+        from .script_state_manager import script_state_manager
         
-        # 스크립트 실행 (디버그 매니저가 브레이크포인트 처리)
-        result = yield from self.script_executor.execute_script(script_text, entity, env, self)
+        # 스크립트 실행 시작
+        entity_id = entity.id if entity else None
+        script_state_manager.start_execution(self.id, entity_id, entity)
         
-        # 결과 처리
-        if isinstance(result, tuple) and result[0] == 'created_entity':
-            # create entity 명령으로 엔티티가 생성된 경우
-            entity = result[1]  # 생성된 엔티티로 교체
-            logger.info(f"[{self.name}] Entity created and updated: {entity.id}")
+        try:
+            # 전체 스크립트를 문자열로 변환
+            script_text = '\n'.join(self.script_lines)
+            
+            # 스크립트 실행 (디버그 매니저가 브레이크포인트 처리)
+            result = yield from self.script_executor.execute_script(script_text, entity, env, self)
+            
+            # 결과 처리
+            if isinstance(result, tuple) and result[0] == 'created_entity':
+                # create entity 명령으로 엔티티가 생성된 경우
+                entity = result[1]  # 생성된 엔티티로 교체
+                logger.info(f"[{self.name}] Entity created and updated: {entity.id}")
+            
+            # 엔티티가 있으면 이 블록에서 처리되었음을 표시
+            if entity:
+                entity.processed_by_blocks.add(self.id)
+        
+        finally:
+            # 스크립트 실행 완료 - 상태 초기화
+            script_state_manager.end_execution(self.id)
         
         # 스크립트 실행 완료
         return None
+    
+    def execute_script_by_command(self, env: simpy.Environment) -> Generator:
+        """execute 명령어를 통한 스크립트 실행"""
+        if self.execution_state == "running":
+            logger.info(f"Block {self.name} is already running, execute command ignored")
+            return False
+        
+        # 실행 상태 변경
+        self.execution_state = "running"
+        self.is_executing_script = True
+        logger.info(f"Block {self.name} started execution by command")
+        
+        try:
+            # 블록에 엔티티가 있으면 첫 번째 엔티티로, 없으면 None으로 실행
+            entity = self.entities_in_block[0] if self.entities_in_block else None
+            yield from self.process_entity(env, entity)
+        finally:
+            # 실행 완료 후 상태 복원
+            self.execution_state = "idle"
+            self.is_executing_script = False
+            logger.info(f"Block {self.name} finished execution")
+        
+        return True
     
     def _execute_remaining_script(self, env: simpy.Environment, start_line: int) -> Generator:
         """엔티티 이동 후 남은 스크립트 실행"""
@@ -237,111 +298,54 @@ class IndependentBlock:
                 from .script_state_manager import script_state_manager
                 state = script_state_manager.get_state(self.id)
                 
+                # 디버그: 매 루프마다 상태 출력 (force execution 블록만)
+                if is_force_execution and env.now < 5:  # 처음 5초만 로그
+                    logger.info(f"[LOOP] Block {self.name} at {env.now:.1f}s: entities={len(self.entities_in_block)}, is_executing={state.is_executing}, is_executing_script={self.is_executing_script}")
+                
                 # 이미 실행 중인 경우 (force execution으로 생성된 엔티티 처리)
                 if state.is_executing and state.entity_ref and state.entity_ref in self.entities_in_block:
                     entity = state.entity_ref
                     # logger.debug(f"Block {self.name} continuing with entity {entity.id} from state")
                     
-                    # 이동 요청 처리
-                    if entity.movement_requested and entity.target_block:
-                        target_block_id = self.output_connections.get(entity.target_connector, entity.target_block)
+                    # go 명령이 동기적으로 처리되므로 여기서는 이동 처리하지 않음
+                    # 상태 초기화
+                    script_state_manager.end_execution(self.id)
                         
-                        # 블록 이름을 ID로 변환
-                        if target_block_id not in engine_ref.blocks:
-                            resolved_id = engine_ref.get_block_id_by_name(target_block_id)
-                            if resolved_id:
-                                target_block_id = resolved_id
-                                
-                        if target_block_id and target_block_id in engine_ref.blocks:
-                            target_block = engine_ref.blocks[target_block_id]
-                            # 대상 블록이 엔티티를 받을 수 있는지 확인
-                            if target_block.can_accept_entity():
-                                self.remove_entity(entity)
-                                yield from engine_ref.move_entity_to_block(env, entity, target_block_id)
-                            else:
-                                # 용량 초과로 이동 실패, 경고 추가
-                                self.add_capacity_warning(env, target_block.name, entity.id)
-                                # logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
-                        else:
-                            # 이동할 수 없으면 엔티티 제거
-                            self.remove_entity(entity)
-                            self.total_processed += 1
-                        
-                        # 상태 초기화
-                        script_state_manager.end_execution(self.id)
-                        
-                # 블록에 엔티티가 있으면 처리
-                elif self.entities_in_block and not is_force_execution:
-                    # force execution 블록이 아닐 때만 일반 처리
-                    entity = self.entities_in_block[0]
-                    
-                    # 스크립트 실행 (기존 process_entity 사용하여 go to 이후 스크립트도 실행)
-                    yield from self.process_entity(env, entity)
-                    
-                    # 이동 요청 처리
-                    if entity.movement_requested and entity.target_block:
-                        target_block_id = self.output_connections.get(entity.target_connector, entity.target_block)
-                        
-                        # 블록 이름을 ID로 변환
-                        if target_block_id not in engine_ref.blocks:
-                            resolved_id = engine_ref.get_block_id_by_name(target_block_id)
-                            if resolved_id:
-                                target_block_id = resolved_id
-                                
-                        if target_block_id and target_block_id in engine_ref.blocks:
-                            target_block = engine_ref.blocks[target_block_id]
-                            # 대상 블록이 엔티티를 받을 수 있는지 확인
-                            if target_block.can_accept_entity():
-                                self.remove_entity(entity)
-                                yield from engine_ref.move_entity_to_block(env, entity, target_block_id)
-                            else:
-                                # 용량 초과로 이동 실패, 경고 추가
-                                self.add_capacity_warning(env, target_block.name, entity.id)
-                                # logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
-                        else:
-                            # 이동할 수 없으면 엔티티 제거
-                            self.remove_entity(entity)
-                            self.total_processed += 1
+                # 엔티티 도착 시 자동 스크립트 실행 제거 - execute 명령어를 통해서만 실행
+                
+                # force execution이고 엔티티가 없으면 스크립트 실행
+                # force execution은 is_executing 상태와 관계없이 실행 (wait에서 대기 중일 수 있음)
                 elif is_force_execution:
-                    # force execution 블록 처리
-                    if not self.entities_in_block:
-                        # 블록이 비어있을 때만 스크립트 실행
+                    # 로그 제한: 상태가 변경될 때만 출력
+                    if not hasattr(self, '_last_force_exec_log_state'):
+                        self._last_force_exec_log_state = None
+                    
+                    current_state = (len(self.entities_in_block), self.is_executing_script, state.is_executing)
+                    if current_state != self._last_force_exec_log_state:
+                        logger.info(f"[FORCE_EXEC_CHECK] Block {self.name}: entities={len(self.entities_in_block)}, is_executing_script={self.is_executing_script}, state.is_executing={state.is_executing}")
+                        self._last_force_exec_log_state = current_state
+                    
+                    if not self.entities_in_block and not self.is_executing_script and not state.is_executing:
                         logger.info(f"Block {self.name} starting force execution (no entities in block)")
-                        # Executing script without entity (force execution)
+                        logger.info(f"Block {self.name} state: is_executing={state.is_executing}, entities_count={len(self.entities_in_block)}, execution_state={self.execution_state}")
+                        
+                        # force execution은 execution_state를 체크하지 않음 (무한 루프)
+                        # 임시로 실행 중 표시
+                        self.is_executing_script = True
+                        
+                        # 엔티티 없이 스크립트 실행
                         yield from self.process_entity(env, None)
-                        # Finished force execution
-                    else:
-                        # 엔티티가 있으면 이동 처리만
-                        entity = self.entities_in_block[0]
-                        if entity.movement_requested and entity.target_block:
-                            target_block_id = self.output_connections.get(entity.target_connector, entity.target_block)
-                            
-                            # 블록 이름을 ID로 변환
-                            if target_block_id not in engine_ref.blocks:
-                                resolved_id = engine_ref.get_block_id_by_name(target_block_id)
-                                if resolved_id:
-                                    target_block_id = resolved_id
-                                    
-                            if target_block_id and target_block_id in engine_ref.blocks:
-                                target_block = engine_ref.blocks[target_block_id]
-                                # 대상 블록이 엔티티를 받을 수 있는지 확인
-                                if target_block.can_accept_entity():
-                                    self.remove_entity(entity)
-                                    yield from engine_ref.move_entity_to_block(env, entity, target_block_id)
-                                else:
-                                    # 용량 초과로 이동 실패, 경고 추가
-                                    self.add_capacity_warning(env, target_block.name, entity.id)
-                                    # logger.debug(f"Target block {target_block.name} is full, entity {entity.id} stays in block {self.name}")
-                            else:
-                                # 이동할 수 없으면 엔티티 제거
-                                self.remove_entity(entity)
-                                self.total_processed += 1
+                        
+                        # 실행 완료 후 플래그만 해제 (execution_state는 변경하지 않음)
+                        self.is_executing_script = False
+                    
+                    # go 명령이 동기적으로 처리되므로 여기서는 이동 처리하지 않음
                     
                     # 짧은 대기
                     yield env.timeout(0.01)
                 else:
-                    # 엔티티가 없으면 잠시 대기
-                    yield env.timeout(0.1)
+                    # 대기
+                    yield env.timeout(0.01)
                     
             except Exception as e:
                 logger.error(f"Block {self.name} process error: {e}")
@@ -351,37 +355,28 @@ class IndependentBlock:
                        engine_ref) -> Generator:
         """소스 블록 프로세스"""
         
-        # 스크립트에서 이동 지연 시간 추출
+        # 스크립트에서 이동 지연 시간 추출 (새로운 go 형식)
         transit_delay = 0
         for line in self.script_lines:
             stripped_line = line.strip()
             
-            # go to 명령어 처리
-            if stripped_line.startswith('go to '):
-                parts = stripped_line.split(',')
-                if len(parts) > 1:
-                    try:
-                        transit_delay = int(parts[1].strip())
-                        break
-                    except:
-                        pass
-            
-            # go from 명령어 처리 (새로운 형식)
-            elif stripped_line.startswith('go from '):
-                # go from R to 공정1.L,3 형태에서 딜레이 추출
-                if ' to ' in stripped_line and ',' in stripped_line:
-                    # "to" 이후 부분에서 딜레이 찾기
-                    to_part = stripped_line.split(' to ', 1)[1]
-                    if ',' in to_part:
-                        delay_part = to_part.split(',')[1].strip()
+            # 새로운 go 명령어 형식: go R to 공정1.L(0,3)
+            if stripped_line.startswith('go '):
+                import re
+                # go R to 공정1.L(0,3) 형태 파싱
+                go_pattern = r'^go\s+[^\s]+\s+to\s+[^(]+(?:\((\d+)(?:,\s*(\d+(?:\.\d+)?))?\))?$'
+                match = re.match(go_pattern, stripped_line, re.IGNORECASE)
+                if match:
+                    delay_str = match.group(2)  # 딜레이 부분
+                    if delay_str:
                         try:
-                            transit_delay = int(delay_part)
+                            transit_delay = float(delay_str)
                             break
                         except:
                             pass
         
         # 정확한 생성 주기 계산: 이동 시간만 고려
-        generation_cycle = transit_delay  # 이동 시간과 동일하게 설정
+        generation_cycle = transit_delay if transit_delay > 0 else 3  # 기본값 3초
         last_entity_sent = None  # 마지막으로 보낸 엔티티 추적
         
         while True:  # 계속 엔티티 생성
@@ -409,36 +404,7 @@ class IndependentBlock:
                     # 스크립트 실행 (끝까지 실행됨)
                     yield from self.process_entity(env, entity)
                     
-                    # 이동 요청 처리
-                    if entity.movement_requested and entity.target_block:
-                        # 먼저 커넥터로 연결된 블록 찾기
-                        target_block_id = self.output_connections.get(entity.target_connector)
-                        
-                        # 커넥터 연결이 없으면 블록 이름으로 직접 찾기
-                        if not target_block_id:
-                            target_block_id = entity.target_block
-                            # 블록 이름을 블록 ID로 변환
-                            resolved_id = engine_ref.get_block_id_by_name(target_block_id)
-                            if resolved_id:
-                                target_block_id = resolved_id
-                        
-                        if target_block_id and target_block_id in engine_ref.blocks:
-                            target_block = engine_ref.blocks[target_block_id]
-                            # 대상 블록이 가득 차 있어도 이동 시도
-                            if target_block.can_accept_entity():
-                                self.remove_entity(entity)
-                                yield from engine_ref.move_entity_to_block(env, entity, target_block_id)
-                                
-                                # 스크립트는 이미 끝까지 실행되었으므로 추가 실행 불필요
-                                pass
-                            else:
-                                # 이동할 수 없으면 소스 블록에 남겨둠, 경고 추가
-                                self.add_capacity_warning(env, target_block.name, entity.id)
-                                # Target block is full, entity stays in source block
-                        else:
-                            # 대상 블록을 찾을 수 없으면 엔티티 제거
-                            # logger.warning(f"Target block not found, removing entity {entity.id}")
-                            self.remove_entity(entity)
+                    # go 명령이 동기적으로 처리되므로 여기서는 이동 처리하지 않음
                 else:
                     # logger.warning(f"Failed to add entity to source block {self.name}")
                     pass
@@ -460,33 +426,7 @@ class IndependentBlock:
         # 스크립트 실행 (끝까지 실행됨)
         yield from self.process_entity(env, entity)
         
-        # 이동 요청 처리
-        if entity.movement_requested and entity.target_block:
-            target_block_id = self.output_connections.get(entity.target_connector, entity.target_block)
-            
-            # 블록 이름을 ID로 변환
-            if target_block_id not in engine_ref.blocks:
-                resolved_id = engine_ref.get_block_id_by_name(target_block_id)
-                if resolved_id:
-                    target_block_id = resolved_id
-                    
-            if target_block_id and target_block_id in engine_ref.blocks:
-                target_block = engine_ref.blocks[target_block_id]
-                # 대상 블록이 엔티티를 받을 수 있는지 확인
-                if target_block.can_accept_entity():
-                    self.remove_entity(entity)
-                    yield from engine_ref.move_entity_to_block(env, entity, target_block_id)
-                else:
-                    # 용량 초과로 이동 실패, 경고 추가
-                    self.add_capacity_warning(env, target_block.name, entity.id)
-                    # Target block is full, entity stays in block
-                
-                # 스크립트는 이미 끝까지 실행되었으므로 추가 실행 불필요
-                pass
-            else:
-                # 이동할 수 없으면 엔티티 제거
-                self.remove_entity(entity)
-                self.total_processed += 1
+        # go 명령이 동기적으로 처리되므로 여기서는 이동 처리하지 않음
         
         yield env.timeout(0)  # 즉시 처리
     

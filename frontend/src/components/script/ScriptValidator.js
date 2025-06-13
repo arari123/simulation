@@ -10,27 +10,19 @@ export function validateScript(script, props) {
   const errors = []
   const lines = script.split('\n')
   
-  console.log('[ScriptValidator] validateScript 시작:', { script, props })
-  
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim()
     const lineNum = i + 1
     const lowerLine = line.toLowerCase() // 대소문자 구분 없는 검사를 위해 추가
     
-    console.log(`[ScriptValidator] 라인 ${lineNum} 검증:`, { line, lowerLine })
-    
     // 빈 줄이나 주석은 건너뛰기
     if (!line || line.startsWith('//')) {
-      console.log(`[ScriptValidator] 라인 ${lineNum} 건너뛰기 (빈 줄 또는 주석)`)
       continue
     }
     
     const lineErrors = validateScriptLine(line, lowerLine, lineNum, props)
-    console.log(`[ScriptValidator] 라인 ${lineNum} 검증 결과:`, lineErrors)
     errors.push(...lineErrors)
   }
-  
-  console.log('[ScriptValidator] validateScript 완료:', { valid: errors.length === 0, errors })
   
   return {
     valid: errors.length === 0,
@@ -44,10 +36,8 @@ export function validateScript(script, props) {
 function validateScriptLine(line, lowerLine, lineNum, props) {
   const errors = []
   
-  // 디버깅용 로그
-  if (line.includes('.status') || line.includes('int ')) {
-    console.log(`[ScriptValidator] 검증 중 - 라인 ${lineNum}: "${line}"`)
-  }
+  // execute 명령어 특별 체크
+  // 디버깅 코드 제거됨
   
   if (lowerLine.startsWith('delay ')) {
     const delayPart = line.replace(/delay /i, '').trim()
@@ -65,12 +55,19 @@ function validateScriptLine(line, lowerLine, lineNum, props) {
     const intErrors = validateIntOperation(line, lineNum, props)
     errors.push(...intErrors)
   }
+  else if (lowerLine.startsWith('execute ')) {
+    const executeErrors = validateExecuteStatement(line, lineNum, props)
+    errors.push(...executeErrors)
+  }
+  else if (line.match(/^product\s+type\(\d+\)\s*=\s*.+$/)) {
+    // product type(index) = value 형식은 유효함 - 에러 없음
+  }
   else if (line.includes('.status = ')) {
     // 블록 상태 명령 (블록이름.status = "값")
     const statusErrors = validateBlockStatusAssignment(line, lineNum, props)
     errors.push(...statusErrors)
   }
-  else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !line.trim().toLowerCase().startsWith('log ') && !lowerLine.startsWith('int ')) {
+  else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('elif ') && !lowerLine.startsWith('wait ') && !line.trim().toLowerCase().startsWith('log ') && !lowerLine.startsWith('int ')) {
     // 신호 설정 명령
     const signalErrors = validateSignalAssignment(line, lineNum, props)
     errors.push(...signalErrors)
@@ -79,13 +76,24 @@ function validateScriptLine(line, lowerLine, lineNum, props) {
     const waitErrors = validateWaitStatement(line, lineNum, props)
     errors.push(...waitErrors)
   }
-  else if (lowerLine.startsWith('go to ') || lowerLine.startsWith('go from ')) {
+  else if (lowerLine.startsWith('go to ')) {
+    errors.push(`라인 ${lineNum}: "go to" 명령은 더 이상 지원되지 않습니다. "go" 명령을 사용해주세요 (예: go R to 공정1.L(0,3))`)
+  }
+  else if (lowerLine.startsWith('go ') && !lowerLine.startsWith('go to ')) {
     const gotoErrors = validateGotoStatement(line, lineNum, props)
     errors.push(...gotoErrors)
   }
-  else if (lowerLine.startsWith('if ')) {
+  else if (lowerLine.startsWith('if ') || lowerLine === 'if') {
     const ifErrors = validateIfStatement(line, lineNum, props)
     errors.push(...ifErrors)
+  }
+  else if (lowerLine.startsWith('elif ') || lowerLine === 'elif') {
+    const elifLine = lowerLine === 'elif' ? 'if' : line.replace(/^elif\s+/i, 'if ')
+    const elifErrors = validateIfStatement(elifLine, lineNum, props)
+    errors.push(...elifErrors)
+  }
+  else if (line.trim().toLowerCase() === 'else') {
+    // else는 조건이 없으므로 별도 검증 없음
   }
   else if (line.trim().toLowerCase().startsWith('log ')) {
     const logErrors = validateLogStatement(line, lineNum)
@@ -94,11 +102,31 @@ function validateScriptLine(line, lowerLine, lineNum, props) {
   else if (line.includes('product type +=') || line.includes('product type -=')) {
     // product type 명령은 유효함 - 에러 없음
   }
-  else if (line.trim() === 'create entity' || line.trim() === 'dispose entity' || line.trim() === 'force execution') {
+  else if (line.trim() === 'create product' || line.trim() === 'dispose product' || line.trim() === 'force execution') {
     // 엔티티 관련 명령어는 유효함 - 에러 없음
   }
   else {
     errors.push(`라인 ${lineNum}: 인식되지 않는 명령어 "${line}"`)
+  }
+  
+  return errors
+}
+
+/**
+ * execute 명령 검증
+ */
+function validateExecuteStatement(line, lineNum, props) {
+  const errors = []
+  const targetBlock = line.replace(/execute /i, '').trim()
+  
+  if (!targetBlock) {
+    errors.push(`라인 ${lineNum}: execute 명령에 대상 블록이 지정되지 않았습니다`)
+  } else if (props.allBlocks && props.allBlocks.length > 0) {
+    // 블록 이름 검증
+    const blockExists = props.allBlocks.some(block => block.name === targetBlock)
+    if (!blockExists) {
+      errors.push(`라인 ${lineNum}: 존재하지 않는 블록 "${targetBlock}"`)
+    }
   }
   
   return errors
@@ -112,8 +140,6 @@ function validateIntOperation(line, lineNum, props) {
   
   // int 변수명 연산자 값 형식 파싱 (한글 변수명 지원)
   const intMatch = line.match(/^int\s+([a-zA-Z0-9_가-힣]+)\s*([\+\-\*\/]?=)\s*(.+)$/)
-  
-  console.log(`[ScriptValidator] int 명령어 매칭 결과:`, intMatch)
   
   if (!intMatch) {
     errors.push(`라인 ${lineNum}: 잘못된 int 명령어 형식 (예: int counter += 5)`)
@@ -296,56 +322,57 @@ function validateSingleWaitCondition(condition, lineNum, props) {
 }
 
 /**
- * go to 문 검증
+ * go 문 검증 (새로운 형식: go R to 블록.커넥터(0,3))
  */
 function validateGotoStatement(line, lineNum, props) {
   const errors = []
-  let target = ''
   
-  // go from 처리
-  if (line.toLowerCase().startsWith('go from ')) {
-    const goFromPattern = /^go\s+from\s+([^\s]+)\s+to\s+(.+)$/i
-    const match = line.match(goFromPattern)
-    if (match) {
-      target = match[2].trim()
-    } else {
-      errors.push(`라인 ${lineNum}: 잘못된 go from 형식 (예: go from R to 블록명.커넥터명,3)`)
-      return errors
-    }
-  }
-  // go to 처리
-  else {
-    target = line.replace(/go to /i, '').trim()
-  }
+  // 새로운 go 형식 파싱: go R to 블록.커넥터(0,3)
+  const goPattern = /^go\s+([^\s]+)\s+to\s+([^(]+)(?:\((\d+)(?:,\s*(\d+(?:\.\d+)?))?\))?$/i
+  const match = line.match(goPattern)
   
-  if (!target) {
-    errors.push(`라인 ${lineNum}: go to 대상이 지정되지 않았습니다`)
+  if (!match) {
+    errors.push(`라인 ${lineNum}: 잘못된 go 형식 (예: go R to 블록.L(0,3))`)
     return errors
   }
   
-  let targetPath = target
-  let delay = null
+  const fromConnector = match[1].trim()
+  const toTarget = match[2].trim()
+  const entityIndex = match[3]  // 엔티티 인덱스 (옵션)
+  const delay = match[4]  // 딜레이 (옵션)
   
-  if (target.includes(',')) {
-    const parts = target.split(',')
-    targetPath = parts[0].trim()
-    delay = parts[1].trim()
-    
-    // 딜레이 형식 검사
-    if (delay && !/^(\d+(\.\d+)?|\d+-\d+)$/.test(delay)) {
-      errors.push(`라인 ${lineNum}: 잘못된 딜레이 형식 "${delay}" (예: 3, 2-5)`)
+  // 출발 커넥터 유효성 검사
+  if (props.currentBlock && props.currentBlock.connectionPoints) {
+    const foundConnector = props.currentBlock.connectionPoints.find(cp => cp.name === fromConnector)
+    if (!foundConnector) {
+      const availableConnectors = props.currentBlock.connectionPoints.map(cp => cp.name).filter(name => name).join(', ')
+      errors.push(`라인 ${lineNum}: 현재 블록에 "${fromConnector}" 커넥터가 없습니다 (사용 가능: ${availableConnectors || '없음'})`)
     }
   }
   
-  // self 라우팅 검증
-  if (targetPath.startsWith('self.')) {
-    const selfErrors = validateSelfTarget(targetPath, lineNum, props)
-    errors.push(...selfErrors)
+  // 도착 대상 검사
+  if (toTarget.includes('.')) {
+    const [blockName, connectorName] = toTarget.split('.')
+    const targetBlock = props.allBlocks.find(b => b.name === blockName.trim())
+    
+    if (!targetBlock) {
+      errors.push(`라인 ${lineNum}: 존재하지 않는 블록: ${blockName}`)
+    } else {
+      const targetConnector = targetBlock.connectionPoints?.find(cp => 
+        cp.name === connectorName.trim()
+      )
+      
+      if (!targetConnector) {
+        errors.push(`라인 ${lineNum}: 블록 "${blockName}"에 "${connectorName}" 커넥터가 없습니다`)
+      }
+    }
+  } else {
+    errors.push(`라인 ${lineNum}: go 명령의 도착지는 "블록명.커넥터명" 형식이어야 합니다`)
   }
-  // 다른 블록으로 이동 검증
-  else if (targetPath.includes('.')) {
-    const blockErrors = validateBlockTarget(targetPath, lineNum, props)
-    errors.push(...blockErrors)
+  
+  // 딜레이 형식 검사
+  if (delay && !/^(\d+(\.\d+)?|\d+-\d+)$/.test(delay)) {
+    errors.push(`라인 ${lineNum}: 잘못된 딜레이 형식 "${delay}" (예: 3, 2-5)`)
   }
   
   return errors
@@ -434,9 +461,16 @@ function validateIfStatement(line, lineNum, props) {
   const errors = []
   const condition = line.replace(/if /i, '').trim()
   
+  // 조건이 없으면 오류
+  if (!condition) {
+    errors.push(`라인 ${lineNum}: 조건이 없습니다`)
+    return errors
+  }
+  
   // product type 조건 체크
-  if (condition.includes('product type =')) {
-    // product type 조건은 항상 유효함
+  if (condition.includes('product type =') || condition.includes('product type !=') || 
+      condition.match(/product\s+type\(\d+\)\s*=/) || condition.match(/product\s+type\(\d+\)\s*!=/)) {
+    // product type 조건은 항상 유효함 (인덱스 문법 및 != 연산자 포함)
     return errors
   }
   
@@ -527,16 +561,11 @@ function validateLogStatement(line, lineNum) {
   const trimmedLine = line.trim()
   const logPart = trimmedLine.replace(/^log /i, '').trim()
   
-  // 디버깅을 위한 로그
-  console.log('Log validation:', { line, trimmedLine, logPart, lineNum })
-  
   // 로그 메시지가 있는지 확인
   if (!logPart) {
     errors.push(`라인 ${lineNum}: 로그 메시지가 지정되지 않았습니다`)
   }
   // 따옴표 검사는 선택적이므로 오류로 처리하지 않음
-  
-  console.log('Log validation result:', errors)
   return errors
 }
 
@@ -580,13 +609,19 @@ function parseScriptLineToAction(line, lowerLine, lineNumber, actionCounter, pro
   else if (lowerLine.startsWith('int ')) {
     return parseIntOperationAction(line, actionCounter)
   }
-  else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('wait ') && !lowerLine.startsWith('int ')) {
+  else if (lowerLine.startsWith('execute ')) {
+    return parseExecuteAction(line, actionCounter)
+  }
+  else if (line.includes(' = ') && !lowerLine.startsWith('if ') && !lowerLine.startsWith('elif ') && !lowerLine.startsWith('wait ') && !lowerLine.startsWith('int ')) {
     return parseSignalUpdateAction(line, actionCounter)
   }
   else if (lowerLine.startsWith('wait ')) {
     return parseWaitAction(line, actionCounter)
   }
-  else if (lowerLine.startsWith('go to ') || lowerLine.startsWith('go from ')) {
+  else if (lowerLine.startsWith('go to ')) {
+    return parseErrorAction(line, lineNumber, actionCounter, '"go to" 명령은 더 이상 지원되지 않습니다. "go" 명령을 사용해주세요 (예: go R to 공정1.L(0,3))')
+  }
+  else if (lowerLine.startsWith('go ') && !lowerLine.startsWith('go to ')) {
     return parseGotoAction(line, lowerLine, lineNumber, actionCounter, props)
   }
   else if (lowerLine.startsWith('if ')) {
@@ -598,8 +633,36 @@ function parseScriptLineToAction(line, lowerLine, lineNumber, actionCounter, pro
   else if (line.includes('product type +=') || line.includes('product type -=')) {
     return parseProductTypeAction(line, actionCounter)
   }
+  else if (line.trim() === 'create product' || line.trim() === 'dispose product' || line.trim() === 'force execution') {
+    return parseScriptAction(line, actionCounter)
+  }
   else {
     return parseErrorAction(line, lineNumber, actionCounter, '인식되지 않는 명령어')
+  }
+}
+
+/**
+ * execute 액션 파싱
+ */
+function parseExecuteAction(line, actionCounter) {
+  const targetBlock = line.replace(/execute /i, '').trim()
+  return {
+    id: `script-action-${actionCounter}`,
+    name: `블록 "${targetBlock}" 실행`,
+    type: 'script',
+    parameters: { script: line }
+  }
+}
+
+/**
+ * 스크립트 액션 파싱 (create product, dispose product, force execution 등)
+ */
+function parseScriptAction(line, actionCounter) {
+  return {
+    id: `script-action-${actionCounter}`,
+    name: line,
+    type: 'script',
+    parameters: { script: line }
   }
 }
 
@@ -688,53 +751,18 @@ function parseWaitAction(line, actionCounter) {
 }
 
 /**
- * go to 액션 파싱
+ * go 액션 파싱 (새로운 형식)
  */
 function parseGotoAction(line, lowerLine, lineNumber, actionCounter, props) {
-  let target = ''
-  
-  // go from 처리
-  if (lowerLine.startsWith('go from ')) {
-    const goFromPattern = /^go\s+from\s+([^\s]+)\s+to\s+(.+)$/i
-    const match = line.match(goFromPattern)
-    if (match) {
-      target = match[2].trim()
-    } else {
-      return parseErrorAction(line, lineNumber, actionCounter, '잘못된 go from 형식')
+  // 새로운 go 형식: go R to 블록.커넥터(0,3)
+  // 백엔드로 전체 스크립트를 전달하여 처리
+  return {
+    id: `script-action-${actionCounter}`,
+    name: 'go 명령 실행',
+    type: 'script',
+    parameters: { 
+      script: line
     }
-  }
-  // go to 처리
-  else {
-    target = line.replace(/go to /i, '').trim()
-  }
-  
-  let targetPath = target
-  let delay = '0'
-  
-  // 딜레이 파싱
-  if (target.includes(',')) {
-    const parts = target.split(',')
-    targetPath = parts[0].trim()
-    const delayPart = parts[1].trim()
-    
-    if (/^(\d+(\.\d+)?|\d+-\d+)$/.test(delayPart)) {
-      delay = delayPart
-    } else {
-      return parseErrorAction(line, lineNumber, actionCounter, `잘못된 딜레이 형식: ${delayPart}`)
-    }
-  }
-  
-  // self 라우팅 처리
-  if (targetPath.startsWith('self.')) {
-    return parseSelfGotoAction(line, targetPath, delay, lineNumber, actionCounter, props)
-  }
-  // 다른 블록으로 이동
-  else if (targetPath.includes('.')) {
-    return parseBlockGotoAction(line, targetPath, delay, lineNumber, actionCounter, props)
-  }
-  // 단순 블록 이름만 있는 경우
-  else {
-    return parseSimpleGotoAction(line, targetPath, delay, lineNumber, actionCounter, props)
   }
 }
 

@@ -54,7 +54,12 @@
       "Bash(gcloud run services update:*)",
       "Bash(/home/arari123/.claude/local/node_modules/@anthropic-ai/claude-code/vendor/ripgrep/x64-linux/rg -n -A 5 -B 5 \"loadConfigFile|load-config\" /home/arari123/project/simulation/frontend/src/App.vue)",
       "Bash(./build-and-deploy.sh:*)",
-      "Bash(bash:*)"
+      "Bash(bash:*)",
+      "Bash(dos2unix:*)",
+      "Bash(./start-local.sh:*)",
+      "Bash(git checkout:*)",
+      "Bash(./run_backend.sh:*)",
+      "Bash(fuser:*)"
     ],
     "deny": []
   }

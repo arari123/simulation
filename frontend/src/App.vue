@@ -461,6 +461,7 @@ function updateBlockWarnings(blockStates) {
       // total_processed 정보 업데이트
       if (blockState.total_processed !== undefined) {
         block.totalProcessed = blockState.total_processed
+        // Block totalProcessed updated
       }
       
       // 블록 상태 업데이트

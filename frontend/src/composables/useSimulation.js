@@ -237,7 +237,7 @@ export function useSimulation() {
         
         // 브레이크포인트에서 멈췄는지 확인
         if (result.result && result.result.debug_info && result.result.debug_info.is_paused) {
-          console.log('[useSimulation] 브레이크포인트에서 멈춤 감지, 전체 실행 일시정지')
+          // 브레이크포인트에서 멈춤 감지, 전체 실행 일시정지
           shouldStopFullExecution.value = true
           // 일시정지 상태를 유지하되 전체 실행 상태는 true로 유지
           isFullExecutionRunning.value = false

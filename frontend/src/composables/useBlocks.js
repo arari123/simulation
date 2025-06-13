@@ -200,11 +200,13 @@ export function useBlocks() {
     // 현재 블록 찾기 (출발 커넥터 찾기 위해)
     const sourceBlock = blocks.value.find(b => String(b.id) === String(sourceBlockId))
     
-    // "go from 커넥터명 to 블록명.커넥터명" 패턴 찾기 (새로운 형식)
-    const goFromToRegex = /go\s+from\s+([^\s]+)\s+to\s+([^.\s]+)\.([^,\s]+)/gi
+    // "go 커넥터명 to 블록명.커넥터명(인덱스,딜레이)" 패턴 찾기 (새로운 형식)
+    const goRegex = /go\s+([^\s]+)\s+to\s+([^.\s]+)\.([^\(\s]+)(?:\([^)]*\))?/gi
     let match
     
-    while ((match = goFromToRegex.exec(script)) !== null) {
+    while ((match = goRegex.exec(script)) !== null) {
+      // go from 형식은 건너뛰기 (하위 호환성)
+      if (match[0].includes('from')) continue
       const fromConnectorName = match[1].trim()
       const targetBlockName = match[2].trim()
       const targetConnectorName = match[3].trim()
@@ -253,38 +255,50 @@ export function useBlocks() {
       }
     }
     
-    // 기존 "go to 블록명.커넥터명" 패턴도 계속 지원 (하위 호환성)
-    const goToRegex = /go\s+to\s+([^.\s]+)\.([^,\s]+)/gi
-    goToRegex.lastIndex = 0 // 정규식 재설정
+    // "go from 커넥터명 to 블록명.커넥터명" 패턴 찾기 (이전 형식 - 하위 호환성)
+    const goFromToRegex = /go\s+from\s+([^\s]+)\s+to\s+([^.\s]+)\.([^,\s]+)/gi
+    goFromToRegex.lastIndex = 0 // 정규식 재설정
     
-    while ((match = goToRegex.exec(script)) !== null) {
-      // go from이 아닌 경우만 처리
-      const fullMatch = match[0]
-      if (!fullMatch.includes('from')) {
-        const targetBlockName = match[1].trim()
-        const targetConnectorName = match[2].trim()
+    while ((match = goFromToRegex.exec(script)) !== null) {
+      const fromConnectorName = match[1].trim()
+      const targetBlockName = match[2].trim()
+      const targetConnectorName = match[3].trim()
+      
+      // 출발 커넥터 찾기
+      let fromConnectorId = null
+      if (sourceBlock && sourceBlock.connectionPoints) {
+        const fromConnector = sourceBlock.connectionPoints.find(cp => cp.name === fromConnectorName)
+        fromConnectorId = fromConnector?.id
         
-        
-        // 자기 자신에 대한 참조가 아닌 경우만
-        if (targetBlockName !== 'self') {
-          const targetBlock = blocks.value.find(b => b.name === targetBlockName)
-          if (targetBlock) {
-            let targetConnectorId = null
-            if (targetBlock.connectionPoints) {
-              const targetConnector = targetBlock.connectionPoints.find(cp => cp.name === targetConnectorName)
-              targetConnectorId = targetConnector?.id
-            }
+        if (!fromConnector) {
+          continue
+        }
+      }
+      
+      // 대상 블록과 커넥터 찾기
+      if (targetBlockName !== 'self') {
+        const targetBlock = blocks.value.find(b => b.name === targetBlockName)
+        if (targetBlock) {
+          // 대상 커넥터 찾기
+          let targetConnectorId = null
+          if (targetBlock.connectionPoints) {
+            const targetConnector = targetBlock.connectionPoints.find(cp => cp.name === targetConnectorName)
+            targetConnectorId = targetConnector?.id
             
-            if (targetConnectorId) {
-              const newConnection = {
-                from_block_id: String(sourceBlockId),
-                from_connector_id: "block-action", // 기존 형식은 블록 중앙에서 시작
-                to_block_id: String(targetBlock.id),
-                to_connector_id: targetConnectorId,
-                from_conditional_script: true
-              }
-              connections.push(newConnection)
+            if (!targetConnector) {
+              continue
             }
+          }
+          
+          if (fromConnectorId && targetConnectorId) {
+            const newConnection = {
+              from_block_id: String(sourceBlockId),
+              from_connector_id: fromConnectorId, // 실제 출발 커넥터 ID 사용
+              to_block_id: String(targetBlock.id),
+              to_connector_id: targetConnectorId,
+              from_conditional_script: true
+            }
+            connections.push(newConnection)
           }
         }
       }
